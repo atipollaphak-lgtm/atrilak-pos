@@ -1,0 +1,57 @@
+.pricing-product-row {
+    transition: background-color .15s ease;
+}
+
+.pricing-product-row:hover {
+    background: #f8f9fa;
+}
+
+.pricing-toolbar {
+    margin-bottom: 15px;
+}
+
+.pricing-status-ok {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.pricing-status-warning {
+    color: #fd7e14;
+    font-weight: 600;
+}
+
+.pricing-status-lock {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.pricing-hidden {
+    display: none !important;
+}
+
+.pricing-summary-card {
+    transition: all .2s ease;
+    cursor: default;
+}
+
+.pricing-summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+}
+
+.pricing-summary-card .card-body {
+    padding: 1rem;
+}
+
+.pricing-summary-card .text-muted {
+    font-size: .85rem;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+}
+
+.pricing-summary-card h3 {
+    margin-top: .5rem;
+    margin-bottom: 0;
+    font-size: 2rem;
+    font-weight: 700;
+}

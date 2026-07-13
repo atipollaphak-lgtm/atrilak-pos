@@ -1,0 +1,20 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Technician extends Model
+{
+    protected $fillable = [
+        'code',
+        'name',
+        'phone',
+        'address',
+        'bank_name',
+        'bank_account_name',
+        'bank_account_no',
+        'active',
+        'remark',
+    ];
+}

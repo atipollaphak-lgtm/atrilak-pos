@@ -1,0 +1,440 @@
+<?php
+
+use App\Http\Controllers\ProfileController;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\PosController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\TechnicianController;
+use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SettingController;
+use App\Http\Controllers\QuotationController;
+use App\Http\Controllers\ReservationController;
+use App\Http\Controllers\BarcodeController;
+use App\Http\Controllers\StockCountController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\SaleController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\StockMovementController;
+use App\Http\Controllers\BackupController;
+use App\Http\Controllers\UnitController;
+use App\Http\Controllers\ProductPriceTierController;
+use App\Http\Controllers\PriceController;
+use App\Http\Controllers\TechnicianPaymentController;
+use App\Http\Controllers\TechnicianCommissionController;
+use App\Http\Controllers\TechnicianCommissionRuleController;
+use App\Http\Controllers\TechnicianPaymentBatchController;
+use App\Http\Controllers\DeliveryZoneController;
+use App\Http\Controllers\CustomerDeliveryAddressController;
+use App\Http\Controllers\PricingManagementController;
+
+Route::resource(
+    'units',
+    UnitController::class
+);
+
+
+Route::get('/', function () {
+    return view('welcome');
+});
+
+Route::get(
+    '/dashboard',
+    [DashboardController::class, 'index']
+)->middleware(['auth', 'verified'])->name('dashboard');
+
+
+Route::middleware(['auth'])->group(function () {
+
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
+
+
+    Route::get('/home', function () {
+        return redirect('/dashboard');
+    });
+
+    Route::get('/profile', [ProfileController::class, 'edit'])
+        ->name('profile.edit');
+
+    Route::patch('/profile', [ProfileController::class, 'update'])
+        ->name('profile.update');
+
+    Route::delete('/profile', [ProfileController::class, 'destroy'])
+        ->name('profile.destroy');
+
+    Route::post('/units/seed', [UnitController::class, 'seed'])
+        ->name('units.seed');
+
+    Route::post('/units/merge', [UnitController::class, 'merge'])
+        ->name('units.merge');
+
+    Route::resource('units', UnitController::class)->except([
+        'create',
+        'show',
+        'edit',
+    ]);
+
+    // Cashier ขึ้นไป
+    Route::middleware(['role:cashier'])->group(function () {
+
+        Route::post(
+            '/sales/check-profit',
+            [SaleController::class, 'checkProfit']
+        )->name('sales.check-profit');
+
+        Route::get('/sales-history', [SaleController::class, 'history'])
+            ->name('sales.history');
+
+        Route::get('/sales-v2', [SaleController::class, 'indexV2'])
+            ->name('sales.v2');
+
+
+
+        Route::post(
+            '/sales-v2/store',
+            [SaleController::class, 'storeV2']
+        )->name('sales.v2.store');
+
+        Route::resource('sales', SaleController::class);
+
+        Route::get('/sales/{sale}/invoice', [SaleController::class, 'invoice'])
+            ->name('sales.invoice');
+
+        Route::get('/sales/{sale}/invoice-v2', [SaleController::class, 'invoiceV2'])
+            ->name('sales.invoice-v2');
+
+        Route::get('/sales/{sale}/print', [SaleController::class, 'print'])
+            ->name('sales.print');
+
+        Route::resource('customers', CustomerController::class);
+
+
+        Route::post(
+            '/customers/{customer}/restore',
+            [CustomerController::class, 'restore']
+        )->name('customers.restore');
+
+        Route::get(
+            '/technician-payments',
+            [TechnicianPaymentController::class, 'index']
+        )->name('technician-payments.index');
+
+        Route::resource(
+            'technicians',
+            TechnicianController::class
+        )->only([
+            'index',
+            'store',
+            'update',
+            'destroy'
+        ]);
+
+        Route::get('/technician-commissions', [TechnicianCommissionController::class, 'index'])
+            ->name('technician-commissions.index');
+
+        Route::post(
+            '/api/price/calculate',
+            [PriceController::class, 'calculate']
+        )->name('api.price.calculate');
+
+        Route::get(
+            '/sales-v2/customers/{customer}/delivery-addresses-json',
+            [
+                CustomerDeliveryAddressController::class,
+                'getByCustomer'
+            ]
+        )->name('sales.v2.customer-delivery-addresses.json');
+    });
+
+
+
+    // Manager ขึ้นไป
+    Route::middleware(['role:manager'])->group(function () {
+        Route::resource('products', ProductController::class);
+        Route::post(
+            '/products/{product}/restore',
+            [ProductController::class, 'restore']
+        )->name('products.restore');
+
+        Route::post('/products/{product}/units', [ProductController::class, 'storeUnit'])
+            ->name('products.units.store');
+
+        Route::put('/products/{product}/units/{productUnit}', [ProductController::class, 'updateUnit'])
+            ->name('products.units.update');
+
+        Route::delete('/products/{product}/units/{productUnit}', [ProductController::class, 'destroyUnit'])
+            ->name('products.units.destroy');
+
+        Route::post(
+            '/products/{product}/barcodes',
+            [ProductController::class, 'storeBarcode']
+        )->name('products.barcodes.store');
+
+        Route::put(
+            '/products/{product}/barcodes/{productBarcode}',
+            [ProductController::class, 'updateBarcode']
+        )->name('products.barcodes.update');
+
+        Route::delete(
+            '/products/{product}/barcodes/{productBarcode}',
+            [ProductController::class, 'destroyBarcode']
+        )->name('products.barcodes.destroy');
+
+        Route::post(
+            '/products/{product}/units/{productUnit}/price-tiers',
+            [ProductPriceTierController::class, 'store']
+        )->name('products.price-tiers.store');
+
+        Route::put(
+            '/products/{product}/units/{productUnit}/price-tiers/{productPriceTier}',
+            [ProductPriceTierController::class, 'update']
+        )->name('products.price-tiers.update');
+
+        Route::delete(
+            '/products/{product}/units/{productUnit}/price-tiers/{productPriceTier}',
+            [
+                ProductPriceTierController::class,
+                'destroy'
+            ]
+        )->name('products.price-tiers.destroy');
+
+        Route::get(
+            '/product-price-tiers',
+            [ProductPriceTierController::class, 'index']
+        )->name('product-price-tiers.index');
+
+        Route::get(
+            '/product-price-tiers/bulk-copy-data',
+            [ProductPriceTierController::class, 'bulkCopyData']
+        )->name('product-price-tiers.bulk-copy-data');
+
+        Route::post(
+            '/product-price-tiers/bulk-copy',
+            [ProductPriceTierController::class, 'bulkCopy']
+        )->name('product-price-tiers.bulk-copy');
+
+        Route::post(
+            '/product-price-tiers/store',
+            [ProductPriceTierController::class, 'storeFromManagement']
+        )->name('product-price-tiers.store');
+
+        Route::put(
+            '/product-price-tiers/{productPriceTier}',
+            [ProductPriceTierController::class, 'updateFromManagement']
+        )->name('product-price-tiers.update');
+
+        Route::delete(
+            '/product-price-tiers/{productPriceTier}',
+            [ProductPriceTierController::class, 'destroyFromManagement']
+        )->name('product-price-tiers.destroy');
+
+        Route::resource('categories', CategoryController::class);
+        Route::resource('suppliers', SupplierController::class);
+        Route::resource('purchases', PurchaseController::class);
+        Route::get('/purchases/{purchase}/edit', [PurchaseController::class, 'edit'])
+            ->name('purchases.edit');
+        Route::get(
+            '/purchases/{purchase}/print',
+            [PurchaseController::class, 'print']
+        )->name('purchases.print');
+
+        Route::put('/purchases/{purchase}', [PurchaseController::class, 'update'])
+            ->name('purchases.update');
+        Route::get(
+            '/purchases/{purchase}',
+            [PurchaseController::class, 'show']
+        )->name('purchases.show');
+
+        Route::get('/stock-movements', [StockMovementController::class, 'index'])
+            ->name('stock-movements.index');
+
+        Route::get('/stock-counts', [StockCountController::class, 'index'])
+            ->name('stock-counts.index');
+
+        Route::post('/stock-counts', [StockCountController::class, 'store'])
+            ->name('stock-counts.store');
+
+        Route::get('/barcodes', [BarcodeController::class, 'index'])
+            ->name('barcodes.index');
+
+        Route::resource('quotations', QuotationController::class);
+
+        Route::get('/quotations/{quotation}/print', [QuotationController::class, 'print'])
+            ->name('quotations.print');
+
+        Route::post(
+            '/quotations/{quotation}/convert',
+            [QuotationController::class, 'convertToSale']
+        )->name('quotations.convert');
+
+        Route::resource(
+            'units',
+            UnitController::class
+        );
+        Route::resource(
+            'technician-commission-rules',
+            TechnicianCommissionRuleController::class
+        );
+        Route::get('/technician-payments', [TechnicianPaymentController::class, 'index'])
+            ->name('technician-payments.index');
+
+        Route::post('/technician-payments/pay', [TechnicianPaymentController::class, 'pay'])
+            ->name('technician-payments.pay');
+
+        Route::get('/technician-payment-batches', [TechnicianPaymentBatchController::class, 'index'])
+            ->name('technician-payment-batches.index');
+
+        Route::get('/technician-payment-batches/create', [TechnicianPaymentBatchController::class, 'create'])
+            ->name('technician-payment-batches.create');
+
+        Route::post('/technician-payment-batches/preview', [TechnicianPaymentBatchController::class, 'preview'])
+            ->name('technician-payment-batches.preview');
+
+        Route::post('/technician-payment-batches', [TechnicianPaymentBatchController::class, 'store'])
+            ->name('technician-payment-batches.store');
+
+        Route::get('/technician-payment-batches/preview', function () {
+            return redirect()->route('technician-payment-batches.create');
+        });
+
+
+        Route::get('/technician-payment-batches/{batch}', [TechnicianPaymentBatchController::class, 'show'])
+            ->name('technician-payment-batches.show');
+
+        Route::get('/technician-payment-batches/{batch}/print', [TechnicianPaymentBatchController::class, 'print'])
+            ->name('technician-payment-batches.print');
+
+        Route::resource(
+            'delivery-zones',
+            DeliveryZoneController::class
+        );
+
+        Route::resource(
+            'customers.delivery-addresses',
+            CustomerDeliveryAddressController::class
+        );
+    });
+
+    // Owner เท่านั้น
+    Route::middleware(['role:owner'])->group(function () {
+        Route::resource('users', UserController::class);
+
+        Route::post('/users/{user}/update-role', [UserController::class, 'updateRole'])
+            ->name('users.update-role');
+
+        Route::get('/settings', [SettingController::class, 'index'])
+            ->name('settings.index');
+
+        Route::post('/settings', [SettingController::class, 'update'])
+            ->name('settings.update');
+
+        Route::get('/backups', [BackupController::class, 'index'])
+            ->name('backups.index');
+
+        Route::post('/backups/create', [BackupController::class, 'createBackup'])
+            ->name('backups.create');
+
+        Route::get('/backups/{fileName}/download', [BackupController::class, 'downloadFile'])
+            ->name('backups.download');
+
+        Route::post('/backups/restore', [BackupController::class, 'restore'])
+            ->name('backups.restore');
+
+        Route::get('/reports/daily-profit', [ReportController::class, 'dailyProfit'])
+            ->name('reports.daily-profit');
+
+        Route::get(
+            'reports/daily-profit/export',
+            [ReportController::class, 'exportDailyProfit']
+        )->name('reports.daily-profit.export');
+
+        Route::get('/reports/monthly-profit', [ReportController::class, 'monthlyProfit'])
+            ->name('reports.monthly-profit');
+
+        Route::get(
+            '/reports/monthly-profit/export',
+            [ReportController::class, 'exportMonthlyProfit']
+        )->name('reports.monthly-profit.export');
+
+        Route::get('/reports/yearly-profit', [ReportController::class, 'yearlyProfit'])
+            ->name('reports.yearly-profit');
+
+        Route::get(
+            '/reports/yearly-profit/export',
+            [ReportController::class, 'exportYearlyProfit']
+        )->name('reports.yearly-profit.export');
+
+
+        Route::get('/reports/product-sales', [ReportController::class, 'productSales'])
+            ->name('reports.product-sales');
+        Route::get(
+            '/reports/product-sales/export',
+            [ReportController::class, 'exportProductSales']
+        )->name('reports.product-sales.export');
+
+        Route::get('/reports/best-seller', [ReportController::class, 'bestSeller'])
+            ->name('reports.best-seller');
+
+        Route::get(
+            '/reports/best-seller/export',
+            [ReportController::class, 'exportBestSeller']
+        )->name('reports.best-seller.export');
+
+        Route::get(
+            '/pricing-management',
+            [PricingManagementController::class, 'index']
+        )->name('pricing-management.index');
+
+        Route::put(
+            '/pricing-management/{product}',
+            [PricingManagementController::class, 'update']
+        )->name('pricing-management.update');
+
+        Route::post(
+            '/pricing-management/recalculate-all',
+            [PricingManagementController::class, 'recalculateAll']
+        )->name('pricing-management.recalculate-all');
+
+        Route::post(
+            '/pricing-management/apply-all',
+            [PricingManagementController::class, 'applyAllChanged']
+        )->name('pricing-management.apply-all');
+
+        Route::post(
+            '/pricing-management/preview-all',
+            [PricingManagementController::class, 'previewAll']
+        )->name('pricing-management.preview-all');
+
+        Route::post(
+            '/pricing-management/preview-category',
+            [PricingManagementController::class, 'previewCategory']
+        )->name('pricing-management.preview-category');
+
+        Route::post(
+            '/pricing-management/apply-category',
+            [PricingManagementController::class, 'applyCategory']
+        )->name('pricing-management.apply-category');
+
+        Route::post(
+            '/pricing-management/{product}/apply',
+            [PricingManagementController::class, 'apply']
+        )->name('pricing-management.apply');
+
+        Route::get(
+            '/pricing-management/history',
+            [PricingManagementController::class, 'history']
+        )->name('pricing-management.history');
+
+        Route::post(
+            '/pricing-management/history/{history}/rollback',
+            [PricingManagementController::class, 'rollback']
+        )->name('pricing-management.rollback');
+    });
+});
+
+require __DIR__ . '/auth.php';
