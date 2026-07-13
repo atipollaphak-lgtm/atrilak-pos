@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Sale;
 use App\Models\Product;
+use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Models\CustomerDeliveryAddress;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,7 @@ use App\Services\Sales\SaleItemService;
 use App\Services\Sales\StockService;
 use App\Services\Sales\CommissionService;
 use App\Services\Sales\ProfitGuardService;
+use DomainException;
 
 class SaleService
 {
@@ -110,6 +112,152 @@ $this->profitGuardService = $profitGuardService;
                 ->createFromSale($sale);
 
             return $sale;
+        });
+    }
+
+    public function updateSale(Sale $sale, array $data): Sale
+    {
+        return DB::transaction(function () use ($sale, $data) {
+            $sale->loadMissing('items');
+
+            foreach ($sale->items as $item) {
+                $product = $item->product;
+
+                if (! $product) {
+                    continue;
+                }
+
+                $oldStock = $product->stock_qty;
+                $newStock = $oldStock + $item->qty;
+
+                $product->stock_qty = $newStock;
+                $product->save();
+
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'type' => 'IN',
+                    'qty' => $item->qty,
+                    'stock_before' => $oldStock,
+                    'stock_after' => $newStock,
+                    'reference_type' => 'sale_edit',
+                    'reference_id' => $sale->id,
+                    'remark' => 'คืนสต๊อกจากการแก้ไขบิล '.$sale->sale_no,
+                ]);
+            }
+
+            $sale->items()->delete();
+
+            foreach ($data['product_id'] as $index => $productId) {
+                $qty = $data['qty'][$index] ?? 0;
+
+                if (empty($productId) || empty($qty)) {
+                    continue;
+                }
+
+                $product = Product::find($productId);
+
+                if (! $product) {
+                    throw new DomainException('ไม่พบสินค้า');
+                }
+
+                if ($product->stock_qty < $qty) {
+                    throw new DomainException('สินค้า '.$product->name.' มีสต็อกไม่พอ');
+                }
+            }
+
+            $grandTotal = 0;
+
+            foreach ($data['product_id'] as $index => $productId) {
+                $qty = $data['qty'][$index] ?? 0;
+                $price = $data['selling_price'][$index] ?? 0;
+
+                if (empty($productId) || empty($qty) || empty($price)) {
+                    continue;
+                }
+
+                $product = Product::find($productId);
+                $lineTotal = $qty * $price;
+                $costPrice = $product->cost_price ?? 0;
+                $lineProfit = ($price - $costPrice) * $qty;
+
+                SaleItem::create([
+                    'sale_id' => $sale->id,
+                    'product_id' => $productId,
+                    'qty' => $qty,
+                    'selling_price' => $price,
+                    'cost_price' => $costPrice,
+                    'total' => $lineTotal,
+                    'profit' => $lineProfit,
+                ]);
+
+                $oldStock = $product->stock_qty;
+                $newStock = $oldStock - $qty;
+
+                $product->stock_qty = $newStock;
+                $product->save();
+
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'type' => 'OUT',
+                    'qty' => $qty,
+                    'stock_before' => $oldStock,
+                    'stock_after' => $newStock,
+                    'reference_type' => 'sale_edit',
+                    'reference_id' => $sale->id,
+                    'remark' => 'ขายออกจากการแก้ไขบิล '.$sale->sale_no,
+                ]);
+
+                $grandTotal += $lineTotal;
+            }
+
+            $deliveryFee = $data['delivery_fee'] ?? 0;
+            $discount = $data['discount'] ?? 0;
+            $netTotal = $grandTotal + $deliveryFee - $discount;
+
+            $sale->update([
+                'customer_id' => $data['customer_id'] ?? null,
+                'sale_date' => $data['sale_date'],
+                'total_amount' => $netTotal,
+                'delivery_fee' => $deliveryFee,
+                'discount' => $discount,
+            ]);
+
+            return $sale;
+        });
+    }
+
+    public function deleteSale(Sale $sale): void
+    {
+        DB::transaction(function () use ($sale) {
+            $sale->load('items.product');
+
+            foreach ($sale->items as $item) {
+                $product = $item->product;
+
+                if (! $product) {
+                    continue;
+                }
+
+                $oldStock = $product->stock_qty;
+                $newStock = $oldStock + $item->qty;
+
+                $product->stock_qty = $newStock;
+                $product->save();
+
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'type' => 'IN',
+                    'qty' => $item->qty,
+                    'stock_before' => $oldStock,
+                    'stock_after' => $newStock,
+                    'reference_type' => 'sale_delete',
+                    'reference_id' => $sale->id,
+                    'remark' => 'คืนสต๊อกจากการลบบิล '.$sale->sale_no,
+                ]);
+            }
+
+            $sale->items()->delete();
+            $sale->delete();
         });
     }
 }

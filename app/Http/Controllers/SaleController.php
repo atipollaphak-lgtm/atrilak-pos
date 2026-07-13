@@ -6,14 +6,13 @@ use App\Models\Sale;
 use App\Models\Product;
 use App\Models\Customer;
 use Illuminate\Http\Request;
-use App\Models\SaleItem;
 use App\Models\Setting;
-use App\Models\StockMovement;
 use App\Models\TechnicianCommission;
 use App\Models\Technician;
 use App\Services\TechnicianCommissionService;
 use App\Services\SaleService;
 use App\Services\CommercialDocumentService;
+use DomainException;
 
 class SaleController extends Controller
 {
@@ -292,181 +291,27 @@ class SaleController extends Controller
             'selling_price' => 'required|array',
         ]);
 
-        /*
-    |--------------------------------------------------------------------------
-    | 1) คืนสต๊อกจากบิลเดิมก่อน
-    |--------------------------------------------------------------------------
-    */
-        foreach ($sale->items as $item) {
-
-            $product = $item->product;
-
-            if (!$product) {
-                continue;
-            }
-
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock + $item->qty;
-
-            $product->stock_qty = $newStock;
-            $product->save();
-
-            StockMovement::create([
-                'product_id'     => $product->id,
-                'type'           => 'IN',
-                'qty'            => $item->qty,
-                'stock_before'   => $oldStock,
-                'stock_after'    => $newStock,
-                'reference_type' => 'sale_edit',
-                'reference_id'   => $sale->id,
-                'remark'         => 'คืนสต๊อกจากการแก้ไขบิล ' . $sale->sale_no,
+        try {
+            app(SaleService::class)->updateSale($sale, [
+                'customer_id' => $request->customer_id,
+                'sale_date' => $request->sale_date,
+                'product_id' => $request->product_id,
+                'qty' => $request->qty,
+                'selling_price' => $request->selling_price,
+                'delivery_fee' => $request->delivery_fee ?? 0,
+                'discount' => $request->discount ?? 0,
             ]);
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
         }
 
-        /*
-    |--------------------------------------------------------------------------
-    | 2) ลบรายการสินค้าเดิมในบิล
-    |--------------------------------------------------------------------------
-    */
-        $sale->items()->delete();
-
-        /*
-    |--------------------------------------------------------------------------
-    | 3) ตรวจสอบสต๊อกก่อนบันทึกใหม่
-    |--------------------------------------------------------------------------
-    */
-        foreach ($request->product_id as $index => $productId) {
-
-            $qty = $request->qty[$index] ?? 0;
-
-            if (empty($productId) || empty($qty)) {
-                continue;
-            }
-
-            $product = Product::find($productId);
-
-            if (!$product) {
-                return back()->with('error', 'ไม่พบสินค้า');
-            }
-
-            if ($product->stock_qty < $qty) {
-                return back()->with(
-                    'error',
-                    'สินค้า ' . $product->name . ' มีสต็อกไม่พอ'
-                );
-            }
-        }
-
-        /*
-    |--------------------------------------------------------------------------
-    | 4) บันทึกรายการใหม่ + ตัดสต๊อก + บันทึกต้นทุน/กำไร
-    |--------------------------------------------------------------------------
-    */
-        $grandTotal = 0;
-
-        foreach ($request->product_id as $index => $productId) {
-
-            $qty = $request->qty[$index] ?? 0;
-            $price = $request->selling_price[$index] ?? 0;
-
-            if (
-                empty($productId) ||
-                empty($qty) ||
-                empty($price)
-            ) {
-                continue;
-            }
-
-            $product = Product::find($productId);
-
-            $lineTotal = $qty * $price;
-            $costPrice = $product->cost_price ?? 0;
-            $lineProfit = ($price - $costPrice) * $qty;
-
-            SaleItem::create([
-                'sale_id' => $sale->id,
-                'product_id' => $productId,
-                'qty' => $qty,
-                'selling_price' => $price,
-                'cost_price' => $costPrice,
-                'total' => $lineTotal,
-                'profit' => $lineProfit,
-            ]);
-
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock - $qty;
-
-            $product->stock_qty = $newStock;
-            $product->save();
-
-            StockMovement::create([
-                'product_id'     => $product->id,
-                'type'           => 'OUT',
-                'qty'            => $qty,
-                'stock_before'   => $oldStock,
-                'stock_after'    => $newStock,
-                'reference_type' => 'sale_edit',
-                'reference_id'   => $sale->id,
-                'remark'         => 'ขายออกจากการแก้ไขบิล ' . $sale->sale_no,
-            ]);
-
-            $grandTotal += $lineTotal;
-        }
-
-        /*
-    |--------------------------------------------------------------------------
-    | 5) อัปเดตหัวบิล
-    |--------------------------------------------------------------------------
-    */
-        $deliveryFee = $request->delivery_fee ?? 0;
-        $discount = $request->discount ?? 0;
-
-        $netTotal = $grandTotal + $deliveryFee - $discount;
-
-        $sale->update([
-            'customer_id' => $request->customer_id,
-            'sale_date' => $request->sale_date,
-            'total_amount' => $netTotal,
-            'delivery_fee' => $deliveryFee,
-            'discount' => $discount,
-        ]);
         return redirect()
             ->route('sales.show', $sale->id)
             ->with('success', 'แก้ไขบิลเรียบร้อยแล้ว');
     }
     public function destroy(Sale $sale)
     {
-        $sale->load('items.product');
-
-        foreach ($sale->items as $item) {
-
-            $product = $item->product;
-
-            if (!$product) {
-                continue;
-            }
-
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock + $item->qty;
-
-            $product->stock_qty = $newStock;
-            $product->save();
-
-            StockMovement::create([
-                'product_id'     => $product->id,
-                'type'           => 'IN',
-                'qty'            => $item->qty,
-                'stock_before'   => $oldStock,
-                'stock_after'    => $newStock,
-                'reference_type' => 'sale_delete',
-                'reference_id'   => $sale->id,
-                'remark'         => 'คืนสต๊อกจากการลบบิล ' . $sale->sale_no,
-            ]);
-        }
-
-        $sale->items()->delete();
-
-        $sale->delete();
+        app(SaleService::class)->deleteSale($sale);
 
         return redirect()
             ->route('sales.index')
