@@ -22,23 +22,32 @@ class SaleService
     protected StockService $stockService;
     protected CommissionService $commissionService;
     protected ProfitGuardService $profitGuardService;
+    protected StockLockService $stockLockService;
 
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
         StockService $stockService,
         CommissionService $commissionService,
-        ProfitGuardService $profitGuardService
+        ProfitGuardService $profitGuardService,
+        StockLockService $stockLockService
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
         $this->stockService = $stockService;
 $this->commissionService = $commissionService;
 $this->profitGuardService = $profitGuardService;
+        $this->stockLockService = $stockLockService;
     }
     public function createSale(array $data)
     {
         return DB::transaction(function () use ($data) {
+
+            $items = $data['items'] ?? [];
+            $lockedProducts = $this->stockLockService->lockProducts(
+                array_column($items, 'product_id')
+            );
+            $this->stockLockService->assertSufficientStock($lockedProducts, $items);
 
             $saleDate = $data['sale_date'];
 
@@ -106,7 +115,7 @@ $this->profitGuardService = $profitGuardService;
             }
 
             $this->stockService
-                ->deductFromSale($sale);
+                ->deductFromSale($sale, $lockedProducts);
 
             $this->commissionService
                 ->createFromSale($sale);
@@ -118,34 +127,14 @@ $this->profitGuardService = $profitGuardService;
     public function updateSale(Sale $sale, array $data): Sale
     {
         return DB::transaction(function () use ($sale, $data) {
-            $sale->loadMissing('items');
+            $lockedSale = Sale::query()
+                ->whereKey($sale->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-            foreach ($sale->items as $item) {
-                $product = $item->product;
+            $lockedSale->load('items');
 
-                if (! $product) {
-                    continue;
-                }
-
-                $oldStock = $product->stock_qty;
-                $newStock = $oldStock + $item->qty;
-
-                $product->stock_qty = $newStock;
-                $product->save();
-
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'type' => 'IN',
-                    'qty' => $item->qty,
-                    'stock_before' => $oldStock,
-                    'stock_after' => $newStock,
-                    'reference_type' => 'sale_edit',
-                    'reference_id' => $sale->id,
-                    'remark' => 'คืนสต๊อกจากการแก้ไขบิล '.$sale->sale_no,
-                ]);
-            }
-
-            $sale->items()->delete();
+            $newItemsForStock = [];
 
             foreach ($data['product_id'] as $index => $productId) {
                 $qty = $data['qty'][$index] ?? 0;
@@ -154,16 +143,33 @@ $this->profitGuardService = $profitGuardService;
                     continue;
                 }
 
-                $product = Product::find($productId);
-
-                if (! $product) {
-                    throw new DomainException('ไม่พบสินค้า');
-                }
-
-                if ($product->stock_qty < $qty) {
-                    throw new DomainException('สินค้า '.$product->name.' มีสต็อกไม่พอ');
-                }
+                $newItemsForStock[] = [
+                    'product_id' => $productId,
+                    'qty' => $qty,
+                ];
             }
+
+            $productIds = $lockedSale->items
+                ->pluck('product_id')
+                ->merge(array_column($newItemsForStock, 'product_id'))
+                ->all();
+
+            $lockedProducts = $this->stockLockService->lockProducts($productIds);
+
+            $this->stockService->restoreFromSale(
+                $lockedSale,
+                $lockedProducts,
+                'sale_edit',
+                'คืนสต๊อกจากการแก้ไขบิล '.$lockedSale->sale_no
+            );
+
+            $this->stockLockService->assertSufficientStock(
+                $lockedProducts,
+                $newItemsForStock
+            );
+
+            $lockedSale->items()->delete();
+            $lockedSale->unsetRelation('items');
 
             $grandTotal = 0;
 
@@ -175,13 +181,18 @@ $this->profitGuardService = $profitGuardService;
                     continue;
                 }
 
-                $product = Product::find($productId);
+                $product = $lockedProducts->get((int) $productId);
+
+                if (! $product) {
+                    throw new DomainException('ไม่พบสินค้า');
+                }
+
                 $lineTotal = $qty * $price;
                 $costPrice = $product->cost_price ?? 0;
                 $lineProfit = ($price - $costPrice) * $qty;
 
                 SaleItem::create([
-                    'sale_id' => $sale->id,
+                    'sale_id' => $lockedSale->id,
                     'product_id' => $productId,
                     'qty' => $qty,
                     'selling_price' => $price,
@@ -190,31 +201,23 @@ $this->profitGuardService = $profitGuardService;
                     'profit' => $lineProfit,
                 ]);
 
-                $oldStock = $product->stock_qty;
-                $newStock = $oldStock - $qty;
-
-                $product->stock_qty = $newStock;
-                $product->save();
-
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'type' => 'OUT',
-                    'qty' => $qty,
-                    'stock_before' => $oldStock,
-                    'stock_after' => $newStock,
-                    'reference_type' => 'sale_edit',
-                    'reference_id' => $sale->id,
-                    'remark' => 'ขายออกจากการแก้ไขบิล '.$sale->sale_no,
-                ]);
-
                 $grandTotal += $lineTotal;
             }
+
+            $lockedSale->unsetRelation('items');
+
+            $this->stockService->deductFromSale(
+                $lockedSale,
+                $lockedProducts,
+                'sale_edit',
+                'ขายออกจากการแก้ไขบิล '.$lockedSale->sale_no
+            );
 
             $deliveryFee = $data['delivery_fee'] ?? 0;
             $discount = $data['discount'] ?? 0;
             $netTotal = $grandTotal + $deliveryFee - $discount;
 
-            $sale->update([
+            $lockedSale->update([
                 'customer_id' => $data['customer_id'] ?? null,
                 'sale_date' => $data['sale_date'],
                 'total_amount' => $netTotal,
@@ -222,42 +225,33 @@ $this->profitGuardService = $profitGuardService;
                 'discount' => $discount,
             ]);
 
-            return $sale;
+            return $lockedSale;
         });
     }
 
     public function deleteSale(Sale $sale): void
     {
         DB::transaction(function () use ($sale) {
-            $sale->load('items.product');
+            $lockedSale = Sale::query()
+                ->whereKey($sale->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-            foreach ($sale->items as $item) {
-                $product = $item->product;
+            $lockedSale->load('items');
 
-                if (! $product) {
-                    continue;
-                }
+            $lockedProducts = $this->stockLockService->lockProducts(
+                $lockedSale->items->pluck('product_id')->all()
+            );
 
-                $oldStock = $product->stock_qty;
-                $newStock = $oldStock + $item->qty;
+            $this->stockService->restoreFromSale(
+                $lockedSale,
+                $lockedProducts,
+                'sale_delete',
+                'คืนสต๊อกจากการลบบิล '.$lockedSale->sale_no
+            );
 
-                $product->stock_qty = $newStock;
-                $product->save();
-
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'type' => 'IN',
-                    'qty' => $item->qty,
-                    'stock_before' => $oldStock,
-                    'stock_after' => $newStock,
-                    'reference_type' => 'sale_delete',
-                    'reference_id' => $sale->id,
-                    'remark' => 'คืนสต๊อกจากการลบบิล '.$sale->sale_no,
-                ]);
-            }
-
-            $sale->items()->delete();
-            $sale->delete();
+            $lockedSale->items()->delete();
+            $lockedSale->delete();
         });
     }
 }

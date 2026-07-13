@@ -12,6 +12,7 @@ use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\StockService;
 use App\Services\SaleService;
+use App\Services\StockLockService;
 use Mockery;
 use Tests\Support\CreatesBusinessRuleTestSchema;
 use Tests\TestCase;
@@ -83,7 +84,10 @@ class SalesAndStockCharacterizationTest extends TestCase
             'profit' => 75,
         ]);
 
-        (new StockService)->deductFromSale($sale);
+        (new StockService)->deductFromSale(
+            $sale,
+            collect([$product])->keyBy('id')
+        );
 
         $this->assertEquals(7.0, $product->fresh()->stock_qty);
         $this->assertDatabaseHas('stock_movements', [
@@ -159,7 +163,8 @@ class SalesAndStockCharacterizationTest extends TestCase
             new SaleItemService,
             $stock,
             $commission,
-            $profitGuard
+            $profitGuard,
+            new StockLockService
         );
     }
 }
