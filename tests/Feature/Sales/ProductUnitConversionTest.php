@@ -195,11 +195,13 @@ class ProductUnitConversionTest extends TestCase
         app(SaleService::class)->updateSale($sale, [
             'customer_id' => null,
             'sale_date' => '2026-07-14',
-            'sale_item_id' => [$oldItem->id],
-            'product_id' => [$product->id],
-            'product_unit_id' => [null],
-            'qty' => ['1.00'],
-            'selling_price' => ['10.00'],
+            'items' => [[
+                'sale_item_id' => $oldItem->id,
+                'product_id' => $product->id,
+                'product_unit_id' => null,
+                'qty' => '1.00',
+                'selling_price' => '10.00',
+            ]],
             'delivery_fee' => 0,
             'discount' => 0,
         ]);
@@ -221,11 +223,13 @@ class ProductUnitConversionTest extends TestCase
         $this->expectDomainFailure(fn () => app(SaleService::class)->updateSale($sale, [
             'customer_id' => null,
             'sale_date' => '2026-07-14',
-            'sale_item_id' => [$oldItem->id],
-            'product_id' => [$product->id],
-            'product_unit_id' => [$wrongUnit->id],
-            'qty' => ['1.00'],
-            'selling_price' => ['10.00'],
+            'items' => [[
+                'sale_item_id' => $oldItem->id,
+                'product_id' => $product->id,
+                'product_unit_id' => $wrongUnit->id,
+                'qty' => '1.00',
+                'selling_price' => '10.00',
+            ]],
             'delivery_fee' => 0,
             'discount' => 0,
         ]));
@@ -300,11 +304,13 @@ class ProductUnitConversionTest extends TestCase
         app(SaleService::class)->updateSale($sale, [
             'customer_id' => null,
             'sale_date' => '2026-07-14',
-            'sale_item_id' => [$legacyItem->id],
-            'product_id' => [$product->id],
-            'product_unit_id' => [null],
-            'qty' => ['1.00'],
-            'selling_price' => ['10.00'],
+            'items' => [[
+                'sale_item_id' => $legacyItem->id,
+                'product_id' => $product->id,
+                'product_unit_id' => null,
+                'qty' => '1.00',
+                'selling_price' => '10.00',
+            ]],
             'delivery_fee' => 0,
             'discount' => 0,
         ]);

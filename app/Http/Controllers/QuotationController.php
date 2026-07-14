@@ -10,6 +10,7 @@ use App\Services\SaleService;
 use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 class QuotationController extends Controller
 {
@@ -65,15 +66,15 @@ class QuotationController extends Controller
                 $date
             )->count() + 1;
 
-            $quotationNo = 'QT-' .
-                date('Ymd', strtotime($date)) .
-                '-' .
+            $quotationNo = 'QT-'.
+                date('Ymd', strtotime($date)).
+                '-'.
                 str_pad($running, 4, '0', STR_PAD_LEFT);
 
             $totalAmount = 0;
 
             foreach ($request->product_id as $index => $productId) {
-                if (!$productId) {
+                if (! $productId) {
                     continue;
                 }
 
@@ -93,7 +94,7 @@ class QuotationController extends Controller
             ]);
 
             foreach ($request->product_id as $index => $productId) {
-                if (!$productId) {
+                if (! $productId) {
                     continue;
                 }
 
@@ -157,6 +158,13 @@ class QuotationController extends Controller
             $sale = $this->saleService->createSaleFromQuotation($quotation);
         } catch (DomainException $exception) {
             return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'ไม่สามารถแปลงใบเสนอราคาเป็นใบขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
         }
 
         return redirect()

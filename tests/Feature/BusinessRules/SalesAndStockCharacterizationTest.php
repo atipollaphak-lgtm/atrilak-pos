@@ -11,6 +11,7 @@ use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
+use App\Services\Sales\SaleValidationService;
 use App\Services\Sales\StockService;
 use App\Services\SaleService;
 use App\Services\StockLockService;
@@ -106,12 +107,22 @@ class SalesAndStockCharacterizationTest extends TestCase
 
     public function test_pickup_sale_total_is_grand_total_less_discount(): void
     {
+        $product = Product::create([
+            'name' => 'Pickup total product',
+            'cost_price' => 500,
+            'selling_price' => 1000,
+            'stock_qty' => 10,
+        ]);
         $sale = $this->makeSaleService()->createSale([
             'sale_date' => '2026-07-13',
             'grand_total' => 1000,
             'discount' => 75,
             'delivery_type' => 'pickup',
-            'items' => [],
+            'items' => [[
+                'product_id' => $product->id,
+                'qty' => 1,
+                'selling_price' => 1000,
+            ]],
         ]);
 
         $this->assertEquals(925.00, $sale->total_amount);
@@ -120,6 +131,12 @@ class SalesAndStockCharacterizationTest extends TestCase
 
     public function test_delivery_sale_total_adds_the_zone_fee_then_subtracts_discount(): void
     {
+        $product = Product::create([
+            'name' => 'Delivery total product',
+            'cost_price' => 500,
+            'selling_price' => 1000,
+            'stock_qty' => 10,
+        ]);
         $zone = DeliveryZone::create([
             'name' => 'Test zone',
             'base_delivery_fee' => 80,
@@ -137,7 +154,11 @@ class SalesAndStockCharacterizationTest extends TestCase
             'discount' => 50,
             'delivery_type' => 'delivery',
             'customer_delivery_address_id' => $address->id,
-            'items' => [],
+            'items' => [[
+                'product_id' => $product->id,
+                'qty' => 1,
+                'selling_price' => 1000,
+            ]],
         ]);
 
         $this->assertEquals(1030.00, $sale->total_amount);
@@ -168,7 +189,8 @@ class SalesAndStockCharacterizationTest extends TestCase
             $commission,
             $profitGuard,
             new StockLockService,
-            new ProductUnitConversionService
+            new ProductUnitConversionService,
+            new SaleValidationService
         );
     }
 }

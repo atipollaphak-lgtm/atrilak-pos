@@ -10,6 +10,7 @@ use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
+use App\Services\Sales\SaleValidationService;
 use App\Services\Sales\StockService;
 use DomainException;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +31,8 @@ class SaleService
 
     protected ProductUnitConversionService $productUnitConversionService;
 
+    protected SaleValidationService $saleValidationService;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -37,7 +40,8 @@ class SaleService
         CommissionService $commissionService,
         ProfitGuardService $profitGuardService,
         StockLockService $stockLockService,
-        ProductUnitConversionService $productUnitConversionService
+        ProductUnitConversionService $productUnitConversionService,
+        SaleValidationService $saleValidationService
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -46,6 +50,7 @@ class SaleService
         $this->profitGuardService = $profitGuardService;
         $this->stockLockService = $stockLockService;
         $this->productUnitConversionService = $productUnitConversionService;
+        $this->saleValidationService = $saleValidationService;
     }
 
     public function createSale(array $data)
@@ -53,6 +58,11 @@ class SaleService
         return DB::transaction(function () use ($data) {
 
             $items = $data['items'] ?? [];
+            $this->saleValidationService->assertValidItems($items);
+            $this->saleValidationService->assertDeliveryAddressBelongsToCustomer(
+                $data['customer_delivery_address_id'] ?? null,
+                $data['customer_id'] ?? null
+            );
             $lockedProducts = $this->stockLockService->lockProducts(
                 array_column($items, 'product_id')
             );
@@ -64,7 +74,9 @@ class SaleService
             $saleNo = $this->saleNumberService
                 ->generate($saleDate);
 
-            $grandTotal = $data['grand_total'] ?? 0;
+            $grandTotal = array_key_exists('grand_total', $data)
+                ? $data['grand_total']
+                : $this->saleValidationService->calculateItemsTotal($items);
             $deliveryType = $data['delivery_type'] ?? 'delivery';
             $discount = $data['discount'] ?? 0;
 
@@ -118,7 +130,7 @@ class SaleService
             );
 
             if (! $profitGuardResult['passed']) {
-                throw new \Exception(
+                throw new DomainException(
                     $profitGuardResult['message']
                 );
             }
@@ -152,6 +164,8 @@ class SaleService
                 'selling_price' => $item->selling_price,
             ])->all();
 
+            $this->saleValidationService->assertValidItems($items);
+
             $sale = $this->createSale([
                 'customer_id' => $lockedQuotation->customer_id,
                 'sale_date' => now()->toDateString(),
@@ -177,29 +191,16 @@ class SaleService
 
             $lockedSale->load('items');
 
-            $newItemsForStock = [];
+            $newItemsForStock = $data['items'] ?? [];
+            $this->saleValidationService->assertValidItems($newItemsForStock);
             $existingItemIds = $lockedSale->items->modelKeys();
 
-            foreach ($data['product_id'] as $index => $productId) {
-                $qty = $data['qty'][$index] ?? 0;
-                $price = $data['selling_price'][$index] ?? 0;
-                $saleItemId = $data['sale_item_id'][$index] ?? null;
-
-                if (empty($productId) || empty($qty) || empty($price)) {
-                    continue;
-                }
-
+            foreach ($newItemsForStock as $item) {
+                $saleItemId = $item['sale_item_id'] ?? null;
                 if ($saleItemId !== null && $saleItemId !== ''
                     && ! in_array((int) $saleItemId, $existingItemIds, true)) {
                     throw new DomainException('รายการขายไม่ตรงกับใบขาย');
                 }
-
-                $newItemsForStock[] = [
-                    'product_id' => $productId,
-                    'product_unit_id' => $data['product_unit_id'][$index] ?? null,
-                    'qty' => $qty,
-                    'selling_price' => $price,
-                ];
             }
 
             $productIds = $lockedSale->items
@@ -232,9 +233,8 @@ class SaleService
                 $lockedProducts
             );
 
-            $grandTotal = collect($newItemsForStock)->sum(
-                fn (array $item) => $item['qty'] * $item['selling_price']
-            );
+            $grandTotal = $this->saleValidationService
+                ->calculateItemsTotal($newItemsForStock);
 
             $lockedSale->unsetRelation('items');
 

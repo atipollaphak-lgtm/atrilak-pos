@@ -323,9 +323,7 @@ SQL);
             'data' => [
                 'customer_id' => null,
                 'sale_date' => '2026-07-14',
-                'product_id' => array_column($items, 'product_id'),
-                'qty' => array_column($items, 'qty'),
-                'selling_price' => array_column($items, 'selling_price'),
+                'items' => $items,
                 'delivery_fee' => 0,
                 'discount' => 0,
             ],

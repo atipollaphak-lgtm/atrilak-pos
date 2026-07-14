@@ -253,9 +253,12 @@ class SaleUpdateTest extends TestCase
         return [
             'customer_id' => null,
             'sale_date' => '2026-07-14',
-            'product_id' => $productIds,
-            'qty' => $quantities,
-            'selling_price' => $prices,
+            'items' => collect($productIds)->map(fn (int $productId, int $index) => [
+                'product_id' => $productId,
+                'product_unit_id' => null,
+                'qty' => $quantities[$index],
+                'selling_price' => $prices[$index],
+            ])->all(),
             'delivery_fee' => 25,
             'discount' => 10,
         ];

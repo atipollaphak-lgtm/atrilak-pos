@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Sales\StoreSaleV1Request;
+use App\Http\Requests\Sales\StoreSaleV2Request;
+use App\Http\Requests\Sales\UpdateSaleRequest;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
@@ -11,6 +14,7 @@ use App\Services\CommercialDocumentService;
 use App\Services\SaleService;
 use DomainException;
 use Illuminate\Http\Request;
+use Throwable;
 
 class SaleController extends Controller
 {
@@ -79,68 +83,19 @@ class SaleController extends Controller
         );
     }
 
-    public function store(Request $request)
+    public function store(StoreSaleV1Request $request)
     {
-        $request->validate([
-            'product_id' => 'required|array',
-            'qty' => 'required|array',
-            'selling_price' => 'required|array',
-            'technician_id' => 'nullable|exists:technicians,id',
-        ]);
-
-        $items = [];
-        $grandTotal = 0;
-
-        foreach ($request->product_id as $index => $productId) {
-
-            $qty = $request->qty[$index] ?? 0;
-            $price = $request->selling_price[$index] ?? 0;
-
-            if (
-                empty($productId) ||
-                empty($qty) ||
-                empty($price)
-            ) {
-                continue;
-            }
-
-            $product = Product::find($productId);
-
-            if (! $product) {
-                return back()->with('error', 'ไม่พบสินค้า');
-            }
-
-            if ($product->stock_qty < $qty) {
-                return back()->with(
-                    'error',
-                    'สินค้า '.$product->name.' มีสต็อกไม่พอ'
-                );
-            }
-
-            $items[] = [
-                'product_id' => $productId,
-                'qty' => $qty,
-                'selling_price' => $price,
-            ];
-
-            $grandTotal += $qty * $price;
-        }
-
-        if (count($items) <= 0) {
-            return back()->with('error', 'กรุณาเลือกรายการสินค้า');
-        }
+        $validated = $request->validated();
 
         try {
-
             $sale = app(SaleService::class)->createSale([
-                'customer_id' => $request->customer_id,
-                'customer_delivery_address_id' => $request->customer_delivery_address_id,
-                'technician_id' => $request->technician_id,
-                'sale_date' => $request->sale_date ?? now()->toDateString(),
-                'grand_total' => $grandTotal,
-                'delivery_type' => $request->delivery_type ?? 'delivery',
-                'discount' => $request->discount ?? 0,
-                'items' => $items,
+                'customer_id' => $validated['customer_id'] ?? null,
+                'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
+                'technician_id' => $validated['technician_id'] ?? null,
+                'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
+                'delivery_type' => $validated['delivery_type'] ?? 'delivery',
+                'discount' => $validated['discount'] ?? 0,
+                'items' => $request->normalizedItems(),
             ]);
 
             return response()->json([
@@ -148,12 +103,15 @@ class SaleController extends Controller
                 'sale_id' => $sale->id,
                 'invoice_url' => route('sales.invoice', $sale->id),
             ]);
-        } catch (\Exception $e) {
+        } catch (DomainException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
 
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
+            return back()->withInput()->with(
+                'error',
+                'ไม่สามารถบันทึกการขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
         }
     }
 
@@ -165,52 +123,19 @@ class SaleController extends Controller
         ]);
     }
 
-    public function storeV2(Request $request)
+    public function storeV2(StoreSaleV2Request $request)
     {
-        $request->validate([
-            'items' => 'required|array',
-            'items.*.product_id' => 'required',
-            'items.*.product_unit_id' => 'nullable|integer',
-            'items.*.qty' => 'required',
-            'items.*.selling_price' => 'required',
-            'technician_id' => 'nullable|exists:technicians,id',
-        ]);
-
-        $grandTotal = 0;
-        $items = [];
-
-        foreach ($request->items as $item) {
-
-            $product = Product::find($item['product_id']);
-
-            if (! $product) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'ไม่พบสินค้า',
-                ], 422);
-            }
-
-            $items[] = [
-                'product_id' => $item['product_id'],
-                'product_unit_id' => $item['product_unit_id'] ?? null,
-                'qty' => $item['qty'],
-                'selling_price' => $item['selling_price'],
-            ];
-
-            $grandTotal += $item['qty'] * $item['selling_price'];
-        }
+        $validated = $request->validated();
 
         try {
-
             $sale = app(SaleService::class)->createSale([
-                'customer_id' => $request->customer_id,
-                'customer_delivery_address_id' => $request->customer_delivery_address_id,
-                'technician_id' => $request->technician_id,
-                'sale_date' => $request->sale_date ?? now()->toDateString(),
-                'grand_total' => $grandTotal,
-                'delivery_type' => $request->delivery_type ?? 'delivery',
-                'discount' => $request->discount ?? 0,
-                'items' => $items,
+                'customer_id' => $validated['customer_id'] ?? null,
+                'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
+                'technician_id' => $validated['technician_id'] ?? null,
+                'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
+                'delivery_type' => $validated['delivery_type'] ?? 'delivery',
+                'discount' => $validated['discount'] ?? 0,
+                'items' => $validated['items'],
             ]);
 
             return response()->json([
@@ -218,12 +143,20 @@ class SaleController extends Controller
                 'sale_id' => $sale->id,
                 'invoice_url' => route('sales.invoice', $sale->id),
             ]);
-        } catch (\Exception $e) {
+        } catch (DomainException $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'errors' => [],
+            ], 422);
+        } catch (Throwable $exception) {
+            report($exception);
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
+                'message' => 'ไม่สามารถบันทึกการขายได้ กรุณาลองใหม่อีกครั้ง',
+                'errors' => [],
+            ], 500);
         }
     }
 
@@ -277,31 +210,27 @@ class SaleController extends Controller
         );
     }
 
-    public function update(Request $request, Sale $sale)
+    public function update(UpdateSaleRequest $request, Sale $sale)
     {
-        $request->validate([
-            'sale_date' => 'required|date',
-            'product_id' => 'required|array',
-            'qty' => 'required|array',
-            'selling_price' => 'required|array',
-            'sale_item_id' => 'nullable|array',
-            'product_unit_id' => 'nullable|array',
-        ]);
+        $validated = $request->validated();
 
         try {
             app(SaleService::class)->updateSale($sale, [
-                'customer_id' => $request->customer_id,
-                'sale_date' => $request->sale_date,
-                'product_id' => $request->product_id,
-                'qty' => $request->qty,
-                'selling_price' => $request->selling_price,
-                'sale_item_id' => $request->sale_item_id ?? [],
-                'product_unit_id' => $request->product_unit_id ?? [],
-                'delivery_fee' => $request->delivery_fee ?? 0,
-                'discount' => $request->discount ?? 0,
+                'customer_id' => $validated['customer_id'] ?? null,
+                'sale_date' => $validated['sale_date'],
+                'items' => $request->normalizedItems(),
+                'delivery_fee' => $validated['delivery_fee'] ?? 0,
+                'discount' => $validated['discount'] ?? 0,
             ]);
         } catch (DomainException $exception) {
-            return back()->with('error', $exception->getMessage());
+            return back()->withInput()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->withInput()->with(
+                'error',
+                'ไม่สามารถแก้ไขการขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
         }
 
         return redirect()
