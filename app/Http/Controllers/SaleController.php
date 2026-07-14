@@ -95,18 +95,31 @@ class SaleController extends Controller
                 'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
                 'delivery_type' => $validated['delivery_type'] ?? 'delivery',
                 'discount' => $validated['discount'] ?? 0,
+                'idempotency_key' => $validated['idempotency_key'],
                 'items' => $request->normalizedItems(),
             ]);
 
-            return response()->json([
-                'success' => true,
-                'sale_id' => $sale->id,
-                'invoice_url' => route('sales.invoice', $sale->id),
-            ]);
+            return $this->saleCreatedResponse($sale);
         } catch (DomainException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $exception->getMessage(),
+                    'errors' => [],
+                ], $exception->getCode() === 409 ? 409 : 422);
+            }
+
             return back()->withInput()->with('error', $exception->getMessage());
         } catch (Throwable $exception) {
             report($exception);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ไม่สามารถบันทึกการขายได้ กรุณาลองใหม่อีกครั้ง',
+                    'errors' => [],
+                ], 500);
+            }
 
             return back()->withInput()->with(
                 'error',
@@ -135,20 +148,17 @@ class SaleController extends Controller
                 'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
                 'delivery_type' => $validated['delivery_type'] ?? 'delivery',
                 'discount' => $validated['discount'] ?? 0,
+                'idempotency_key' => $validated['idempotency_key'],
                 'items' => $validated['items'],
             ]);
 
-            return response()->json([
-                'success' => true,
-                'sale_id' => $sale->id,
-                'invoice_url' => route('sales.invoice', $sale->id),
-            ]);
+            return $this->saleCreatedResponse($sale);
         } catch (DomainException $exception) {
             return response()->json([
                 'success' => false,
                 'message' => $exception->getMessage(),
                 'errors' => [],
-            ], 422);
+            ], $exception->getCode() === 409 ? 409 : 422);
         } catch (Throwable $exception) {
             report($exception);
 
@@ -245,6 +255,17 @@ class SaleController extends Controller
         return redirect()
             ->route('sales.index')
             ->with('success', 'ลบบิลและคืนสต๊อกเรียบร้อยแล้ว');
+    }
+
+    private function saleCreatedResponse(Sale $sale)
+    {
+        return response()->json([
+            'success' => true,
+            'sale_id' => $sale->id,
+            'sale_no' => $sale->sale_no,
+            'invoice_url' => route('sales.invoice', $sale->id),
+            'idempotent_replay' => $sale->idempotentReplay,
+        ]);
     }
 
     public function invoice(Sale $sale)

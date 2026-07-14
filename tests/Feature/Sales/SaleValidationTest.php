@@ -172,6 +172,7 @@ class SaleValidationTest extends TestCase
         $product = $this->product('V1 product', '10.0000');
 
         $response = $this->post(route('sales.store'), [
+            'idempotency_key' => '10000000-0000-4000-8000-000000000001',
             'sale_date' => '2026-07-14',
             'delivery_type' => 'pickup',
             'product_id' => [$product->id, ''],
@@ -436,6 +437,7 @@ class SaleValidationTest extends TestCase
     private function v2Payload(Product $product): array
     {
         return [
+            'idempotency_key' => '20000000-0000-4000-8000-'.str_pad((string) $product->id, 12, '0', STR_PAD_LEFT),
             'sale_date' => '2026-07-14',
             'delivery_type' => 'pickup',
             'discount' => '0.00',

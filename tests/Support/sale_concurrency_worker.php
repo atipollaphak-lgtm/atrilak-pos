@@ -35,7 +35,12 @@ try {
 
     if ($operation === 'create') {
         $sale = $service->createSale($payload['data']);
-        $result = ['ok' => true, 'sale_id' => $sale->id];
+        $result = [
+            'ok' => true,
+            'sale_id' => $sale->id,
+            'sale_no' => $sale->sale_no,
+            'idempotent_replay' => $sale->idempotentReplay,
+        ];
     } elseif ($operation === 'update') {
         $sale = Sale::findOrFail($payload['sale_id']);
         $updated = $service->updateSale($sale, $payload['data']);

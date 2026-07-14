@@ -26,9 +26,11 @@
         </div>
 
         <div class="card-body">
-            <form action="{{ route('sales.store') }}" method="POST" id="saleForm" target="_blank">
+            <form action="{{ route('sales.store') }}" method="POST" id="saleForm"
+                data-success-url="{{ route('sales.index') }}">
 
                 @csrf
+                <input type="hidden" name="idempotency_key" id="sale-idempotency-key">
 
                 <div class="row">
 
@@ -338,7 +340,8 @@
 
                                 </div>
 
-                                <button type="submit" class="btn btn-success btn-lg btn-block shadow mt-3">
+                                <button type="submit" id="btn-submit-sale-v1"
+                                    class="btn btn-success btn-lg btn-block shadow mt-3">
                                     💰 บันทึกการขาย (F4)
                                 </button>
 
@@ -1251,11 +1254,5 @@
         </script>
     @endif
 
-    <script>
-        document.getElementById('saleForm').addEventListener('submit', function() {
-            setTimeout(function() {
-                window.location.href = "{{ route('sales.index') }}";
-            }, 800);
-        });
-    </script>
+    <script src="{{ asset('js/modules/pos-v1-submit.js') }}"></script>
 @stop

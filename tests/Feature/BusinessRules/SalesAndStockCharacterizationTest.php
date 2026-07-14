@@ -9,6 +9,7 @@ use App\Models\Sale;
 use App\Services\Sales\CommissionService;
 use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
+use App\Services\Sales\SaleIdempotencyService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\SaleValidationService;
@@ -190,7 +191,8 @@ class SalesAndStockCharacterizationTest extends TestCase
             $profitGuard,
             new StockLockService,
             new ProductUnitConversionService,
-            new SaleValidationService
+            new SaleValidationService,
+            new SaleIdempotencyService
         );
     }
 }

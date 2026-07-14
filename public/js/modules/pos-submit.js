@@ -1,107 +1,110 @@
 function bindSubmitSale() {
-
     const button = document.getElementById("btn-submit-sale");
 
     if (!button) {
         return;
     }
 
-    button.addEventListener("click", function () {
+    let isSubmitting = false;
+    let pendingSale = null;
 
-        const items = cart.map(item => ({
-            product_id: item.productId,
-            product_unit_id: item.productUnitId,
-            qty: item.qty,
-            selling_price: item.price
-        }));
+    button.addEventListener("click", async function () {
+        if (isSubmitting) {
+            return;
+        }
 
-        fetch("/sales-v2/store", {
+        const payload = buildSalePayload();
 
-            method: "POST",
+        if (!pendingSale) {
+            pendingSale = {
+                key: crypto.randomUUID(),
+                payload: null
+            };
+        }
 
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
+        pendingSale.payload = payload;
+        payload.idempotency_key = pendingSale.key;
+        isSubmitting = true;
+        button.disabled = true;
 
-                "X-CSRF-TOKEN": document
-                    .querySelector('meta[name="csrf-token"]')
-                    .getAttribute("content")
-            },
-
-            body: JSON.stringify({
-                customer_id: document.getElementById("customer-id")?.value || null,
-
-                customer_delivery_address_id:
-                    document.getElementById("delivery-address-id")?.value || null,
-
-                delivery_zone_id:
-                    customerAddresses.find(function (item) {
-                        return item.id == document.getElementById("delivery-address-id")?.value;
-                    })?.delivery_zone_id || null,
-
-                technician_id:
-                    document.getElementById("technician-id")?.value || null,
-
-                sale_date:
-                    document.getElementById("sale-date")?.value,
-
-                delivery_fee: deliveryFee,
-
-                delivery_type:
-                    document.getElementById("is-pickup")?.checked
-                        ? "pickup"
-                        : "delivery",
-
-                discount: discount,
-
-                items: items
-            })
-
-        })
-            .then(async response => {
-
-                const text = await response.text();
-
-                let data = {};
-
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    console.error("Response is not JSON:", text);
-                    throw new Error("Backend ไม่ได้ส่ง JSON กลับมา");
-                }
-
-                if (!response.ok) {
-                    throw new Error(data.message || "ไม่สามารถบันทึกการขายได้");
-                }
-
-                return data;
-            })
-            .then(data => {
-
-                console.log("POS V2 Response :", data);
-
-                if (data.success && data.invoice_url) {
-                    window.open(data.invoice_url, "_blank");
-
-                    resetPOS();
-
-                    return;
-                }
-
-                alert(data.message || "ไม่สามารถบันทึกการขายได้");
-
-            })
-            .catch(error => {
-
-                console.error(error);
-
-                alert(error.message || "เกิดข้อผิดพลาดระหว่างบันทึกการขาย");
-
+        try {
+            const response = await fetch("/sales-v2/store", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": document
+                        .querySelector('meta[name="csrf-token"]')
+                        .getAttribute("content")
+                },
+                body: JSON.stringify(payload)
             });
+            const data = await parseSaleResponse(response);
 
+            if (!response.ok) {
+                const error = new Error(data.message || "ไม่สามารถบันทึกการขายได้");
+                error.status = response.status;
+                throw error;
+            }
+
+            if (!data.success || !data.invoice_url) {
+                throw new Error(data.message || "ไม่สามารถบันทึกการขายได้");
+            }
+
+            pendingSale = null;
+            window.open(data.invoice_url, "_blank");
+            resetPOS();
+        } catch (error) {
+            console.error(error);
+
+            if (error.status === 409) {
+                pendingSale = null;
+            }
+
+            alert(error.message || "เกิดข้อผิดพลาดระหว่างบันทึกการขาย");
+        } finally {
+            isSubmitting = false;
+            button.disabled = false;
+        }
     });
+}
 
+function buildSalePayload() {
+    const items = cart.map(item => ({
+        product_id: item.productId,
+        product_unit_id: item.productUnitId,
+        qty: item.qty,
+        selling_price: item.price
+    }));
+
+    return {
+        customer_id: document.getElementById("customer-id")?.value || null,
+        customer_delivery_address_id:
+            document.getElementById("delivery-address-id")?.value || null,
+        delivery_zone_id:
+            customerAddresses.find(function (item) {
+                return item.id == document.getElementById("delivery-address-id")?.value;
+            })?.delivery_zone_id || null,
+        technician_id: document.getElementById("technician-id")?.value || null,
+        sale_date: document.getElementById("sale-date")?.value,
+        delivery_fee: deliveryFee,
+        delivery_type: document.getElementById("is-pickup")?.checked
+            ? "pickup"
+            : "delivery",
+        discount: discount,
+        items: items
+    };
+}
+
+async function parseSaleResponse(response) {
+    const text = await response.text();
+
+    try {
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("Response is not JSON:", text);
+        throw new Error("Backend ไม่ได้ส่ง JSON กลับมา");
+    }
 }
 
 function resetPOS() {

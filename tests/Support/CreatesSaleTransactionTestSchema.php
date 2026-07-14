@@ -52,7 +52,9 @@ trait CreatesSaleTransactionTestSchema
 
         Schema::create('sales', function (Blueprint $table) {
             $table->id();
-            $table->string('sale_no')->nullable();
+            $table->string('sale_no')->nullable()->unique('sales_sale_no_unique');
+            $table->uuid('idempotency_key')->nullable()->unique('sales_idempotency_key_unique');
+            $table->char('idempotency_payload_hash', 64)->nullable();
             $table->unsignedBigInteger('customer_id')->nullable();
             $table->unsignedBigInteger('customer_delivery_address_id')->nullable();
             $table->foreignId('technician_id')->nullable()->constrained()->nullOnDelete();
@@ -61,6 +63,12 @@ trait CreatesSaleTransactionTestSchema
             $table->decimal('delivery_fee', 12, 2)->default(0);
             $table->string('delivery_type')->default('delivery');
             $table->decimal('discount', 12, 2)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('sale_number_counters', function (Blueprint $table) {
+            $table->date('sale_date')->primary();
+            $table->integer('last_number');
             $table->timestamps();
         });
 
@@ -108,6 +116,7 @@ trait CreatesSaleTransactionTestSchema
             'technician_commissions',
             'stock_movements',
             'sale_items',
+            'sale_number_counters',
             'sales',
             'technicians',
             'product_units',

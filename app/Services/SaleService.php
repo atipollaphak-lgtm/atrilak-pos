@@ -8,11 +8,13 @@ use App\Models\Sale;
 use App\Services\Sales\CommissionService;
 use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
+use App\Services\Sales\SaleIdempotencyService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\SaleValidationService;
 use App\Services\Sales\StockService;
 use DomainException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 class SaleService
@@ -33,6 +35,8 @@ class SaleService
 
     protected SaleValidationService $saleValidationService;
 
+    protected SaleIdempotencyService $saleIdempotencyService;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -41,7 +45,8 @@ class SaleService
         ProfitGuardService $profitGuardService,
         StockLockService $stockLockService,
         ProductUnitConversionService $productUnitConversionService,
-        SaleValidationService $saleValidationService
+        SaleValidationService $saleValidationService,
+        SaleIdempotencyService $saleIdempotencyService
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -51,98 +56,138 @@ class SaleService
         $this->stockLockService = $stockLockService;
         $this->productUnitConversionService = $productUnitConversionService;
         $this->saleValidationService = $saleValidationService;
+        $this->saleIdempotencyService = $saleIdempotencyService;
     }
 
     public function createSale(array $data)
     {
-        return DB::transaction(function () use ($data) {
+        $idempotencyKey = $data['idempotency_key'] ?? null;
+        $payloadHash = $idempotencyKey !== null
+            ? $this->saleIdempotencyService->payloadHash($data)
+            : null;
 
-            $items = $data['items'] ?? [];
-            $this->saleValidationService->assertValidItems($items);
-            $this->saleValidationService->assertDeliveryAddressBelongsToCustomer(
-                $data['customer_delivery_address_id'] ?? null,
-                $data['customer_id'] ?? null
-            );
-            $lockedProducts = $this->stockLockService->lockProducts(
-                array_column($items, 'product_id')
-            );
-            $items = $this->productUnitConversionService->resolveItems($items);
-            $this->stockLockService->assertSufficientStock($lockedProducts, $items);
+        if ($idempotencyKey !== null) {
+            $replay = $this->saleIdempotencyService->replay($idempotencyKey, $payloadHash);
 
-            $saleDate = $data['sale_date'];
-
-            $saleNo = $this->saleNumberService
-                ->generate($saleDate);
-
-            $grandTotal = array_key_exists('grand_total', $data)
-                ? $data['grand_total']
-                : $this->saleValidationService->calculateItemsTotal($items);
-            $deliveryType = $data['delivery_type'] ?? 'delivery';
-            $discount = $data['discount'] ?? 0;
-
-            $deliveryFee = 0;
-            $minimumProfit = 0;
-            $deliveryZoneId = null;
-
-            if ($deliveryType === 'delivery') {
-                $address = CustomerDeliveryAddress::with('deliveryZone')
-                    ->find($data['customer_delivery_address_id'] ?? null);
-
-                if ($address && $address->deliveryZone) {
-                    $deliveryFee = (float) $address->deliveryZone->base_delivery_fee;
-                    $minimumProfit = (float) $address->deliveryZone->minimum_profit;
-                    $deliveryZoneId = $address->deliveryZone->id;
-                }
-            } else {
-                $deliveryFee = 0;
+            if ($replay !== null) {
+                return $replay;
             }
+        }
 
-            $netTotal = $grandTotal + $deliveryFee - $discount;
+        try {
+            return DB::transaction(function () use ($data, $idempotencyKey, $payloadHash) {
 
-            $sale = new Sale;
-
-            $sale->sale_no = $saleNo;
-            $sale->customer_id = $data['customer_id'] ?? null;
-            $sale->customer_delivery_address_id =
-                $data['customer_delivery_address_id'] ?? null;
-            $sale->technician_id = $data['technician_id'] ?? null;
-            $sale->sale_date = $saleDate;
-            $sale->total_amount = $netTotal;
-            $sale->delivery_fee = $deliveryFee;
-            $sale->delivery_type = $deliveryType;
-            $sale->discount = $discount;
-
-            $sale->save();
-
-            $this->saleItemService
-                ->createItems($sale, $items, $lockedProducts);
-
-            $productProfit = $sale->items()->sum('profit');
-
-            $profitGuardResult = $this->profitGuardService->check(
-                [
-                    'delivery_type' => $deliveryType,
-                    'delivery_fee' => $deliveryFee,
-                    'delivery_zone_id' => $deliveryZoneId,
-                    'minimum_profit' => $minimumProfit,
-                ],
-                $productProfit
-            );
-
-            if (! $profitGuardResult['passed']) {
-                throw new DomainException(
-                    $profitGuardResult['message']
+                $items = $data['items'] ?? [];
+                $this->saleValidationService->assertValidItems($items);
+                $this->saleValidationService->assertDeliveryAddressBelongsToCustomer(
+                    $data['customer_delivery_address_id'] ?? null,
+                    $data['customer_id'] ?? null
                 );
+                $lockedProducts = $this->stockLockService->lockProducts(
+                    array_column($items, 'product_id')
+                );
+
+                if ($idempotencyKey !== null) {
+                    $replay = $this->saleIdempotencyService->replay($idempotencyKey, $payloadHash);
+
+                    if ($replay !== null) {
+                        return $replay;
+                    }
+                }
+
+                $items = $this->productUnitConversionService->resolveItems($items);
+                $this->stockLockService->assertSufficientStock($lockedProducts, $items);
+
+                $saleDate = $data['sale_date'];
+
+                $saleNo = $this->saleNumberService
+                    ->generate($saleDate);
+
+                $grandTotal = array_key_exists('grand_total', $data)
+                    ? $data['grand_total']
+                    : $this->saleValidationService->calculateItemsTotal($items);
+                $deliveryType = $data['delivery_type'] ?? 'delivery';
+                $discount = $data['discount'] ?? 0;
+
+                $deliveryFee = 0;
+                $minimumProfit = 0;
+                $deliveryZoneId = null;
+
+                if ($deliveryType === 'delivery') {
+                    $address = CustomerDeliveryAddress::with('deliveryZone')
+                        ->find($data['customer_delivery_address_id'] ?? null);
+
+                    if ($address && $address->deliveryZone) {
+                        $deliveryFee = (float) $address->deliveryZone->base_delivery_fee;
+                        $minimumProfit = (float) $address->deliveryZone->minimum_profit;
+                        $deliveryZoneId = $address->deliveryZone->id;
+                    }
+                } else {
+                    $deliveryFee = 0;
+                }
+
+                $netTotal = $grandTotal + $deliveryFee - $discount;
+
+                $sale = new Sale;
+
+                $sale->sale_no = $saleNo;
+                if ($idempotencyKey !== null) {
+                    $sale->idempotency_key = $idempotencyKey;
+                    $sale->idempotency_payload_hash = $payloadHash;
+                }
+                $sale->customer_id = $data['customer_id'] ?? null;
+                $sale->customer_delivery_address_id =
+                    $data['customer_delivery_address_id'] ?? null;
+                $sale->technician_id = $data['technician_id'] ?? null;
+                $sale->sale_date = $saleDate;
+                $sale->total_amount = $netTotal;
+                $sale->delivery_fee = $deliveryFee;
+                $sale->delivery_type = $deliveryType;
+                $sale->discount = $discount;
+
+                $sale->save();
+
+                $this->saleItemService
+                    ->createItems($sale, $items, $lockedProducts);
+
+                $productProfit = $sale->items()->sum('profit');
+
+                $profitGuardResult = $this->profitGuardService->check(
+                    [
+                        'delivery_type' => $deliveryType,
+                        'delivery_fee' => $deliveryFee,
+                        'delivery_zone_id' => $deliveryZoneId,
+                        'minimum_profit' => $minimumProfit,
+                    ],
+                    $productProfit
+                );
+
+                if (! $profitGuardResult['passed']) {
+                    throw new DomainException(
+                        $profitGuardResult['message']
+                    );
+                }
+
+                $this->stockService
+                    ->deductFromSale($sale, $lockedProducts);
+
+                $this->commissionService
+                    ->createFromSale($sale);
+
+                return $sale;
+            });
+        } catch (QueryException $exception) {
+            if ($idempotencyKey !== null
+                && $this->saleIdempotencyService->isIdempotencyKeyViolation($exception)) {
+                $replay = $this->saleIdempotencyService->replay($idempotencyKey, $payloadHash);
+
+                if ($replay !== null) {
+                    return $replay;
+                }
             }
 
-            $this->stockService
-                ->deductFromSale($sale, $lockedProducts);
-
-            $this->commissionService
-                ->createFromSale($sale);
-
-            return $sale;
-        });
+            throw $exception;
+        }
     }
 
     public function createSaleFromQuotation(Quotation $quotation): Sale

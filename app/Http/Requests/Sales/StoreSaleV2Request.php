@@ -35,6 +35,7 @@ class StoreSaleV2Request extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'uuid'],
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'customer_delivery_address_id' => ['nullable', 'integer', 'exists:customer_delivery_addresses,id'],
             'technician_id' => ['nullable', 'integer', 'exists:technicians,id'],

@@ -76,6 +76,42 @@ class SaleConcurrencyTest extends TestCase
         $this->assertMovementChain($product, 10, 2);
     }
 
+    public function test_concurrent_sales_for_different_products_receive_unique_daily_numbers(): void
+    {
+        $first = $this->createProduct('First number product', 10);
+        $second = $this->createProduct('Second number product', 10);
+
+        $results = $this->runConcurrently(
+            $this->createOperation([$this->line($first, 1, 10)]),
+            $this->createOperation([$this->line($second, 1, 10)])
+        );
+
+        $this->assertTrue(collect($results)->every(fn (array $result) => $result['ok']));
+        $this->assertCount(2, array_unique(array_column($results, 'sale_no')));
+        $this->assertEqualsCanonicalizing(
+            ['SAL-20260713-0001', 'SAL-20260713-0002'],
+            array_column($results, 'sale_no')
+        );
+    }
+
+    public function test_concurrent_same_idempotency_key_creates_one_sale_and_one_replay(): void
+    {
+        $product = $this->createProduct('Concurrent replay product', 10);
+        $operation = $this->createOperation([$this->line($product, 2, 10)]);
+        $operation['data']['idempotency_key'] = '40000000-0000-4000-8000-000000000001';
+
+        $results = $this->runConcurrently($operation, $operation);
+
+        $this->assertTrue(collect($results)->every(fn (array $result) => $result['ok']), json_encode($results));
+        $this->assertSame(1, collect($results)->where('idempotent_replay', true)->count());
+        $this->assertSame(1, collect($results)->where('idempotent_replay', false)->count());
+        $this->assertSame(1, collect($results)->pluck('sale_id')->unique()->count());
+        $this->assertDatabaseCount('sales', 1);
+        $this->assertDatabaseCount('sale_items', 1);
+        $this->assertDatabaseCount('stock_movements', 1);
+        $this->assertSame('8.0000', $product->fresh()->stock_qty);
+    }
+
     public function test_concurrent_create_and_update_keep_stock_and_movements_consistent(): void
     {
         $product = $this->createProduct('Create update product', 8);

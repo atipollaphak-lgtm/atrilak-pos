@@ -5,6 +5,7 @@ namespace Tests\Feature\Stock;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Quotation;
+use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Services\PurchaseService;
@@ -142,6 +143,7 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         $this->assertAllSucceeded($results);
         $this->assertMovementChain($product, 10, 5);
         $this->assertDatabaseCount('sales', 2);
+        $this->assertSame(2, Sale::query()->pluck('sale_no')->unique()->count());
     }
 
     public function test_same_quotation_converts_to_at_most_one_sale(): void
