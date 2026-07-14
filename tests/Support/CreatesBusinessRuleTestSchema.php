@@ -47,6 +47,8 @@ trait CreatesBusinessRuleTestSchema
             $table->unsignedBigInteger('product_id');
             $table->unsignedBigInteger('product_unit_id')->nullable();
             $table->decimal('qty', 12, 4);
+            $table->decimal('conversion_rate_used', 15, 4)->nullable();
+            $table->decimal('base_qty', 19, 4)->nullable();
             $table->decimal('selling_price', 12, 2);
             $table->decimal('cost_price', 12, 2);
             $table->decimal('total', 12, 2);

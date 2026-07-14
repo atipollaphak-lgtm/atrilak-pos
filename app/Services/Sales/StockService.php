@@ -4,6 +4,7 @@ namespace App\Services\Sales;
 
 use App\Models\Sale;
 use App\Models\StockMovement;
+use Brick\Math\BigDecimal;
 use DomainException;
 use Illuminate\Support\Collection;
 
@@ -25,22 +26,23 @@ class StockService
                 throw new DomainException('ไม่พบสินค้า');
             }
 
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock - $item->qty;
+            $qty = $this->stockQuantity($item);
+            $oldStock = BigDecimal::of($product->stock_qty);
+            $newStock = $oldStock->minus($qty);
 
-            if ($newStock < 0) {
+            if ($newStock->isLessThan(BigDecimal::zero())) {
                 throw new DomainException('สินค้า '.$product->name.' มีสต็อกไม่พอ');
             }
 
-            $product->stock_qty = $newStock;
+            $product->stock_qty = (string) $newStock;
             $product->save();
 
             StockMovement::create([
                 'product_id' => $product->id,
                 'type' => 'OUT',
-                'qty' => $item->qty,
-                'stock_before' => $oldStock,
-                'stock_after' => $newStock,
+                'qty' => (string) $qty,
+                'stock_before' => (string) $oldStock,
+                'stock_after' => (string) $newStock,
                 'reference_type' => $referenceType,
                 'reference_id' => $sale->id,
                 'remark' => $remark,
@@ -63,22 +65,28 @@ class StockService
                 throw new DomainException('ไม่พบสินค้า');
             }
 
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock + $item->qty;
+            $qty = $this->stockQuantity($item);
+            $oldStock = BigDecimal::of($product->stock_qty);
+            $newStock = $oldStock->plus($qty);
 
-            $product->stock_qty = $newStock;
+            $product->stock_qty = (string) $newStock;
             $product->save();
 
             StockMovement::create([
                 'product_id' => $product->id,
                 'type' => 'IN',
-                'qty' => $item->qty,
-                'stock_before' => $oldStock,
-                'stock_after' => $newStock,
+                'qty' => (string) $qty,
+                'stock_before' => (string) $oldStock,
+                'stock_after' => (string) $newStock,
                 'reference_type' => $referenceType,
                 'reference_id' => $sale->id,
                 'remark' => $remark,
             ]);
         }
+    }
+
+    private function stockQuantity($item): BigDecimal
+    {
+        return BigDecimal::of((string) ($item->base_qty ?? $item->qty));
     }
 }

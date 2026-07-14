@@ -2,28 +2,33 @@
 
 namespace App\Services;
 
-use App\Models\Sale;
-use App\Models\Product;
-use App\Models\SaleItem;
-use App\Models\StockMovement;
 use App\Models\CustomerDeliveryAddress;
 use App\Models\Quotation;
-use Illuminate\Support\Facades\DB;
-use App\Services\Sales\SaleNumberService;
-use App\Services\Sales\SaleItemService;
-use App\Services\Sales\StockService;
+use App\Models\Sale;
 use App\Services\Sales\CommissionService;
+use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
+use App\Services\Sales\SaleItemService;
+use App\Services\Sales\SaleNumberService;
+use App\Services\Sales\StockService;
 use DomainException;
+use Illuminate\Support\Facades\DB;
 
 class SaleService
 {
     protected SaleNumberService $saleNumberService;
+
     protected SaleItemService $saleItemService;
+
     protected StockService $stockService;
+
     protected CommissionService $commissionService;
+
     protected ProfitGuardService $profitGuardService;
+
     protected StockLockService $stockLockService;
+
+    protected ProductUnitConversionService $productUnitConversionService;
 
     public function __construct(
         SaleNumberService $saleNumberService,
@@ -31,15 +36,18 @@ class SaleService
         StockService $stockService,
         CommissionService $commissionService,
         ProfitGuardService $profitGuardService,
-        StockLockService $stockLockService
+        StockLockService $stockLockService,
+        ProductUnitConversionService $productUnitConversionService
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
         $this->stockService = $stockService;
-$this->commissionService = $commissionService;
-$this->profitGuardService = $profitGuardService;
+        $this->commissionService = $commissionService;
+        $this->profitGuardService = $profitGuardService;
         $this->stockLockService = $stockLockService;
+        $this->productUnitConversionService = $productUnitConversionService;
     }
+
     public function createSale(array $data)
     {
         return DB::transaction(function () use ($data) {
@@ -48,6 +56,7 @@ $this->profitGuardService = $profitGuardService;
             $lockedProducts = $this->stockLockService->lockProducts(
                 array_column($items, 'product_id')
             );
+            $items = $this->productUnitConversionService->resolveItems($items);
             $this->stockLockService->assertSufficientStock($lockedProducts, $items);
 
             $saleDate = $data['sale_date'];
@@ -78,7 +87,7 @@ $this->profitGuardService = $profitGuardService;
 
             $netTotal = $grandTotal + $deliveryFee - $discount;
 
-            $sale = new Sale();
+            $sale = new Sale;
 
             $sale->sale_no = $saleNo;
             $sale->customer_id = $data['customer_id'] ?? null;
@@ -94,7 +103,7 @@ $this->profitGuardService = $profitGuardService;
             $sale->save();
 
             $this->saleItemService
-                ->createItems($sale, $data['items']);
+                ->createItems($sale, $items, $lockedProducts);
 
             $productProfit = $sale->items()->sum('profit');
 
@@ -108,8 +117,7 @@ $this->profitGuardService = $profitGuardService;
                 $productProfit
             );
 
-
-            if (!$profitGuardResult['passed']) {
+            if (! $profitGuardResult['passed']) {
                 throw new \Exception(
                     $profitGuardResult['message']
                 );
@@ -170,17 +178,27 @@ $this->profitGuardService = $profitGuardService;
             $lockedSale->load('items');
 
             $newItemsForStock = [];
+            $existingItemIds = $lockedSale->items->modelKeys();
 
             foreach ($data['product_id'] as $index => $productId) {
                 $qty = $data['qty'][$index] ?? 0;
+                $price = $data['selling_price'][$index] ?? 0;
+                $saleItemId = $data['sale_item_id'][$index] ?? null;
 
-                if (empty($productId) || empty($qty)) {
+                if (empty($productId) || empty($qty) || empty($price)) {
                     continue;
+                }
+
+                if ($saleItemId !== null && $saleItemId !== ''
+                    && ! in_array((int) $saleItemId, $existingItemIds, true)) {
+                    throw new DomainException('รายการขายไม่ตรงกับใบขาย');
                 }
 
                 $newItemsForStock[] = [
                     'product_id' => $productId,
+                    'product_unit_id' => $data['product_unit_id'][$index] ?? null,
                     'qty' => $qty,
+                    'selling_price' => $price,
                 ];
             }
 
@@ -190,6 +208,8 @@ $this->profitGuardService = $profitGuardService;
                 ->all();
 
             $lockedProducts = $this->stockLockService->lockProducts($productIds);
+            $newItemsForStock = $this->productUnitConversionService
+                ->resolveItems($newItemsForStock);
 
             $this->stockService->restoreFromSale(
                 $lockedSale,
@@ -206,38 +226,15 @@ $this->profitGuardService = $profitGuardService;
             $lockedSale->items()->delete();
             $lockedSale->unsetRelation('items');
 
-            $grandTotal = 0;
+            $this->saleItemService->createItems(
+                $lockedSale,
+                $newItemsForStock,
+                $lockedProducts
+            );
 
-            foreach ($data['product_id'] as $index => $productId) {
-                $qty = $data['qty'][$index] ?? 0;
-                $price = $data['selling_price'][$index] ?? 0;
-
-                if (empty($productId) || empty($qty) || empty($price)) {
-                    continue;
-                }
-
-                $product = $lockedProducts->get((int) $productId);
-
-                if (! $product) {
-                    throw new DomainException('ไม่พบสินค้า');
-                }
-
-                $lineTotal = $qty * $price;
-                $costPrice = $product->cost_price ?? 0;
-                $lineProfit = ($price - $costPrice) * $qty;
-
-                SaleItem::create([
-                    'sale_id' => $lockedSale->id,
-                    'product_id' => $productId,
-                    'qty' => $qty,
-                    'selling_price' => $price,
-                    'cost_price' => $costPrice,
-                    'total' => $lineTotal,
-                    'profit' => $lineProfit,
-                ]);
-
-                $grandTotal += $lineTotal;
-            }
+            $grandTotal = collect($newItemsForStock)->sum(
+                fn (array $item) => $item['qty'] * $item['selling_price']
+            );
 
             $lockedSale->unsetRelation('items');
 

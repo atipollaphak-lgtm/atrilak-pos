@@ -58,6 +58,10 @@
                         @foreach ($sale->items as $item)
                             <tr>
                                 <td>
+                                    <input type="hidden" name="sale_item_id[]" class="sale-item-id"
+                                        value="{{ $item->id }}">
+                                    <input type="hidden" name="product_unit_id[]" class="product-unit-id"
+                                        value="{{ $item->product_unit_id }}">
                                     <select name="product_id[]" class="form-control product-select">
                                         @foreach ($products as $product)
                                             <option value="{{ $product->id }}" data-price="{{ $product->selling_price }}"
@@ -214,6 +218,9 @@
                 let price = e.target.options[e.target.selectedIndex].dataset.price || 0;
 
                 let row = e.target.closest('tr');
+
+                row.querySelector('.sale-item-id').value = '';
+                row.querySelector('.product-unit-id').value = '';
 
                 row.querySelector('.price').value = price;
 

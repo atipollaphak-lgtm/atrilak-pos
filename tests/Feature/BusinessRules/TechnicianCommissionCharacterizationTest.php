@@ -85,6 +85,33 @@ class TechnicianCommissionCharacterizationTest extends TestCase
         $this->assertSame('pending', $commission->status);
     }
 
+    public function test_amount_commission_uses_sale_quantity_not_converted_base_quantity(): void
+    {
+        $product = Product::create([
+            'name' => 'Converted commission product',
+            'cost_price' => 50,
+            'selling_price' => 100,
+            'stock_qty' => 100,
+        ]);
+        TechnicianCommissionRule::create([
+            'product_id' => $product->id,
+            'name' => '15 per sale unit',
+            'rule_type' => 'amount',
+            'rule_value' => 15,
+            'active' => true,
+        ]);
+        $sale = $this->createSaleWithItem($product, 3, 100);
+        $sale->items()->update([
+            'conversion_rate_used' => '12.0000',
+            'base_qty' => '36.0000',
+        ]);
+
+        $commission = (new TechnicianCommissionService)->createFromSale($sale->fresh());
+
+        $this->assertNotNull($commission);
+        $this->assertEquals(45.00, $commission->commission_amount);
+    }
+
     private function createSaleWithItem(Product $product, float $qty, float $price): Sale
     {
         $sale = Sale::create([

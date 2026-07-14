@@ -205,6 +205,9 @@ class CompetingStockWritersTest extends TestCase
         $this->assertEquals(8, $product->fresh()->stock_qty);
         $this->assertEquals('converted', $quotation->fresh()->status);
         $this->assertEquals(60, $sale->total_amount);
+        $this->assertNull($sale->items()->sole()->product_unit_id);
+        $this->assertSame('1.0000', $sale->items()->sole()->conversion_rate_used);
+        $this->assertSame('2.0000', $sale->items()->sole()->base_qty);
 
         $this->expectException(DomainException::class);
         app(SaleService::class)->createSaleFromQuotation($quotation);

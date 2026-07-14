@@ -2,17 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Sale;
-use App\Models\Product;
 use App\Models\Customer;
-use Illuminate\Http\Request;
+use App\Models\Product;
+use App\Models\Sale;
 use App\Models\Setting;
-use App\Models\TechnicianCommission;
 use App\Models\Technician;
-use App\Services\TechnicianCommissionService;
-use App\Services\SaleService;
 use App\Services\CommercialDocumentService;
+use App\Services\SaleService;
 use DomainException;
+use Illuminate\Http\Request;
 
 class SaleController extends Controller
 {
@@ -108,14 +106,14 @@ class SaleController extends Controller
 
             $product = Product::find($productId);
 
-            if (!$product) {
+            if (! $product) {
                 return back()->with('error', 'ไม่พบสินค้า');
             }
 
             if ($product->stock_qty < $qty) {
                 return back()->with(
                     'error',
-                    'สินค้า ' . $product->name . ' มีสต็อกไม่พอ'
+                    'สินค้า '.$product->name.' มีสต็อกไม่พอ'
                 );
             }
 
@@ -163,7 +161,7 @@ class SaleController extends Controller
     {
         return response()->json([
             'success' => true,
-            'message' => 'Check Profit API Ready'
+            'message' => 'Check Profit API Ready',
         ]);
     }
 
@@ -172,6 +170,7 @@ class SaleController extends Controller
         $request->validate([
             'items' => 'required|array',
             'items.*.product_id' => 'required',
+            'items.*.product_unit_id' => 'nullable|integer',
             'items.*.qty' => 'required',
             'items.*.selling_price' => 'required',
             'technician_id' => 'nullable|exists:technicians,id',
@@ -184,17 +183,10 @@ class SaleController extends Controller
 
             $product = Product::find($item['product_id']);
 
-            if (!$product) {
+            if (! $product) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'ไม่พบสินค้า'
-                ], 422);
-            }
-
-            if ($product->stock_qty < $item['qty']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'สินค้า ' . $product->name . ' มีสต๊อกไม่พอ'
+                    'message' => 'ไม่พบสินค้า',
                 ], 422);
             }
 
@@ -240,7 +232,7 @@ class SaleController extends Controller
         $sale->load([
             'customer',
             'technician',
-            'items.product'
+            'items.product',
         ]);
 
         $totalCost = $sale->items->sum(function ($item) {
@@ -258,20 +250,22 @@ class SaleController extends Controller
             )
         );
     }
+
     public function print(Sale $sale)
     {
         $sale->load([
             'customer',
-            'items.product'
+            'items.product',
         ]);
 
         $setting = Setting::first();
 
         return view('sales.print', compact('sale', 'setting'));
     }
+
     public function edit(Sale $sale)
     {
-        $sale->load('items.product', 'customer');
+        $sale->load('items.product', 'items.productUnit', 'customer');
 
         $customers = Customer::where('active', true)->get();
 
@@ -282,6 +276,7 @@ class SaleController extends Controller
             compact('sale', 'customers', 'products')
         );
     }
+
     public function update(Request $request, Sale $sale)
     {
         $request->validate([
@@ -289,6 +284,8 @@ class SaleController extends Controller
             'product_id' => 'required|array',
             'qty' => 'required|array',
             'selling_price' => 'required|array',
+            'sale_item_id' => 'nullable|array',
+            'product_unit_id' => 'nullable|array',
         ]);
 
         try {
@@ -298,6 +295,8 @@ class SaleController extends Controller
                 'product_id' => $request->product_id,
                 'qty' => $request->qty,
                 'selling_price' => $request->selling_price,
+                'sale_item_id' => $request->sale_item_id ?? [],
+                'product_unit_id' => $request->product_unit_id ?? [],
                 'delivery_fee' => $request->delivery_fee ?? 0,
                 'discount' => $request->discount ?? 0,
             ]);
@@ -309,6 +308,7 @@ class SaleController extends Controller
             ->route('sales.show', $sale->id)
             ->with('success', 'แก้ไขบิลเรียบร้อยแล้ว');
     }
+
     public function destroy(Sale $sale)
     {
         app(SaleService::class)->deleteSale($sale);
@@ -317,6 +317,7 @@ class SaleController extends Controller
             ->route('sales.index')
             ->with('success', 'ลบบิลและคืนสต๊อกเรียบร้อยแล้ว');
     }
+
     public function invoice(Sale $sale)
     {
         $sale->load([
@@ -344,12 +345,12 @@ class SaleController extends Controller
         $setting = Setting::first();
 
         $document = $commercialDocumentService->buildSaleDocument(
-    $sale,
-    $request->query(
-    'document_type',
-    'delivery-note'
-)
-);
+            $sale,
+            $request->query(
+                'document_type',
+                'delivery-note'
+            )
+        );
 
         return view(
             'sales.invoice_v2',

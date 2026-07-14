@@ -3,18 +3,19 @@
 namespace App\Services\Sales;
 
 use App\Models\Sale;
-use App\Models\Product;
+use DomainException;
+use Illuminate\Support\Collection;
 
 class SaleItemService
 {
-    public function createItems(Sale $sale, array $items): void
+    public function createItems(Sale $sale, array $items, Collection $lockedProducts): void
     {
         foreach ($items as $item) {
 
-            $product = Product::find($item['product_id']);
+            $product = $lockedProducts->get((int) $item['product_id']);
 
-            if (!$product) {
-                continue;
+            if (! $product) {
+                throw new DomainException('ไม่พบสินค้า');
             }
 
             $qty = $item['qty'];
@@ -27,19 +28,16 @@ class SaleItemService
             $lineProfit = ($price - $costPrice) * $qty;
 
             $sale->items()->create([
-    'product_id' => $product->id,
-    'product_unit_id' => $productUnitId,
-
-    'qty' => $qty,
-
-    'selling_price' => $price,
-
-    'cost_price' => $costPrice,
-
-    'total' => $lineTotal,
-
-    'profit' => $lineProfit,
-]);
+                'product_id' => $product->id,
+                'product_unit_id' => $productUnitId,
+                'conversion_rate_used' => $item['conversion_rate_used'],
+                'base_qty' => $item['base_qty'],
+                'qty' => $qty,
+                'selling_price' => $price,
+                'cost_price' => $costPrice,
+                'total' => $lineTotal,
+                'profit' => $lineProfit,
+            ]);
         }
     }
 }

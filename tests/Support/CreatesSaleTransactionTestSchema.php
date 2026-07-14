@@ -16,7 +16,30 @@ trait CreatesSaleTransactionTestSchema
             $table->string('name');
             $table->decimal('cost_price', 12, 2)->default(0);
             $table->decimal('selling_price', 12, 2)->default(0);
-            $table->decimal('stock_qty', 12, 4)->default(0);
+            $table->decimal('stock_qty', 19, 4)->default(0);
+            $table->decimal('minimum_stock', 19, 4)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('units', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('product_units', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('product_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('unit_id')->constrained()->restrictOnDelete();
+            $table->decimal('conversion_rate', 15, 4)->default(1);
+            $table->boolean('is_base_unit')->default(false);
+            $table->boolean('is_purchase_unit')->default(true);
+            $table->boolean('is_sale_unit')->default(true);
+            $table->decimal('purchase_price', 15, 2)->nullable();
+            $table->decimal('selling_price', 15, 2)->nullable();
+            $table->boolean('active')->default(true);
+            $table->integer('sort_order')->default(0);
+            $table->timestamp('conversion_confirmed_at')->nullable();
             $table->timestamps();
         });
 
@@ -46,7 +69,9 @@ trait CreatesSaleTransactionTestSchema
             $table->foreignId('sale_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_id')->constrained()->cascadeOnDelete();
             $table->unsignedBigInteger('product_unit_id')->nullable();
-            $table->decimal('qty', 15, 4);
+            $table->decimal('qty', 15, 2);
+            $table->decimal('conversion_rate_used', 15, 4)->nullable();
+            $table->decimal('base_qty', 19, 4)->nullable();
             $table->decimal('selling_price', 15, 2);
             $table->decimal('cost_price', 12, 2)->default(0);
             $table->decimal('total', 15, 2);
@@ -58,9 +83,9 @@ trait CreatesSaleTransactionTestSchema
             $table->id();
             $table->foreignId('product_id')->constrained()->cascadeOnDelete();
             $table->string('type');
-            $table->decimal('qty', 15, 4);
-            $table->decimal('stock_before', 15, 4);
-            $table->decimal('stock_after', 15, 4);
+            $table->decimal('qty', 19, 4);
+            $table->decimal('stock_before', 19, 4);
+            $table->decimal('stock_after', 19, 4);
             $table->string('reference_type')->nullable();
             $table->unsignedBigInteger('reference_id')->nullable();
             $table->text('remark')->nullable();
@@ -85,6 +110,8 @@ trait CreatesSaleTransactionTestSchema
             'sale_items',
             'sales',
             'technicians',
+            'product_units',
+            'units',
             'products',
         ] as $table) {
             Schema::dropIfExists($table);

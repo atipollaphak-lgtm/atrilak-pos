@@ -7,6 +7,7 @@ use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Services\Sales\CommissionService;
+use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
@@ -52,7 +53,9 @@ class SalesAndStockCharacterizationTest extends TestCase
             'product_id' => $product->id,
             'qty' => 3,
             'selling_price' => 120,
-        ]]);
+            'conversion_rate_used' => '1.0000',
+            'base_qty' => '3.0000',
+        ]], collect([$product])->keyBy('id'));
 
         $item = $sale->items()->sole();
 
@@ -164,7 +167,8 @@ class SalesAndStockCharacterizationTest extends TestCase
             $stock,
             $commission,
             $profitGuard,
-            new StockLockService
+            new StockLockService,
+            new ProductUnitConversionService
         );
     }
 }

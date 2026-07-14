@@ -27,7 +27,6 @@ trait CreatesCompetingStockWriterTestSchema
             $table->unsignedBigInteger('unit_id')->nullable();
             $table->string('barcode')->nullable();
             $table->string('unit')->default('piece');
-            $table->decimal('minimum_stock', 12, 4)->default(0);
             $table->boolean('vat_enabled')->default(false);
             $table->boolean('active')->default(true);
             $table->text('remark')->nullable();

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Sales;
 
 use App\Models\Product;
+use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\StockMovement;
 use Illuminate\Support\Facades\Config;
@@ -151,6 +152,36 @@ class SaleConcurrencyTest extends TestCase
         $this->assertMovementChain($second, 20, 14);
     }
 
+    public function test_concurrent_sales_in_different_units_share_the_same_base_stock(): void
+    {
+        $product = $this->createProduct('Concurrent mixed units', 20);
+        $piece = $this->createProductUnit($product, 'piece', '1.0000', true);
+        $dozen = $this->createProductUnit($product, 'dozen', '12.0000');
+
+        $results = $this->runConcurrently(
+            $this->createOperation([[
+                'product_id' => $product->id,
+                'product_unit_id' => $piece->id,
+                'qty' => 2,
+                'selling_price' => 10,
+            ]]),
+            $this->createOperation([[
+                'product_id' => $product->id,
+                'product_unit_id' => $dozen->id,
+                'qty' => 1,
+                'selling_price' => 100,
+            ]])
+        );
+
+        $this->assertTrue(collect($results)->every(fn (array $result) => $result['ok']));
+        $this->assertEquals(6.0000, $product->fresh()->stock_qty);
+        $this->assertEqualsCanonicalizing(
+            ['2.0000', '12.0000'],
+            StockMovement::where('product_id', $product->id)->pluck('qty')->all()
+        );
+        $this->assertMovementChain($product, 20, 6);
+    }
+
     public function test_lock_timeout_rolls_back_without_partial_sale_writes(): void
     {
         $product = $this->createProduct('Timeout product', 10);
@@ -204,6 +235,29 @@ SQL);
             'cost_price' => 5,
             'selling_price' => 10,
             'stock_qty' => $stock,
+        ]);
+    }
+
+    private function createProductUnit(
+        Product $product,
+        string $name,
+        string $rate,
+        bool $base = false
+    ): ProductUnit {
+        $unitId = DB::table('units')->insertGetId([
+            'name' => $name,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return ProductUnit::create([
+            'product_id' => $product->id,
+            'unit_id' => $unitId,
+            'conversion_rate' => $rate,
+            'is_base_unit' => $base,
+            'is_sale_unit' => true,
+            'active' => true,
+            'conversion_confirmed_at' => $base ? null : now(),
         ]);
     }
 

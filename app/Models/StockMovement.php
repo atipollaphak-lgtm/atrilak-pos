@@ -17,6 +17,12 @@ class StockMovement extends Model
         'remark',
     ];
 
+    protected $casts = [
+        'qty' => 'decimal:4',
+        'stock_before' => 'decimal:4',
+        'stock_after' => 'decimal:4',
+    ];
+
     public function product()
     {
         return $this->belongsTo(Product::class);

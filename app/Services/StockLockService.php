@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Product;
+use Brick\Math\BigDecimal;
 use DomainException;
 use Illuminate\Support\Collection;
 
@@ -41,14 +42,16 @@ class StockLockService
 
         foreach ($items as $item) {
             $productId = $item['product_id'] ?? null;
-            $qty = $item['qty'] ?? 0;
+            $qty = $item['base_qty'] ?? $item['qty'] ?? 0;
 
             if (empty($productId) || empty($qty)) {
                 continue;
             }
 
             $productId = (int) $productId;
-            $requiredByProduct[$productId] = ($requiredByProduct[$productId] ?? 0) + $qty;
+            $requiredByProduct[$productId] = isset($requiredByProduct[$productId])
+                ? $requiredByProduct[$productId]->plus((string) $qty)
+                : BigDecimal::of((string) $qty);
         }
 
         ksort($requiredByProduct, SORT_NUMERIC);
@@ -60,7 +63,7 @@ class StockLockService
                 throw new DomainException('ไม่พบสินค้า');
             }
 
-            if ($product->stock_qty < $requiredQty) {
+            if (BigDecimal::of($product->stock_qty)->isLessThan($requiredQty)) {
                 throw new DomainException('สินค้า '.$product->name.' มีสต็อกไม่พอ');
             }
         }
