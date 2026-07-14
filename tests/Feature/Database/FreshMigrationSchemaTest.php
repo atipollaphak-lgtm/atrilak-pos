@@ -16,6 +16,7 @@ class FreshMigrationSchemaTest extends TestCase
         $this->assertTrue(Schema::hasColumn('pricing_settings', 'default_satang_rounding_mode'));
         $this->assertTrue(Schema::hasColumn('pricing_settings', 'default_baht_rounding_mode'));
         $this->assertFalse(Schema::hasColumn('pricing_settings', 'default_rounding_mode'));
+        $this->assertTrue(Schema::hasColumn('sales', 'quotation_id'));
 
         $this->assertTrue($this->hasForeignKey(
             'product_price_tiers',
@@ -26,6 +27,11 @@ class FreshMigrationSchemaTest extends TestCase
             'technician_commissions',
             'payment_batch_id',
             'technician_payment_batches'
+        ));
+        $this->assertTrue($this->hasForeignKey(
+            'sales',
+            'quotation_id',
+            'quotations'
         ));
     }
 

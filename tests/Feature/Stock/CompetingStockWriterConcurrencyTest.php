@@ -154,8 +154,8 @@ class CompetingStockWriterConcurrencyTest extends TestCase
 
         $results = $this->runConcurrently($operation, $operation);
 
-        $this->assertSame(1, collect($results)->where('ok', true)->count());
-        $this->assertSame(1, collect($results)->where('ok', false)->count());
+        $this->assertAllSucceeded($results);
+        $this->assertSame(1, collect($results)->pluck('sale_id')->unique()->count());
         $this->assertDatabaseCount('sales', 1);
         $this->assertMovementChain($product, 10, 8);
     }

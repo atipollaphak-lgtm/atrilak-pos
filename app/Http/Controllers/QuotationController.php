@@ -122,6 +122,7 @@ class QuotationController extends Controller
         $quotation->load([
             'customer',
             'items.product',
+            'convertedSale',
         ]);
 
         return view(
@@ -145,7 +146,18 @@ class QuotationController extends Controller
 
     public function destroy(Quotation $quotation)
     {
-        $quotation->delete();
+        try {
+            $this->saleService->deleteQuotation($quotation);
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'ไม่สามารถลบใบเสนอราคาได้ กรุณาลองใหม่อีกครั้ง'
+            );
+        }
 
         return redirect()
             ->route('quotations.index')

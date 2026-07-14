@@ -8,6 +8,8 @@
 
 @section('content')
 
+    @include('partials.flash-messages')
+
     <div class="card">
 
         <div class="card-header">

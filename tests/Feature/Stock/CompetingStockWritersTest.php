@@ -209,8 +209,12 @@ class CompetingStockWritersTest extends TestCase
         $this->assertSame('1.0000', $sale->items()->sole()->conversion_rate_used);
         $this->assertSame('2.0000', $sale->items()->sole()->base_qty);
 
-        $this->expectException(DomainException::class);
-        app(SaleService::class)->createSaleFromQuotation($quotation);
+        $replayedSale = app(SaleService::class)->createSaleFromQuotation($quotation);
+
+        $this->assertSame($sale->id, $replayedSale->id);
+        $this->assertDatabaseCount('sales', 1);
+        $this->assertDatabaseCount('sale_items', 1);
+        $this->assertDatabaseCount('stock_movements', 1);
     }
 
     private function product(float $stock, float $cost = 10): Product

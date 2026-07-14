@@ -8,6 +8,8 @@
 
 @section('content')
 
+    @include('partials.flash-messages')
+
     <div class="card">
 
         <div class="card-header">
@@ -19,11 +21,13 @@
                 พิมพ์
             </a>
             @if ($quotation->status !== 'converted')
-                <form action="{{ route('quotations.convert', $quotation) }}" method="POST" style="display:inline-block;">
+                <form action="{{ route('quotations.convert', $quotation) }}" method="POST"
+                    id="quotation-convert-form" style="display:inline-block;">
 
                     @csrf
 
-                    <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('แปลงเป็นใบขาย ?')">
+                    <button type="submit" id="quotation-convert-button" class="btn btn-primary btn-sm"
+                        onclick="return confirm('แปลงเป็นใบขาย ?')">
 
                         แปลงเป็นใบขาย
 
@@ -34,6 +38,11 @@
                 <span class="badge badge-success">
                     แปลงเป็นใบขายแล้ว
                 </span>
+                @if ($quotation->convertedSale)
+                    <a href="{{ route('sales.show', $quotation->convertedSale) }}" class="btn btn-info btn-sm">
+                        ดูใบขาย {{ $quotation->convertedSale->sale_no }}
+                    </a>
+                @endif
             @endif
         </div>
 
@@ -83,4 +92,8 @@
 
     </div>
 
+@stop
+
+@section('js')
+    <script src="{{ asset('js/modules/quotation-convert.js') }}"></script>
 @stop

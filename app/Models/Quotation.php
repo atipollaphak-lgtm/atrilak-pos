@@ -24,4 +24,9 @@ class Quotation extends Model
     {
         return $this->hasMany(QuotationItem::class);
     }
+
+    public function convertedSale()
+    {
+        return $this->hasOne(Sale::class);
+    }
 }

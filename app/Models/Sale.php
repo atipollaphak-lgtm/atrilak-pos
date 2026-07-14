@@ -41,4 +41,9 @@ class Sale extends Model
     {
         return $this->belongsTo(Technician::class);
     }
+
+    public function quotation()
+    {
+        return $this->belongsTo(Quotation::class);
+    }
 }

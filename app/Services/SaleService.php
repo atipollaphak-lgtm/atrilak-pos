@@ -16,6 +16,7 @@ use App\Services\Sales\StockService;
 use DomainException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SaleService
 {
@@ -59,7 +60,7 @@ class SaleService
         $this->saleIdempotencyService = $saleIdempotencyService;
     }
 
-    public function createSale(array $data)
+    public function createSale(array $data, ?int $quotationId = null)
     {
         $idempotencyKey = $data['idempotency_key'] ?? null;
         $payloadHash = $idempotencyKey !== null
@@ -75,7 +76,7 @@ class SaleService
         }
 
         try {
-            return DB::transaction(function () use ($data, $idempotencyKey, $payloadHash) {
+            return DB::transaction(function () use ($data, $idempotencyKey, $payloadHash, $quotationId) {
 
                 $items = $data['items'] ?? [];
                 $this->saleValidationService->assertValidItems($items);
@@ -131,6 +132,9 @@ class SaleService
                 $sale = new Sale;
 
                 $sale->sale_no = $saleNo;
+                if ($quotationId !== null) {
+                    $sale->quotation_id = $quotationId;
+                }
                 if ($idempotencyKey !== null) {
                     $sale->idempotency_key = $idempotencyKey;
                     $sale->idempotency_payload_hash = $payloadHash;
@@ -198,8 +202,34 @@ class SaleService
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $existingSale = Sale::query()
+                ->where('quotation_id', $lockedQuotation->getKey())
+                ->first();
+
             if ($lockedQuotation->status === 'converted') {
-                throw new DomainException('ใบเสนอราคานี้ถูกแปลงเป็นใบขายแล้ว');
+                if ($existingSale !== null) {
+                    return $existingSale;
+                }
+
+                Log::warning('Converted quotation has no related sale', [
+                    'quotation_id' => $lockedQuotation->getKey(),
+                ]);
+
+                throw new DomainException(
+                    'ใบเสนอราคานี้ถูกแปลงแล้ว แต่ไม่มีความสัมพันธ์กับใบขายในระบบรุ่นเก่า กรุณาตรวจสอบข้อมูลก่อนดำเนินการต่อ'
+                );
+            }
+
+            if ($existingSale !== null) {
+                Log::warning('Quotation has a related sale but is not marked converted', [
+                    'quotation_id' => $lockedQuotation->getKey(),
+                    'sale_id' => $existingSale->getKey(),
+                    'quotation_status' => $lockedQuotation->status,
+                ]);
+
+                throw new DomainException(
+                    'สถานะใบเสนอราคาไม่สัมพันธ์กับใบขายที่มีอยู่ กรุณาตรวจสอบข้อมูลก่อนดำเนินการต่อ'
+                );
             }
 
             $lockedQuotation->load('items');
@@ -218,11 +248,29 @@ class SaleService
                 'delivery_type' => 'pickup',
                 'discount' => 0,
                 'items' => $items,
-            ]);
+            ], (int) $lockedQuotation->getKey());
 
             $lockedQuotation->update(['status' => 'converted']);
 
             return $sale;
+        });
+    }
+
+    public function deleteQuotation(Quotation $quotation): void
+    {
+        DB::transaction(function () use ($quotation) {
+            $lockedQuotation = Quotation::query()
+                ->whereKey($quotation->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (Sale::query()->where('quotation_id', $lockedQuotation->getKey())->exists()) {
+                throw new DomainException(
+                    'ไม่สามารถลบใบเสนอราคานี้ได้ เนื่องจากมีใบขายที่สร้างจากใบเสนอราคานี้และต้องเก็บไว้เป็นประวัติอ้างอิง'
+                );
+            }
+
+            $lockedQuotation->delete();
         });
     }
 
@@ -313,6 +361,12 @@ class SaleService
                 ->whereKey($sale->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ($lockedSale->quotation_id !== null) {
+                throw new DomainException(
+                    'ไม่สามารถลบใบขายนี้ได้ เนื่องจากสร้างจากใบเสนอราคาและต้องเก็บไว้เป็นประวัติอ้างอิง'
+                );
+            }
 
             $lockedSale->load('items');
 

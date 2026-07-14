@@ -250,7 +250,18 @@ class SaleController extends Controller
 
     public function destroy(Sale $sale)
     {
-        app(SaleService::class)->deleteSale($sale);
+        try {
+            app(SaleService::class)->deleteSale($sale);
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'ไม่สามารถลบใบขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
+        }
 
         return redirect()
             ->route('sales.index')

@@ -109,13 +109,20 @@ trait CreatesCompetingStockWriterTestSchema
             $table->decimal('total', 15, 2);
             $table->timestamps();
         });
+
+        Schema::table('sales', function (Blueprint $table) {
+            $table->foreignId('quotation_id')
+                ->nullable()
+                ->constrained('quotations')
+                ->restrictOnDelete();
+            $table->unique('quotation_id', 'sales_quotation_id_unique');
+        });
     }
 
     protected function dropCompetingStockWriterTestSchema(): void
     {
         foreach ([
             'quotation_items',
-            'quotations',
             'stock_count_items',
             'stock_counts',
             'purchase_items',
@@ -128,5 +135,6 @@ trait CreatesCompetingStockWriterTestSchema
         }
 
         $this->dropSaleTransactionTestSchema();
+        Schema::dropIfExists('quotations');
     }
 }
