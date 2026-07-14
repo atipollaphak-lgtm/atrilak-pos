@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
 use App\Models\CustomerDeliveryAddress;
+use App\Models\Quotation;
 use Illuminate\Support\Facades\DB;
 use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\SaleItemService;
@@ -119,6 +120,40 @@ $this->profitGuardService = $profitGuardService;
 
             $this->commissionService
                 ->createFromSale($sale);
+
+            return $sale;
+        });
+    }
+
+    public function createSaleFromQuotation(Quotation $quotation): Sale
+    {
+        return DB::transaction(function () use ($quotation) {
+            $lockedQuotation = Quotation::query()
+                ->whereKey($quotation->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedQuotation->status === 'converted') {
+                throw new DomainException('ใบเสนอราคานี้ถูกแปลงเป็นใบขายแล้ว');
+            }
+
+            $lockedQuotation->load('items');
+            $items = $lockedQuotation->items->map(fn ($item) => [
+                'product_id' => $item->product_id,
+                'qty' => $item->qty,
+                'selling_price' => $item->selling_price,
+            ])->all();
+
+            $sale = $this->createSale([
+                'customer_id' => $lockedQuotation->customer_id,
+                'sale_date' => now()->toDateString(),
+                'grand_total' => $lockedQuotation->total_amount,
+                'delivery_type' => 'pickup',
+                'discount' => 0,
+                'items' => $items,
+            ]);
+
+            $lockedQuotation->update(['status' => 'converted']);
 
             return $sale;
         });

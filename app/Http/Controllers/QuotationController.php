@@ -6,14 +6,15 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
+use App\Services\SaleService;
+use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\Sale;
-use App\Models\SaleItem;
-use App\Models\StockMovement;
 
 class QuotationController extends Controller
 {
+    public function __construct(private SaleService $saleService) {}
+
     public function index()
     {
         $quotations = Quotation::with('customer')
@@ -152,64 +153,11 @@ class QuotationController extends Controller
 
     public function convertToSale(Quotation $quotation)
     {
-        DB::transaction(function () use ($quotation, &$sale) {
-
-            $running = Sale::whereDate(
-                'sale_date',
-                now()
-            )->count() + 1;
-
-            $saleNo =
-                'SAL-' .
-                now()->format('Ymd') .
-                '-' .
-                str_pad($running, 4, '0', STR_PAD_LEFT);
-
-            $sale = Sale::create([
-                'sale_no'      => $saleNo,
-                'customer_id'  => $quotation->customer_id,
-                'sale_date'    => now()->toDateString(),
-                'total_amount' => $quotation->total_amount,
-            ]);
-
-            foreach ($quotation->items as $item) {
-
-                $product = $item->product;
-
-                SaleItem::create([
-                    'sale_id'       => $sale->id,
-                    'product_id'    => $product->id,
-                    'qty'           => $item->qty,
-                    'selling_price' => $item->selling_price,
-                    'cost_price'    => $product->cost_price,
-                    'profit'        => ($item->selling_price - $product->cost_price)
-                        * $item->qty,
-                    'total'         => $item->total,
-                ]);
-
-                $before = $product->stock_qty;
-                $after  = $before - $item->qty;
-
-                $product->update([
-                    'stock_qty' => $after,
-                ]);
-
-                StockMovement::create([
-                    'product_id'     => $product->id,
-                    'type'           => 'OUT',
-                    'qty'            => $item->qty,
-                    'stock_before'   => $before,
-                    'stock_after'    => $after,
-                    'reference_type' => Sale::class,
-                    'reference_id'   => $sale->id,
-                    'remark'         => 'Quotation Convert',
-                ]);
-            }
-
-            $quotation->update([
-                'status' => 'converted',
-            ]);
-        });
+        try {
+            $sale = $this->saleService->createSaleFromQuotation($quotation);
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return redirect()
             ->route('sales.show', $sale)

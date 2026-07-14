@@ -5,25 +5,28 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\Category;
 use Illuminate\Http\Request;
-use App\Models\StockMovement;
 use App\Models\Unit;
 use App\Models\ProductPriceHistory;
 use App\Models\ProductPriceTier;
 use App\Models\ProductUnit;
 use App\Services\ProductUnitService;
 use App\Services\ProductBarcodeService;
+use App\Services\ProductUpdateService;
 
 class ProductController extends Controller
 {
     protected ProductUnitService $productUnitService;
     protected ProductBarcodeService $productBarcodeService;
+    protected ProductUpdateService $productUpdateService;
 
     public function __construct(
         ProductUnitService $productUnitService,
-        ProductBarcodeService $productBarcodeService
+        ProductBarcodeService $productBarcodeService,
+        ProductUpdateService $productUpdateService
     ) {
         $this->productUnitService = $productUnitService;
         $this->productBarcodeService = $productBarcodeService;
+        $this->productUpdateService = $productUpdateService;
     }
     public function index()
     {
@@ -136,72 +139,7 @@ class ProductController extends Controller
             'name' => 'required',
             'unit_id' => 'nullable|exists:units,id',
         ]);
-        $oldStock = $product->stock_qty;
-        $newStock = $request->stock_qty;
-
-        $oldCostPrice = $product->cost_price;
-        $oldSellingPrice = $product->selling_price;
-
-        $product->update([
-            'barcode' => $request->barcode,
-            'name' => $request->name,
-            'category_id' => $request->category_id,
-            'unit_id' => $request->unit_id,
-            'unit' => $product->unit ?? '-',
-            'cost_price' => $request->cost_price,
-            'selling_price' => $request->selling_price,
-            'stock_qty' => $request->stock_qty,
-            'minimum_stock' => $request->minimum_stock,
-            'vat_enabled' => $request->vat_enabled ?? 0,
-            'active' => $request->active ?? 1,
-            'remark' => $request->remark,
-        ]);
-
-        if ($request->unit_id) {
-            $this->productUnitService->createOrUpdateBaseUnit(
-                $product,
-                [
-                    'unit_id' => $request->unit_id,
-                    'purchase_price' => $request->cost_price,
-                    'selling_price' => $request->selling_price,
-                ]
-            );
-        }
-
-        if (
-            $oldCostPrice != $request->cost_price ||
-            $oldSellingPrice != $request->selling_price
-        ) {
-
-            ProductPriceHistory::create([
-
-                'product_id' => $product->id,
-
-                'old_cost_price' => $oldCostPrice,
-                'new_cost_price' => $request->cost_price,
-
-                'old_selling_price' => $oldSellingPrice,
-                'new_selling_price' => $request->selling_price,
-
-                'remark' => 'แก้ไขราคาสินค้า',
-
-            ]);
-        }
-
-        if ($oldStock != $newStock) {
-
-            StockMovement::create([
-                'product_id'     => $product->id,
-                'type' => 'ADJUST',
-                'qty'            => abs($newStock - $oldStock),
-                'stock_before'   => $oldStock,
-                'stock_after'    => $newStock,
-                'reference_type' => 'adjust',
-                'reference_id'   => $product->id,
-                'remark'         => 'ปรับสต๊อกจากหน้าแก้ไขสินค้า',
-            ]);
-        }
-
+        $product = $this->productUpdateService->update($product, $request->all());
 
         return redirect()
             ->route('products.edit', $product)

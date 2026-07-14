@@ -4,13 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\StockCount;
-use App\Models\StockCountItem;
-use App\Models\StockMovement;
+use App\Services\StockCountService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class StockCountController extends Controller
 {
+    public function __construct(private StockCountService $stockCountService) {}
+
     public function index()
     {
         $products = Product::where('active', true)
@@ -38,69 +38,20 @@ class StockCountController extends Controller
             'actual_qty' => 'required|array',
         ]);
 
-        DB::transaction(function () use ($request) {
+        $items = [];
 
-            $countDate = $request->count_date;
+        foreach ($request->product_id as $index => $productId) {
+            $items[] = [
+                'product_id' => $productId,
+                'actual_qty' => $request->actual_qty[$index] ?? 0,
+            ];
+        }
 
-            $running = StockCount::whereDate(
-                'count_date',
-                $countDate
-            )->count() + 1;
-
-            $countNo = 'SC-' .
-                date('Ymd', strtotime($countDate)) .
-                '-' .
-                str_pad($running, 4, '0', STR_PAD_LEFT);
-
-            $stockCount = StockCount::create([
-                'count_no' => $countNo,
-                'count_date' => $countDate,
-                'remark' => $request->remark,
-            ]);
-
-            foreach ($request->product_id as $index => $productId) {
-
-                if (!$productId) {
-                    continue;
-                }
-
-                $product = Product::find($productId);
-
-                if (!$product) {
-                    continue;
-                }
-
-                $systemQty = (int) $product->stock_qty;
-                $actualQty = (int) ($request->actual_qty[$index] ?? 0);
-                $difference = $actualQty - $systemQty;
-
-                StockCountItem::create([
-                    'stock_count_id' => $stockCount->id,
-                    'product_id' => $product->id,
-                    'system_qty' => $systemQty,
-                    'actual_qty' => $actualQty,
-                    'difference' => $difference,
-                ]);
-
-                if ($difference != 0) {
-
-                    StockMovement::create([
-                        'product_id' => $product->id,
-                        'type' => 'ADJUST',
-                        'qty' => $difference,
-                        'stock_before' => $systemQty,
-                        'stock_after' => $actualQty,
-                        'reference_type' => StockCount::class,
-                        'reference_id' => $stockCount->id,
-                        'remark' => 'ตรวจนับสต็อก ' . $countNo,
-                    ]);
-
-                    $product->update([
-                        'stock_qty' => $actualQty,
-                    ]);
-                }
-            }
-        });
+        $this->stockCountService->create([
+            'count_date' => $request->count_date,
+            'remark' => $request->remark,
+            'items' => $items,
+        ]);
 
         return redirect()
             ->route('stock-counts.index')
