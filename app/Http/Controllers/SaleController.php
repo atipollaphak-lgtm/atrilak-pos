@@ -198,7 +198,8 @@ class SaleController extends Controller
     {
         $sale->load([
             'customer',
-            'items.product',
+            'items.product.unitRelation',
+            'items.productUnit.unit',
         ]);
 
         $setting = Setting::first();
@@ -305,7 +306,8 @@ class SaleController extends Controller
         $sale->load([
             'customer',
             'technician',
-            'items.product',
+            'items.product.unitRelation',
+            'items.productUnit.unit',
         ]);
 
         $setting = Setting::first();
@@ -321,7 +323,8 @@ class SaleController extends Controller
         $sale->load([
             'customer',
             'technician',
-            'items.product',
+            'items.product.unitRelation',
+            'items.productUnit.unit',
         ]);
 
         $setting = Setting::first();

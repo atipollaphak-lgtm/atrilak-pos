@@ -17,6 +17,11 @@ class SaleItem extends Model
         'total',
         'cost_price',
         'profit',
+        'product_name_snapshot',
+        'product_sku_snapshot',
+        'product_code_snapshot',
+        'unit_name_snapshot',
+        'unit_code_snapshot',
     ];
 
     protected $casts = [

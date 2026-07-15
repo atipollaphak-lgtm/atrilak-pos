@@ -10,6 +10,25 @@
         $logoUrl = $storageLogoPath ? asset('storage/' . $storageLogoPath) : null;
 
         $logoExists = $storageLogoPath ? file_exists(public_path('storage/' . $storageLogoPath)) : false;
+
+        $storeName = $sale->store_name_snapshot !== null
+            ? $sale->store_name_snapshot
+            : ($setting->store_name ?? 'อตรีลักษณ์ คอนกรีต');
+        $storeAddress = $sale->store_address_snapshot !== null
+            ? $sale->store_address_snapshot
+            : ($setting->store_address ?? 'ที่อยู่ร้าน');
+        $storePhone = $sale->store_phone_snapshot !== null
+            ? $sale->store_phone_snapshot
+            : ($setting->store_phone ?? '-');
+        $storeTaxNumber = $sale->store_tax_number_snapshot !== null
+            ? $sale->store_tax_number_snapshot
+            : ($setting->tax_number ?? null);
+        $storeBranchType = $sale->store_branch_type_snapshot !== null
+            ? $sale->store_branch_type_snapshot
+            : ($setting->branch_type ?? 'head_office');
+        $storeBranchNumber = $sale->store_branch_number_snapshot !== null
+            ? $sale->store_branch_number_snapshot
+            : ($setting->branch_number ?? null);
     @endphp
 
     @if ($logoUrl)
@@ -21,26 +40,27 @@
 {{-- Store Information --}}
 <td class="header-store-cell">
     <div class="store-name">
-        {{ $setting->store_name ?? 'อตรีลักษณ์ คอนกรีต' }}
+        {{ $storeName }}
     </div>
 
     <div class="store-address">
-        {{ $setting->store_address ?? 'ที่อยู่ร้าน' }}
+        {{ $storeAddress }}
     </div>
 
     <div class="store-contact">
-        โทร {{ $setting->store_phone ?? '-' }}
+        โทร {{ $storePhone }}
     </div>
 
-    @if (($document['type'] ?? 'delivery-receipt') === 'tax-invoice' && !empty($setting?->tax_number))
+    @if (($document['type'] ?? 'delivery-receipt') === 'tax-invoice'
+        && $storeTaxNumber !== null && $storeTaxNumber !== '')
 
     <div class="store-tax-no">
-        เลขประจำตัวผู้เสียภาษี {{ $setting->tax_number }}
+        เลขประจำตัวผู้เสียภาษี {{ $storeTaxNumber }}
     </div>
 
     <div class="store-tax-no">
-        @if (($setting->branch_type ?? 'head_office') === 'branch')
-            สาขาที่ {{ $setting->branch_number }}
+        @if ($storeBranchType === 'branch')
+            สาขาที่ {{ $storeBranchNumber ?? '-' }}
         @else
             สำนักงานใหญ่
         @endif

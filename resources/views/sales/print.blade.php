@@ -137,6 +137,19 @@
                 $qrBase64 = 'data:image/' . $qrType . ';base64,' . $qrData;
             }
         }
+
+        $storeName = $sale->store_name_snapshot !== null
+            ? $sale->store_name_snapshot
+            : ($setting->store_name ?? 'ATRILAK POS');
+        $storeAddress = $sale->store_address_snapshot !== null
+            ? $sale->store_address_snapshot
+            : ($setting->store_address ?? '');
+        $storePhone = $sale->store_phone_snapshot !== null
+            ? $sale->store_phone_snapshot
+            : ($setting->store_phone ?? '-');
+        $storeTaxNumber = $sale->store_tax_number_snapshot !== null
+            ? $sale->store_tax_number_snapshot
+            : ($setting->tax_number ?? '-');
     @endphp
 
     <div class="container">
@@ -153,20 +166,20 @@
 
             <div class="store-info">
                 <div class="store-name">
-                    {{ $setting->store_name ?? 'ATRILAK POS' }}
+                    {{ $storeName }}
                 </div>
 
                 <div>
-                    {{ $setting->store_address ?? '' }}
+                    {{ $storeAddress }}
                 </div>
 
                 <div>
-                    โทร: {{ $setting->store_phone ?? '-' }}
+                    โทร: {{ $storePhone }}
                 </div>
 
                 <div>
                     เลขประจำตัวผู้เสียภาษี:
-                    {{ $setting->tax_number ?? '-' }}
+                    {{ $storeTaxNumber }}
                 </div>
             </div>
 
@@ -192,7 +205,9 @@
             <tr>
                 <td colspan="2">
                     <strong>ลูกค้า:</strong>
-                    {{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}
+                    {{ $sale->customer_name_snapshot !== null
+                        ? $sale->customer_name_snapshot
+                        : ($sale->customer->name ?? 'ลูกค้าทั่วไป') }}
                 </td>
             </tr>
         </table>
@@ -216,7 +231,9 @@
                         </td>
 
                         <td>
-                            {{ $item->product->name ?? '-' }}
+                            {{ $item->product_name_snapshot !== null
+                                ? $item->product_name_snapshot
+                                : ($item->product->name ?? '-') }}
                         </td>
 
                         <td class="text-right">

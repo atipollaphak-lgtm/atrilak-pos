@@ -12,6 +12,9 @@ class QuotationItem extends Model
         'qty',
         'selling_price',
         'total',
+        'product_name_snapshot',
+        'product_sku_snapshot',
+        'product_code_snapshot',
     ];
 
     public function quotation()

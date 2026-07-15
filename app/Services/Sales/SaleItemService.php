@@ -15,9 +15,13 @@ class SaleItemService
         $this->decimalService = $decimalService ?? new SaleDecimalService;
     }
 
-    public function createItems(Sale $sale, array $items, Collection $lockedProducts): void
-    {
-        foreach ($items as $item) {
+    public function createItems(
+        Sale $sale,
+        array $items,
+        Collection $lockedProducts,
+        array $snapshots = []
+    ): void {
+        foreach ($items as $index => $item) {
 
             $product = $lockedProducts->get((int) $item['product_id']);
 
@@ -34,7 +38,7 @@ class SaleItemService
             $costPrice = $product->cost_price ?? 0;
             $lineProfit = $this->decimalService->lineProfit($qty, $price, $costPrice);
 
-            $sale->items()->create([
+            $sale->items()->create(array_merge([
                 'product_id' => $product->id,
                 'product_unit_id' => $productUnitId,
                 'conversion_rate_used' => $item['conversion_rate_used'],
@@ -44,7 +48,7 @@ class SaleItemService
                 'cost_price' => $costPrice,
                 'total' => $lineTotal,
                 'profit' => $lineProfit,
-            ]);
+            ], $snapshots[$index] ?? []));
         }
     }
 }

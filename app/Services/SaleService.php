@@ -40,6 +40,8 @@ class SaleService
 
     protected SaleIdempotencyService $saleIdempotencyService;
 
+    protected TransactionDocumentSnapshotService $documentSnapshotService;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -49,7 +51,8 @@ class SaleService
         StockLockService $stockLockService,
         ProductUnitConversionService $productUnitConversionService,
         SaleValidationService $saleValidationService,
-        SaleIdempotencyService $saleIdempotencyService
+        SaleIdempotencyService $saleIdempotencyService,
+        ?TransactionDocumentSnapshotService $documentSnapshotService = null
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -60,6 +63,8 @@ class SaleService
         $this->productUnitConversionService = $productUnitConversionService;
         $this->saleValidationService = $saleValidationService;
         $this->saleIdempotencyService = $saleIdempotencyService;
+        $this->documentSnapshotService = $documentSnapshotService
+            ?? new TransactionDocumentSnapshotService;
     }
 
     public function createSale(array $data, ?int $quotationId = null)
@@ -115,11 +120,13 @@ class SaleService
                 $deliveryFee = '0.00';
                 $minimumProfit = '0.00';
                 $deliveryZoneId = null;
+                $deliveryAddressId = $data['customer_delivery_address_id'] ?? null;
+                $address = $deliveryAddressId === null
+                    ? null
+                    : CustomerDeliveryAddress::with('deliveryZone')
+                        ->find($deliveryAddressId);
 
                 if ($deliveryType === 'delivery') {
-                    $address = CustomerDeliveryAddress::with('deliveryZone')
-                        ->find($data['customer_delivery_address_id'] ?? null);
-
                     if ($address && $address->deliveryZone) {
                         $deliveryFee = $this->saleValidationService
                             ->money($address->deliveryZone->base_delivery_fee);
@@ -156,11 +163,20 @@ class SaleService
                 $sale->delivery_fee = $deliveryFee;
                 $sale->delivery_type = $deliveryType;
                 $sale->discount = $discount;
+                $sale->fill($this->documentSnapshotService->saleHeaderSnapshots(
+                    $this->nullableId($data['customer_id'] ?? null),
+                    $this->nullableId($data['technician_id'] ?? null),
+                    $this->nullableId($deliveryAddressId),
+                    $address
+                ));
 
                 $sale->save();
 
+                $itemSnapshots = $this->documentSnapshotService
+                    ->saleItemSnapshots($items, $lockedProducts);
+
                 $this->saleItemService
-                    ->createItems($sale, $items, $lockedProducts);
+                    ->createItems($sale, $items, $lockedProducts, $itemSnapshots);
 
                 $productProfit = $sale->items()->sum('profit');
 
@@ -319,6 +335,12 @@ class SaleService
             $newItemsForStock = $this->productUnitConversionService
                 ->resolveItems($newItemsForStock);
 
+            $itemSnapshots = $this->updatedItemSnapshots(
+                $lockedSale->items,
+                $newItemsForStock,
+                $lockedProducts
+            );
+
             $this->stockService->restoreFromSale(
                 $lockedSale,
                 $lockedProducts,
@@ -337,7 +359,8 @@ class SaleService
             $this->saleItemService->createItems(
                 $lockedSale,
                 $newItemsForStock,
-                $lockedProducts
+                $lockedProducts,
+                $itemSnapshots
             );
 
             $grandTotal = $this->saleValidationService
@@ -368,15 +391,7 @@ class SaleService
             $submittedItem = $submittedItems[$index] ?? null;
 
             if (! is_array($submittedItem)
-                || (int) ($submittedItem['sale_item_id'] ?? 0) !== (int) $existingItem->id
-                || (int) ($submittedItem['product_id'] ?? 0) !== (int) $existingItem->product_id
-                || $this->nullableId($submittedItem['product_unit_id'] ?? null)
-                    !== $this->nullableId($existingItem->product_unit_id)
-                || ! $this->decimalEquals($submittedItem['qty'] ?? null, $existingItem->qty)
-                || ! $this->decimalEquals(
-                    $submittedItem['selling_price'] ?? null,
-                    $existingItem->selling_price
-                )) {
+                || ! $this->saleItemMatches($existingItem, $submittedItem)) {
                 return true;
             }
         }
@@ -408,13 +423,99 @@ class SaleService
             );
         }
 
-        $sale->update([
+        $updates = [
             'customer_id' => $data['customer_id'] ?? null,
             'sale_date' => $data['sale_date'],
             'total_amount' => $netTotal,
             'delivery_fee' => $deliveryFee,
             'discount' => $discount,
-        ]);
+        ];
+
+        if ($this->nullableId($data['customer_id'] ?? null)
+            !== $this->nullableId($sale->customer_id)) {
+            $updates = array_merge(
+                $updates,
+                $this->documentSnapshotService->customerSnapshots(
+                    $this->nullableId($data['customer_id'] ?? null)
+                )
+            );
+        }
+
+        if (array_key_exists('technician_id', $data)
+            && $this->nullableId($data['technician_id'])
+                !== $this->nullableId($sale->technician_id)) {
+            $updates['technician_id'] = $data['technician_id'];
+            $updates = array_merge(
+                $updates,
+                $this->documentSnapshotService->technicianSnapshots(
+                    $this->nullableId($data['technician_id'])
+                )
+            );
+        }
+
+        if (array_key_exists('customer_delivery_address_id', $data)
+            && $this->nullableId($data['customer_delivery_address_id'])
+                !== $this->nullableId($sale->customer_delivery_address_id)) {
+            $updates['customer_delivery_address_id'] = $data['customer_delivery_address_id'];
+            $updates = array_merge(
+                $updates,
+                $this->documentSnapshotService->deliveryAddressSnapshots(
+                    $this->nullableId($data['customer_delivery_address_id'])
+                )
+            );
+        }
+
+        $sale->update($updates);
+    }
+
+    private function updatedItemSnapshots(
+        Collection $existingItems,
+        array $submittedItems,
+        Collection $lockedProducts
+    ): array {
+        $freshSnapshots = $this->documentSnapshotService
+            ->saleItemSnapshots($submittedItems, $lockedProducts);
+        $existingItemsById = $existingItems->keyBy('id');
+        $snapshotColumns = [
+            'product_name_snapshot',
+            'product_sku_snapshot',
+            'product_code_snapshot',
+            'unit_name_snapshot',
+            'unit_code_snapshot',
+        ];
+
+        return collect($submittedItems)->map(function (
+            array $submittedItem,
+            int $index
+        ) use ($existingItemsById, $freshSnapshots, $snapshotColumns): array {
+            $existingItem = $existingItemsById->get(
+                (int) ($submittedItem['sale_item_id'] ?? 0)
+            );
+
+            if ($existingItem === null
+                || ! $this->saleItemMatches($existingItem, $submittedItem)) {
+                return $freshSnapshots[$index];
+            }
+
+            return collect($snapshotColumns)
+                ->mapWithKeys(fn (string $column) => [
+                    $column => $existingItem->getAttribute($column),
+                ])
+                ->all();
+        })->all();
+    }
+
+    private function saleItemMatches($existingItem, array $submittedItem): bool
+    {
+        return (int) ($submittedItem['sale_item_id'] ?? 0) === (int) $existingItem->id
+            && (int) ($submittedItem['product_id'] ?? 0) === (int) $existingItem->product_id
+            && $this->nullableId($submittedItem['product_unit_id'] ?? null)
+                === $this->nullableId($existingItem->product_unit_id)
+            && $this->decimalEquals($submittedItem['qty'] ?? null, $existingItem->qty)
+            && $this->decimalEquals(
+                $submittedItem['selling_price'] ?? null,
+                $existingItem->selling_price
+            );
     }
 
     private function nullableId(mixed $value): ?int

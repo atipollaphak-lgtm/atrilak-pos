@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Services\SaleService;
+use App\Services\TransactionDocumentSnapshotService;
 use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,10 @@ use Throwable;
 
 class QuotationController extends Controller
 {
-    public function __construct(private SaleService $saleService) {}
+    public function __construct(
+        private SaleService $saleService,
+        private TransactionDocumentSnapshotService $documentSnapshotService
+    ) {}
 
     public function index()
     {
@@ -60,6 +64,17 @@ class QuotationController extends Controller
         DB::transaction(function () use ($request) {
 
             $date = $request->quotation_date;
+            $productIds = collect($request->product_id)
+                ->filter()
+                ->map(fn ($productId) => (int) $productId)
+                ->unique()
+                ->values();
+            $products = Product::query()
+                ->whereIn('id', $productIds->all())
+                ->get()
+                ->keyBy('id');
+            $itemSnapshots = $this->documentSnapshotService
+                ->quotationItemSnapshots($products);
 
             $running = Quotation::whereDate(
                 'quotation_date',
@@ -84,14 +99,18 @@ class QuotationController extends Controller
                 $totalAmount += $qty * $price;
             }
 
-            $quotation = Quotation::create([
+            $quotation = Quotation::create(array_merge([
                 'quotation_no' => $quotationNo,
                 'customer_id' => $request->customer_id,
                 'quotation_date' => $date,
                 'total_amount' => $totalAmount,
                 'remark' => $request->remark,
                 'status' => 'draft',
-            ]);
+            ], $this->documentSnapshotService->quotationHeaderSnapshots(
+                $request->customer_id === null || $request->customer_id === ''
+                    ? null
+                    : (int) $request->customer_id
+            )));
 
             foreach ($request->product_id as $index => $productId) {
                 if (! $productId) {
@@ -102,13 +121,13 @@ class QuotationController extends Controller
                 $price = (float) ($request->selling_price[$index] ?? 0);
                 $total = $qty * $price;
 
-                QuotationItem::create([
+                QuotationItem::create(array_merge([
                     'quotation_id' => $quotation->id,
                     'product_id' => $productId,
                     'qty' => $qty,
                     'selling_price' => $price,
                     'total' => $total,
-                ]);
+                ], $itemSnapshots[(int) $productId] ?? []));
             }
         });
 

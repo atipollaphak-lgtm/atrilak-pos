@@ -21,9 +21,39 @@ trait CreatesBusinessRuleTestSchema
             $table->id();
             $table->unsignedBigInteger('category_id')->nullable();
             $table->string('name');
+            $table->string('sku')->nullable();
+            $table->string('product_code')->nullable();
             $table->decimal('cost_price', 12, 2)->default(0);
             $table->decimal('selling_price', 12, 2)->default(0);
             $table->decimal('stock_qty', 12, 4)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create('settings', function (Blueprint $table) {
+            $table->id();
+            $table->string('store_name')->nullable();
+            $table->text('store_address')->nullable();
+            $table->string('store_phone')->nullable();
+            $table->string('tax_number')->nullable();
+            $table->string('branch_type')->nullable();
+            $table->string('branch_number')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('customers', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('phone')->nullable();
+            $table->text('address')->nullable();
+            $table->string('tax_number')->nullable();
+            $table->string('branch_type')->nullable();
+            $table->string('branch_number')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('technicians', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
             $table->timestamps();
         });
 
@@ -38,6 +68,24 @@ trait CreatesBusinessRuleTestSchema
             $table->decimal('delivery_fee', 12, 2)->default(0);
             $table->string('delivery_type')->default('delivery');
             $table->decimal('discount', 12, 2)->default(0);
+            $table->string('store_name_snapshot')->nullable();
+            $table->text('store_address_snapshot')->nullable();
+            $table->string('store_phone_snapshot')->nullable();
+            $table->string('store_tax_number_snapshot')->nullable();
+            $table->string('store_branch_type_snapshot')->nullable();
+            $table->string('store_branch_number_snapshot')->nullable();
+            $table->string('customer_name_snapshot')->nullable();
+            $table->string('customer_phone_snapshot')->nullable();
+            $table->text('customer_address_snapshot')->nullable();
+            $table->string('customer_tax_number_snapshot')->nullable();
+            $table->string('customer_branch_type_snapshot')->nullable();
+            $table->string('customer_branch_number_snapshot')->nullable();
+            $table->string('technician_name_snapshot')->nullable();
+            $table->string('delivery_address_name_snapshot')->nullable();
+            $table->string('delivery_receiver_name_snapshot')->nullable();
+            $table->string('delivery_receiver_phone_snapshot', 30)->nullable();
+            $table->text('delivery_full_address_snapshot')->nullable();
+            $table->text('delivery_landmark_snapshot')->nullable();
             $table->timestamps();
         });
 
@@ -53,6 +101,11 @@ trait CreatesBusinessRuleTestSchema
             $table->decimal('cost_price', 12, 2);
             $table->decimal('total', 12, 2);
             $table->decimal('profit', 12, 2);
+            $table->string('product_name_snapshot')->nullable();
+            $table->string('product_sku_snapshot')->nullable();
+            $table->string('product_code_snapshot')->nullable();
+            $table->string('unit_name_snapshot')->nullable();
+            $table->string('unit_code_snapshot')->nullable();
             $table->timestamps();
         });
 
@@ -126,6 +179,9 @@ trait CreatesBusinessRuleTestSchema
             'stock_movements',
             'sale_items',
             'sales',
+            'technicians',
+            'customers',
+            'settings',
             'products',
             'categories',
         ] as $table) {

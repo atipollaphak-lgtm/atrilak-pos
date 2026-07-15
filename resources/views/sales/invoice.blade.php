@@ -325,6 +325,21 @@
 
     <div class="invoice">
 
+        @php
+            $storeName = $sale->store_name_snapshot !== null
+                ? $sale->store_name_snapshot
+                : ($setting->store_name ?? 'อตรีลักษณ์ คอนกรีต');
+            $storeAddress = $sale->store_address_snapshot !== null
+                ? $sale->store_address_snapshot
+                : ($setting->store_address ?? 'ที่อยู่ร้าน');
+            $storePhone = $sale->store_phone_snapshot !== null
+                ? $sale->store_phone_snapshot
+                : ($setting->store_phone ?? '-');
+            $storeTaxNumber = $sale->store_tax_number_snapshot !== null
+                ? $sale->store_tax_number_snapshot
+                : ($setting->tax_number ?? null);
+        @endphp
+
         <div class="watermark">
             ATRILAK CONCRETE
         </div>
@@ -339,20 +354,20 @@
 
                 <td style="width: 50%;">
                     <div class="store-name">
-                        {{ $setting->store_name ?? 'อตรีลักษณ์ คอนกรีต' }}
+                        {{ $storeName }}
                     </div>
 
                     <div>
-                        {{ $setting->store_address ?? 'ที่อยู่ร้าน' }}
+                        {{ $storeAddress }}
                     </div>
 
                     <div>
-                        โทร {{ $setting->store_phone ?? '-' }}
+                        โทร {{ $storePhone }}
                     </div>
 
-                    @if (!empty($setting?->tax_no))
+                    @if ($storeTaxNumber !== null && $storeTaxNumber !== '')
                         <div>
-                            เลขผู้เสียภาษี {{ $setting->tax_no }}
+                            เลขผู้เสียภาษี {{ $storeTaxNumber }}
                         </div>
                     @endif
                 </td>
@@ -391,7 +406,9 @@
                     </td>
 
                     <td style="width: 45%;">
-                        {{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}
+                        {{ $sale->customer_name_snapshot !== null
+                            ? $sale->customer_name_snapshot
+                            : ($sale->customer->name ?? 'ลูกค้าทั่วไป') }}
                     </td>
 
                     <td class="info-label">
@@ -399,7 +416,9 @@
                     </td>
 
                     <td style="width: 25%;">
-                        {{ $sale->customer->phone ?? '-' }}
+                        {{ $sale->customer_phone_snapshot !== null
+                            ? $sale->customer_phone_snapshot
+                            : ($sale->customer->phone ?? '-') }}
                     </td>
                 </tr>
 
@@ -409,7 +428,9 @@
                     </td>
 
                     <td colspan="3">
-                        {{ $sale->customer->address ?? '-' }}
+                        {{ $sale->customer_address_snapshot !== null
+                            ? $sale->customer_address_snapshot
+                            : ($sale->customer->address ?? '-') }}
                     </td>
                 </tr>
 
@@ -431,7 +452,9 @@
                     </td>
 
                     <td>
-                        @if (!empty($sale->technician))
+                        @if ($sale->technician_name_snapshot !== null)
+                            {{ $sale->technician_name_snapshot }}
+                        @elseif ($sale->technician !== null)
                             {{ $sale->technician->name ?? '-' }}
                         @else
                             -
@@ -486,7 +509,9 @@
                         </td>
 
                         <td class="item-name">
-                            {{ $item->product->name ?? '-' }}
+                            {{ $item->product_name_snapshot !== null
+                                ? $item->product_name_snapshot
+                                : ($item->product->name ?? '-') }}
                         </td>
 
                         <td class="qty">
@@ -494,7 +519,12 @@
 </td>
 
                         <td class="unit">
-                            {{ $item->product->unit->name ?? ($item->product->unit ?? '-') }}
+                            {{ $item->unit_name_snapshot !== null
+                                ? $item->unit_name_snapshot
+                                : ($item->productUnit?->unit?->name
+                                    ?? $item->product?->unitRelation?->name
+                                    ?? $item->product?->unit
+                                    ?? '-') }}
                         </td>
 
                         <td class="price">

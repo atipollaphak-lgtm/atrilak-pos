@@ -10,7 +10,9 @@
             </td>
 
             <td style="width: 45%;">
-                {{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}
+                {{ $sale->customer_name_snapshot !== null
+                    ? $sale->customer_name_snapshot
+                    : ($sale->customer->name ?? 'ลูกค้าทั่วไป') }}
             </td>
 
             <td class="info-label">
@@ -18,7 +20,9 @@
             </td>
 
             <td style="width: 25%;">
-                {{ $sale->customer->phone ?? '-' }}
+                {{ $sale->customer_phone_snapshot !== null
+                    ? $sale->customer_phone_snapshot
+                    : ($sale->customer->phone ?? '-') }}
             </td>
         </tr>
 
@@ -28,7 +32,9 @@
             </td>
 
             <td colspan="3">
-                {{ $sale->customer->address ?? '-' }}
+                {{ $sale->customer_address_snapshot !== null
+                    ? $sale->customer_address_snapshot
+                    : ($sale->customer->address ?? '-') }}
             </td>
         </tr>
 
@@ -39,7 +45,9 @@
                 </td>
 
                 <td>
-                    {{ $sale->customer->tax_number ?? '-' }}
+                    {{ $sale->customer_tax_number_snapshot !== null
+                        ? $sale->customer_tax_number_snapshot
+                        : ($sale->customer->tax_number ?? '-') }}
                 </td>
 
                 <td class="info-label">
@@ -47,8 +55,16 @@
                 </td>
 
                 <td>
-                    @if (($sale->customer->branch_type ?? 'สำนักงานใหญ่') === 'สาขา')
-                        สาขา {{ $sale->customer->branch_number ?? '-' }}
+                    @php
+                        $customerBranchType = $sale->customer_branch_type_snapshot !== null
+                            ? $sale->customer_branch_type_snapshot
+                            : ($sale->customer->branch_type ?? 'สำนักงานใหญ่');
+                        $customerBranchNumber = $sale->customer_branch_number_snapshot !== null
+                            ? $sale->customer_branch_number_snapshot
+                            : ($sale->customer->branch_number ?? null);
+                    @endphp
+                    @if ($customerBranchType === 'สาขา')
+                        สาขา {{ $customerBranchNumber ?? '-' }}
                     @else
                         สำนักงานใหญ่
                     @endif

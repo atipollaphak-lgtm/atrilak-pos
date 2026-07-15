@@ -116,6 +116,7 @@
         $setting = \App\Models\Setting::first();
 
         $logoBase64 = null;
+        $qrBase64 = null;
 
         if ($setting && $setting->logo_image) {
             $logoPath = storage_path('app/public/' . $setting->logo_image);
@@ -138,6 +139,19 @@
                 $qrBase64 = 'data:image/' . $qrType . ';base64,' . $qrData;
             }
         }
+
+        $storeName = $quotation->store_name_snapshot !== null
+            ? $quotation->store_name_snapshot
+            : ($setting->store_name ?? 'ATRILAK POS');
+        $storeAddress = $quotation->store_address_snapshot !== null
+            ? $quotation->store_address_snapshot
+            : ($setting->store_address ?? '');
+        $storePhone = $quotation->store_phone_snapshot !== null
+            ? $quotation->store_phone_snapshot
+            : ($setting->store_phone ?? '-');
+        $storeTaxNumber = $quotation->store_tax_number_snapshot !== null
+            ? $quotation->store_tax_number_snapshot
+            : ($setting->tax_number ?? '-');
     @endphp
 
     <div class="container">
@@ -154,20 +168,20 @@
 
             <div class="store-info">
                 <div class="store-name">
-                    {{ $setting->store_name ?? 'ATRILAK POS' }}
+                    {{ $storeName }}
                 </div>
 
                 <div>
-                    {{ $setting->store_address ?? '' }}
+                    {{ $storeAddress }}
                 </div>
 
                 <div>
-                    โทร: {{ $setting->store_phone ?? '-' }}
+                    โทร: {{ $storePhone }}
                 </div>
 
                 <div>
                     เลขประจำตัวผู้เสียภาษี:
-                    {{ $setting->tax_number ?? '-' }}
+                    {{ $storeTaxNumber }}
                 </div>
             </div>
 
@@ -193,7 +207,9 @@
             <tr>
                 <td colspan="2">
                     <strong>ลูกค้า:</strong>
-                    {{ $quotation->customer->name ?? 'ลูกค้าทั่วไป' }}
+                    {{ $quotation->customer_name_snapshot !== null
+                        ? $quotation->customer_name_snapshot
+                        : ($quotation->customer->name ?? 'ลูกค้าทั่วไป') }}
                 </td>
             </tr>
 
@@ -224,7 +240,9 @@
                         </td>
 
                         <td>
-                            {{ $item->product->name ?? '-' }}
+                            {{ $item->product_name_snapshot !== null
+                                ? $item->product_name_snapshot
+                                : ($item->product->name ?? '-') }}
                         </td>
 
                         <td class="text-right">
