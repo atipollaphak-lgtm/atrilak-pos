@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Sales;
 
+use App\Http\Requests\Sales\Concerns\HandlesSaleRequestShape;
 use Brick\Math\BigDecimal;
 use Brick\Math\Exception\MathException;
 use Closure;
@@ -13,6 +14,8 @@ use Illuminate\Validation\Validator;
 
 class StoreSaleV2Request extends FormRequest
 {
+    use HandlesSaleRequestShape;
+
     public function authorize(): bool
     {
         return true;
@@ -47,6 +50,7 @@ class StoreSaleV2Request extends FormRequest
             'base_qty' => ['prohibited'],
             'conversion_rate_used' => ['prohibited'],
             'items' => ['required', 'array', 'min:1'],
+            'items.*' => ['bail', 'array'],
             'items.*.product_id' => ['bail', 'required', 'integer', 'exists:products,id'],
             'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.qty' => ['bail', 'required', $this->decimalRule(2, 13, true)],
@@ -56,9 +60,21 @@ class StoreSaleV2Request extends FormRequest
         ];
     }
 
+    public function messages(): array
+    {
+        return [
+            'items.*.array' => 'ข้อมูลสินค้ารายการที่ :position ไม่ถูกต้อง',
+            'items.*.product_id.required' => 'กรุณาเลือกสินค้ารายการที่ :position',
+            'items.*.qty.required' => 'กรุณาระบุจำนวนสินค้ารายการที่ :position',
+            'items.*.selling_price.required' => 'กรุณาระบุราคาขายรายการที่ :position',
+        ];
+    }
+
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            $this->validateNestedItemList($validator);
+
             $customerId = $this->input('customer_id');
             $addressId = $this->input('customer_delivery_address_id');
 
@@ -98,9 +114,16 @@ class StoreSaleV2Request extends FormRequest
             $decimal = is_int($value) || is_float($value) || is_string($value)
                 ? (string) $value
                 : '';
+            $attributeLabel = $this->saleItemAttributeLabel($attribute);
 
             if (! preg_match('/^\d{1,'.$integerDigits.'}(?:\.\d{1,'.$scale.'})?$/D', $decimal)) {
-                $fail('รูปแบบ :attribute ไม่ถูกต้องหรือมีทศนิยมเกิน '.$scale.' ตำแหน่ง');
+                $hasTooManyDecimalPlaces = preg_match('/^\d+(?:\.(\d+))?$/D', $decimal, $matches) === 1
+                    && isset($matches[1])
+                    && strlen($matches[1]) > $scale;
+
+                $fail($hasTooManyDecimalPlaces
+                    ? $attributeLabel.'รับได้สูงสุด '.$scale.' ตำแหน่งทศนิยม'
+                    : $attributeLabel.'ไม่ถูกต้อง');
 
                 return;
             }
@@ -108,15 +131,15 @@ class StoreSaleV2Request extends FormRequest
             try {
                 $number = BigDecimal::of($decimal);
             } catch (MathException) {
-                $fail('รูปแบบ :attribute ไม่ถูกต้อง');
+                $fail($attributeLabel.'ไม่ถูกต้อง');
 
                 return;
             }
 
             if ($strictlyPositive ? $number->isLessThanOrEqualTo(0) : $number->isLessThan(0)) {
                 $fail($strictlyPositive
-                    ? ':attribute ต้องมากกว่า 0'
-                    : ':attribute ต้องไม่น้อยกว่า 0');
+                    ? $attributeLabel.'ต้องมากกว่า 0'
+                    : $attributeLabel.'ต้องไม่น้อยกว่า 0');
             }
         };
     }

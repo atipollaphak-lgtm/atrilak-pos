@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Sales;
 
+use App\Http\Requests\Sales\Concerns\HandlesSaleRequestShape;
 use App\Models\Sale;
 use Brick\Math\BigDecimal;
 use Brick\Math\Exception\MathException;
@@ -12,6 +13,8 @@ use Illuminate\Validation\Validator;
 
 class UpdateSaleRequest extends FormRequest
 {
+    use HandlesSaleRequestShape;
+
     public function authorize(): bool
     {
         return true;
@@ -51,10 +54,21 @@ class UpdateSaleRequest extends FormRequest
         ];
     }
 
+    public function messages(): array
+    {
+        return [
+            'normalized_items.*.product_id.required' => 'กรุณาเลือกสินค้ารายการที่ :position',
+            'normalized_items.*.qty.required' => 'กรุณาระบุจำนวนสินค้ารายการที่ :position',
+            'normalized_items.*.selling_price.required' => 'กรุณาระบุราคาขายรายการที่ :position',
+            'sale_item_id.array' => 'รูปแบบรหัสรายการขายไม่ถูกต้อง',
+            'product_unit_id.array' => 'รูปแบบหน่วยขายไม่ถูกต้อง',
+        ];
+    }
+
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            $this->validateArrayLengths($validator);
+            $this->validateParallelArrayAlignment($validator, ['sale_item_id', 'product_unit_id']);
             $this->validateDeliveryAddressOwnership($validator);
             $this->validateActiveReferences($validator);
         });
@@ -67,60 +81,7 @@ class UpdateSaleRequest extends FormRequest
 
     private function normalizeParallelItems(): array
     {
-        $products = is_array($this->input('product_id')) ? $this->input('product_id') : [];
-        $quantities = is_array($this->input('qty')) ? $this->input('qty') : [];
-        $prices = is_array($this->input('selling_price')) ? $this->input('selling_price') : [];
-        $saleItemIds = is_array($this->input('sale_item_id')) ? $this->input('sale_item_id') : [];
-        $productUnitIds = is_array($this->input('product_unit_id')) ? $this->input('product_unit_id') : [];
-        $rowCount = max(count($products), count($quantities), count($prices));
-        $items = [];
-
-        for ($index = 0; $index < $rowCount; $index++) {
-            $productId = $products[$index] ?? null;
-            $qty = $quantities[$index] ?? null;
-            $price = $prices[$index] ?? null;
-
-            if ($this->isBlank($productId) && $this->isBlank($qty) && $this->isBlank($price)) {
-                continue;
-            }
-
-            $items[] = [
-                'sale_item_id' => $saleItemIds[$index] ?? null,
-                'product_id' => $productId,
-                'product_unit_id' => $productUnitIds[$index] ?? null,
-                'qty' => $qty,
-                'selling_price' => $price,
-            ];
-        }
-
-        return $items;
-    }
-
-    private function validateArrayLengths(Validator $validator): void
-    {
-        $coreArrays = [
-            'product_id' => $this->input('product_id'),
-            'qty' => $this->input('qty'),
-            'selling_price' => $this->input('selling_price'),
-        ];
-
-        if (! collect($coreArrays)->contains(fn ($value) => ! is_array($value))) {
-            $coreCounts = array_map('count', $coreArrays);
-
-            if (count(array_unique($coreCounts)) !== 1) {
-                $validator->errors()->add('items', 'จำนวนช่องสินค้า จำนวน และราคาขายต้องตรงกัน');
-            }
-
-            $expectedCount = count($coreArrays['product_id']);
-
-            foreach (['sale_item_id', 'product_unit_id'] as $field) {
-                $value = $this->input($field);
-
-                if ($value !== null && is_array($value) && count($value) !== $expectedCount) {
-                    $validator->errors()->add($field, 'จำนวนช่อง '.$field.' ต้องตรงกับจำนวนสินค้า');
-                }
-            }
-        }
+        return $this->normalizeParallelSaleItems(['sale_item_id', 'product_unit_id']);
     }
 
     private function validateDeliveryAddressOwnership(Validator $validator): void
@@ -209,7 +170,7 @@ class UpdateSaleRequest extends FormRequest
             $decimal = is_int($value) || is_float($value) || is_string($value)
                 ? (string) $value
                 : '';
-            $attributeLabel = $this->attributeLabel($attribute);
+            $attributeLabel = $this->saleItemAttributeLabel($attribute);
 
             if (! preg_match('/^\d{1,'.$integerDigits.'}(?:\.\d{1,'.$scale.'})?$/D', $decimal)) {
                 $hasTooManyDecimalPlaces = preg_match('/^\d+(?:\.(\d+))?$/D', $decimal, $matches) === 1
@@ -237,27 +198,6 @@ class UpdateSaleRequest extends FormRequest
                     : $attributeLabel.'ต้องไม่น้อยกว่า 0');
             }
         };
-    }
-
-    private function attributeLabel(string $attribute): string
-    {
-        if (preg_match('/^normalized_items\.(\d+)\.(qty|selling_price)$/D', $attribute, $matches) === 1) {
-            $rowNumber = (int) $matches[1] + 1;
-            $fieldName = $matches[2] === 'qty' ? 'จำนวนสินค้า' : 'ราคาขาย';
-
-            return $fieldName.'รายการที่ '.$rowNumber.' ';
-        }
-
-        return match ($attribute) {
-            'discount' => 'ส่วนลด ',
-            'delivery_fee' => 'ค่าขนส่ง ',
-            default => $attribute.' ',
-        };
-    }
-
-    private function isBlank(mixed $value): bool
-    {
-        return $value === null || (is_string($value) && trim($value) === '');
     }
 
     private function isPositiveInteger(mixed $value): bool
