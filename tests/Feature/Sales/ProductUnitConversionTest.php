@@ -8,6 +8,7 @@ use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Services\Sales\ProductUnitConversionService;
 use App\Services\SaleService;
+use App\ValueObjects\Sales\ResolvedSaleLine;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\CreatesSaleTransactionTestSchema;
@@ -87,13 +88,111 @@ class ProductUnitConversionTest extends TestCase
     {
         $product = $this->product('Legacy base flow', '10.0000');
 
-        $sale = $this->sale([$this->line($product, '2.50', '10.00')]);
+        $sale = $this->sale([$this->line($product, '5.00', '10.00')]);
         $item = $sale->items()->sole();
 
         $this->assertNull($item->product_unit_id);
         $this->assertSame('1.0000', $item->conversion_rate_used);
-        $this->assertSame('2.5000', $item->base_qty);
-        $this->assertSame('7.5000', $product->fresh()->stock_qty);
+        $this->assertSame('5.0000', $item->base_qty);
+        $this->assertSame('5.0000', $product->fresh()->stock_qty);
+        $this->assertSame('5.0000', StockMovement::sole()->qty);
+    }
+
+    public function test_v2_two_cases_use_sale_quantity_and_forty_eight_base_units(): void
+    {
+        $product = $this->product('Two cases', '60.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+
+        $sale = $this->sale([$this->line($product, '2.00', '180.00', $case)]);
+        $item = $sale->items()->sole();
+
+        $this->assertSame('2.00', $item->qty);
+        $this->assertSame('24.0000', $item->conversion_rate_used);
+        $this->assertSame('48.0000', $item->base_qty);
+        $this->assertSame('case', $item->unit_name_snapshot);
+        $this->assertSame('case', $item->unit_code_snapshot);
+        $this->assertSame('12.0000', $product->fresh()->stock_qty);
+        $this->assertSame('48.0000', StockMovement::sole()->qty);
+    }
+
+    public function test_resolved_lines_preserve_order_source_and_aggregate_mixed_units(): void
+    {
+        $product = $this->product('Resolved contract', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+        $service = app(ProductUnitConversionService::class);
+
+        $lines = $service->resolveLines([
+            $this->line($product, '2.00', '180.00', $case),
+            $this->line($product, '5.00', '10.00'),
+        ], collect([$product->id => $product]));
+
+        $this->assertSame([0, 1], array_map(
+            fn (ResolvedSaleLine $line): int => $line->originalIndex,
+            $lines
+        ));
+        $this->assertSame([
+            ResolvedSaleLine::SOURCE_CURRENT_PRODUCT_UNIT,
+            ResolvedSaleLine::SOURCE_LEGACY_FACTOR_ONE,
+        ], array_map(
+            fn (ResolvedSaleLine $line): string => $line->resolutionSource,
+            $lines
+        ));
+        $this->assertSame(['2.00', '5.00'], array_map(
+            fn (ResolvedSaleLine $line): string => $line->saleQty,
+            $lines
+        ));
+        $this->assertSame([$product->id => '53.0000'], $service
+            ->aggregateBaseQuantityByProduct($lines));
+
+        $sale = $this->sale([
+            $this->line($product, '2.00', '180.00', $case),
+            $this->line($product, '5.00', '10.00'),
+        ]);
+
+        $this->assertSame(['2.00', '5.00'], $sale->items()
+            ->orderBy('id')->pluck('qty')->all());
+        $this->assertSame('47.0000', $product->fresh()->stock_qty);
+    }
+
+    public function test_browser_supplied_conversion_values_and_unit_snapshots_are_ignored(): void
+    {
+        $product = $this->product('Backend authority', '50.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+        $line = array_merge($this->line($product, '1.00', '10.00', $case), [
+            'conversion_rate_used' => '2.0000',
+            'base_qty' => '2.0000',
+            'unit_name_snapshot' => 'forged',
+            'unit_code_snapshot' => 'forged',
+        ]);
+
+        $item = $this->sale([$line])->items()->sole();
+
+        $this->assertSame('24.0000', $item->conversion_rate_used);
+        $this->assertSame('24.0000', $item->base_qty);
+        $this->assertSame('case', $item->unit_name_snapshot);
+        $this->assertSame('case', $item->unit_code_snapshot);
+        $this->assertSame('26.0000', $product->fresh()->stock_qty);
+    }
+
+    public function test_sale_quantity_beyond_two_decimal_places_is_rejected_not_rounded(): void
+    {
+        $product = $this->product('Strict sale precision', '10.0000');
+
+        $this->expectDomainFailure(fn () => $this->sale([
+            $this->line($product, '1.005', '10.00'),
+        ]));
+
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertDatabaseCount('stock_movements', 0);
+        $this->assertSame('10.0000', $product->fresh()->stock_qty);
+    }
+
+    public function test_base_quantity_beyond_numeric_precision_is_rejected_not_truncated(): void
+    {
+        $this->expectException(DomainException::class);
+
+        app(ProductUnitConversionService::class)
+            ->calculateBaseQuantity('9999999999999.99', '1000.0000');
     }
 
     public function test_rejects_invalid_product_unit_configuration_and_rolls_back(): void
@@ -340,6 +439,7 @@ class ProductUnitConversionTest extends TestCase
         mixed $confirmedAt = 'confirmed'
     ): ProductUnit {
         $unitId = DB::table('units')->insertGetId([
+            'code' => $name,
             'name' => $name,
             'created_at' => now(),
             'updated_at' => now(),

@@ -103,8 +103,17 @@ class SaleService
                     }
                 }
 
-                $items = $this->productUnitConversionService->resolveItems($items);
-                $this->stockLockService->assertSufficientStock($lockedProducts, $items);
+                $resolvedLines = $this->productUnitConversionService
+                    ->resolveLines($items, $lockedProducts);
+                $requiredBaseQtyByProduct = $this->productUnitConversionService
+                    ->aggregateBaseQuantityByProduct($resolvedLines);
+                $items = collect($resolvedLines)
+                    ->map(fn ($line): array => $line->toArray())
+                    ->all();
+                $this->stockLockService->assertSufficientBaseQuantities(
+                    $lockedProducts,
+                    $requiredBaseQtyByProduct
+                );
 
                 $saleDate = $data['sale_date'];
 
@@ -173,7 +182,7 @@ class SaleService
                 $sale->save();
 
                 $itemSnapshots = $this->documentSnapshotService
-                    ->saleItemSnapshots($items, $lockedProducts);
+                    ->saleItemSnapshots($items, $lockedProducts, true);
 
                 $this->saleItemService
                     ->createItems($sale, $items, $lockedProducts, $itemSnapshots);

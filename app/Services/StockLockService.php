@@ -68,4 +68,28 @@ class StockLockService
             }
         }
     }
+
+    /**
+     * @param  array<int, string>  $requiredBaseQtyByProduct
+     */
+    public function assertSufficientBaseQuantities(
+        Collection $lockedProducts,
+        array $requiredBaseQtyByProduct
+    ): void {
+        ksort($requiredBaseQtyByProduct, SORT_NUMERIC);
+
+        foreach ($requiredBaseQtyByProduct as $productId => $requiredQty) {
+            $product = $lockedProducts->get((int) $productId);
+
+            if (! $product) {
+                throw new DomainException('à¹„à¸¡à¹ˆà¸žà¸šà¸ªà¸´à¸™à¸„à¹‰à¸²');
+            }
+
+            if (BigDecimal::of($product->stock_qty)->isLessThan(
+                BigDecimal::of((string) $requiredQty)
+            )) {
+                throw new DomainException('à¸ªà¸´à¸™à¸„à¹‰à¸² '.$product->name.' à¸¡à¸µà¸ªà¸•à¹‡à¸­à¸à¹„à¸¡à¹ˆà¸žà¸­');
+            }
+        }
+    }
 }

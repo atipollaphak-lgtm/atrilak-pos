@@ -80,9 +80,14 @@ class TransactionDocumentSnapshotService
         ];
     }
 
-    public function saleItemSnapshots(array $items, Collection $products): array
-    {
+    public function saleItemSnapshots(
+        array $items,
+        Collection $products,
+        bool $useResolvedUnitSnapshots = false
+    ): array {
         $productUnitIds = collect($items)
+            ->reject(fn (array $item): bool => $useResolvedUnitSnapshots
+                && array_key_exists('unit_name_snapshot', $item))
             ->pluck('product_unit_id')
             ->filter(fn ($id) => $id !== null && $id !== '')
             ->map(fn ($id) => (int) $id)
@@ -98,6 +103,8 @@ class TransactionDocumentSnapshotService
                 ->keyBy('id');
 
         $legacyUnitIds = collect($items)
+            ->reject(fn (array $item): bool => $useResolvedUnitSnapshots
+                && array_key_exists('unit_name_snapshot', $item))
             ->filter(fn (array $item) => ($item['product_unit_id'] ?? null) === null
                 || ($item['product_unit_id'] ?? null) === '')
             ->map(function (array $item) use ($products) {
@@ -118,27 +125,34 @@ class TransactionDocumentSnapshotService
         return collect($items)->map(function (array $item) use (
             $products,
             $productUnits,
-            $legacyUnits
+            $legacyUnits,
+            $useResolvedUnitSnapshots
         ): array {
             $product = $products->get((int) ($item['product_id'] ?? 0));
             $productUnitId = $item['product_unit_id'] ?? null;
 
-            if ($productUnitId !== null && $productUnitId !== '') {
+            if ($useResolvedUnitSnapshots
+                && array_key_exists('unit_name_snapshot', $item)) {
+                $unitName = $item['unit_name_snapshot'];
+                $unitCode = $item['unit_code_snapshot'] ?? null;
+            } elseif ($productUnitId !== null && $productUnitId !== '') {
                 $unit = $productUnits->get((int) $productUnitId)?->unit;
-                $legacyUnitName = null;
+                $unitName = $unit?->name;
+                $unitCode = $unit?->code;
             } else {
                 $unit = $product?->unit_id === null
                     ? null
                     : $legacyUnits->get((int) $product->unit_id);
-                $legacyUnitName = $product?->unit;
+                $unitName = $unit?->name ?? $product?->unit;
+                $unitCode = $unit?->code;
             }
 
             return [
                 'product_name_snapshot' => $product?->name,
                 'product_sku_snapshot' => $product?->sku,
                 'product_code_snapshot' => $product?->product_code,
-                'unit_name_snapshot' => $unit?->name ?? $legacyUnitName,
-                'unit_code_snapshot' => $unit?->code,
+                'unit_name_snapshot' => $unitName,
+                'unit_code_snapshot' => $unitCode,
             ];
         })->all();
     }
