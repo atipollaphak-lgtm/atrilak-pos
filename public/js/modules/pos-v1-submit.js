@@ -7,8 +7,10 @@
         return;
     }
 
-    let isSubmitting = false;
-    let pendingKey = null;
+    const pendingIntent = SaleIntentStorage.createManager({
+        storageKey: "atrilak.pos.v1.pending-sale.v1"
+    });
+    const submissionGuard = SaleIntentStorage.createSubmissionGuard();
 
     form.addEventListener("submit", async function (event) {
         if (event.defaultPrevented) {
@@ -17,21 +19,21 @@
 
         event.preventDefault();
 
-        if (isSubmitting) {
+        if (!submissionGuard.start()) {
             return;
         }
 
-        if (!pendingKey) {
-            pendingKey = crypto.randomUUID();
-        }
-
-        keyInput.value = pendingKey;
-        isSubmitting = true;
         button.disabled = true;
 
         const invoiceWindow = window.open("", "_blank");
+        let intent = null;
 
         try {
+            intent = await pendingIntent.keyFor(
+                SaleIntentStorage.formDataPayload(new FormData(form))
+            );
+            keyInput.value = intent.key;
+
             const response = await fetch(form.action, {
                 method: "POST",
                 headers: {
@@ -40,7 +42,14 @@
                 },
                 body: new FormData(form)
             });
-            const data = await parseJsonResponse(response);
+            let data;
+
+            try {
+                data = await parseJsonResponse(response);
+            } catch (error) {
+                error.status = response.status;
+                throw error;
+            }
 
             if (!response.ok) {
                 const error = new Error(data.message || "ไม่สามารถบันทึกการขายได้");
@@ -52,7 +61,7 @@
                 throw new Error(data.message || "ไม่สามารถบันทึกการขายได้");
             }
 
-            pendingKey = null;
+            pendingIntent.clear(intent.key);
             keyInput.value = "";
 
             if (invoiceWindow) {
@@ -67,13 +76,13 @@
                 invoiceWindow.close();
             }
 
-            if (error.status === 409) {
-                pendingKey = null;
+            if (SaleIntentStorage.isDefinitiveClientError(error.status)) {
+                pendingIntent.clear(intent?.key);
                 keyInput.value = "";
             }
 
             alert(error.message || "เกิดข้อผิดพลาดระหว่างบันทึกการขาย");
-            isSubmitting = false;
+            submissionGuard.release();
             button.disabled = false;
         }
     });

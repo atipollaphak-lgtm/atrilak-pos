@@ -1254,5 +1254,6 @@
         </script>
     @endif
 
+    <script src="{{ asset('js/modules/sale-intent-storage.js') }}"></script>
     <script src="{{ asset('js/modules/pos-v1-submit.js') }}"></script>
 @stop

@@ -20,6 +20,7 @@
 
     <script src="{{ asset('js/modules/pos-search.js') }}"></script>
 
+    <script src="{{ asset('js/modules/sale-intent-storage.js') }}"></script>
     <script src="{{ asset('js/modules/pos-submit.js') }}"></script>
 
     <script src="{{ asset('js/pos-v2.js') }}"></script>
