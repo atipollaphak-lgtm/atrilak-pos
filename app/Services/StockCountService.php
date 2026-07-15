@@ -13,7 +13,10 @@ use Illuminate\Validation\ValidationException;
 
 class StockCountService
 {
-    public function __construct(private StockLockService $stockLockService) {}
+    public function __construct(
+        private StockLockService $stockLockService,
+        private StockCountNumberService $stockCountNumberService
+    ) {}
 
     public function create(array $data): StockCount
     {
@@ -39,8 +42,7 @@ class StockCountService
 
             $lockedProducts = $this->stockLockService->lockProducts($productIds);
             $countDate = $data['count_date'];
-            $running = StockCount::query()->whereDate('count_date', $countDate)->count() + 1;
-            $countNo = 'SC-'.date('Ymd', strtotime($countDate)).'-'.str_pad($running, 4, '0', STR_PAD_LEFT);
+            $countNo = $this->stockCountNumberService->generate($countDate);
             $stockCount = StockCount::query()->create([
                 'count_no' => $countNo,
                 'count_date' => $countDate,

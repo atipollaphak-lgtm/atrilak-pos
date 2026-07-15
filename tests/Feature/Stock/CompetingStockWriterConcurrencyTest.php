@@ -156,6 +156,45 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
         $this->assertDatabaseCount('stock_counts', 2);
         $this->assertDatabaseCount('stock_count_items', 2);
+        $this->assertSame(2, DB::table('stock_counts')->pluck('count_no')->unique()->count());
+        $this->assertSame(2, DB::table('stock_count_number_counters')->where('count_date', '2026-07-14')->value('last_number'));
+    }
+
+    public function test_stock_counts_for_different_products_share_a_safe_daily_counter(): void
+    {
+        $first = $this->product('Count number first', 10);
+        $second = $this->product('Count number second', 10);
+
+        $results = $this->runConcurrently(
+            $this->stockCount([[$first->id, 8]]),
+            $this->stockCount([[$second->id, 9]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertSame(
+            ['SC-20260714-0001', 'SC-20260714-0002'],
+            DB::table('stock_counts')->orderBy('count_no')->pluck('count_no')->all()
+        );
+        $this->assertSame(2, DB::table('stock_count_number_counters')->where('count_date', '2026-07-14')->value('last_number'));
+    }
+
+    public function test_stock_counts_on_different_dates_use_different_counter_rows(): void
+    {
+        $first = $this->product('Count date first', 10);
+        $second = $this->product('Count date second', 10);
+
+        $results = $this->runConcurrently(
+            $this->stockCount([[$first->id, 8]], '2026-07-14'),
+            $this->stockCount([[$second->id, 9]], '2026-07-15')
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertSame(
+            ['SC-20260714-0001', 'SC-20260715-0001'],
+            DB::table('stock_counts')->orderBy('count_no')->pluck('count_no')->all()
+        );
+        $this->assertDatabaseHas('stock_count_number_counters', ['count_date' => '2026-07-14', 'last_number' => 1]);
+        $this->assertDatabaseHas('stock_count_number_counters', ['count_date' => '2026-07-15', 'last_number' => 1]);
     }
 
     public function test_stock_counts_with_reverse_product_order_do_not_deadlock(): void
@@ -174,6 +213,46 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         );
         $this->assertMovementChain($first, 10, (float) $first->fresh()->stock_qty);
         $this->assertMovementChain($second, 10, (float) $second->fresh()->stock_qty);
+        $this->assertSame(2, DB::table('stock_counts')->pluck('count_no')->unique()->count());
+    }
+
+    public function test_stock_count_locks_products_before_the_daily_counter(): void
+    {
+        $product = $this->product('Product before counter', 10);
+        DB::table('stock_count_number_counters')->insert([
+            'count_date' => '2026-07-14',
+            'last_number' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $blocker = $this->blockerConnection();
+        $blocker->beginTransaction();
+        $process = $this->workerProcess($this->stockCount([[$product->id, 8]]) + [
+            'lock_timeout_ms' => 2000,
+            'statement_timeout_ms' => 5000,
+        ]);
+
+        try {
+            $blocker->table('products')->where('id', $product->id)->lockForUpdate()->first();
+            $process->start();
+            usleep(300000);
+
+            DB::transaction(function (): void {
+                DB::statement("SET LOCAL lock_timeout = '150ms'");
+                DB::table('stock_count_number_counters')
+                    ->where('count_date', '2026-07-14')
+                    ->lockForUpdate()
+                    ->first();
+            });
+        } finally {
+            $blocker->rollBack();
+        }
+
+        $process->wait();
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $result = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertTrue($result['ok'], json_encode($result));
+        $this->assertSame(1, DB::table('stock_count_number_counters')->where('count_date', '2026-07-14')->value('last_number'));
     }
 
     public function test_manual_adjustment_and_sale_create_form_a_valid_serial_order(): void
@@ -281,6 +360,7 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         $this->assertDatabaseCount('stock_counts', 0);
         $this->assertDatabaseCount('stock_count_items', 0);
         $this->assertDatabaseCount('stock_movements', 0);
+        $this->assertDatabaseCount('stock_count_number_counters', 0);
         $this->assertEquals(10, $product->fresh()->stock_qty);
     }
 
@@ -378,12 +458,12 @@ SQL);
         ];
     }
 
-    private function stockCount(array $lines): array
+    private function stockCount(array $lines, string $countDate = '2026-07-14'): array
     {
         return [
             'operation' => 'stock_count',
             'data' => [
-                'count_date' => '2026-07-14',
+                'count_date' => $countDate,
                 'items' => array_map(fn (array $line) => [
                     'product_id' => $line[0],
                     'actual_qty' => $line[1],

@@ -61,4 +61,17 @@
     $('#stock-count-table tbody tr').each(function () {
         calculateRow($(this));
     });
+
+    $('#stock-count-form').on('submit', function (event) {
+        const form = $(this);
+
+        if (form.data('submitting')) {
+            event.preventDefault();
+
+            return;
+        }
+
+        form.data('submitting', true);
+        form.find('[type="submit"]').prop('disabled', true);
+    });
 })(jQuery);

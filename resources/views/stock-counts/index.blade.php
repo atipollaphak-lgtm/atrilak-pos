@@ -33,7 +33,7 @@
     <div class="card-header">บันทึกตรวจนับสต็อก</div>
 
     <div class="card-body">
-        <form action="{{ route('stock-counts.store') }}" method="POST">
+        <form action="{{ route('stock-counts.store') }}" method="POST" id="stock-count-form">
             @csrf
 
             <div class="row">

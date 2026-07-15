@@ -77,6 +77,13 @@ trait CreatesCompetingStockWriterTestSchema
             $table->date('count_date');
             $table->text('remark')->nullable();
             $table->timestamps();
+            $table->unique('count_no', 'stock_counts_count_no_unique');
+        });
+
+        Schema::create('stock_count_number_counters', function (Blueprint $table) {
+            $table->date('count_date')->primary();
+            $table->integer('last_number');
+            $table->timestamps();
         });
 
         Schema::create('stock_count_items', function (Blueprint $table) {
@@ -128,6 +135,7 @@ trait CreatesCompetingStockWriterTestSchema
         foreach ([
             'quotation_items',
             'stock_count_items',
+            'stock_count_number_counters',
             'stock_counts',
             'purchase_items',
             'purchases',
