@@ -80,6 +80,17 @@ class SaleValidationService
         return $this->decimalService->netTotal($subtotal, $deliveryFee, $discount);
     }
 
+    public function calculateStoredItemsTotal(iterable $items): string
+    {
+        $totals = [];
+
+        foreach ($items as $item) {
+            $totals[] = $item->total;
+        }
+
+        return $this->decimalService->sumMoney($totals);
+    }
+
     private function positiveDecimal(
         mixed $value,
         int $scale,

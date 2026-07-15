@@ -10,6 +10,7 @@ use App\Models\Sale;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\ViewErrorBag;
 use Tests\TestCase;
@@ -252,6 +253,7 @@ class SaleEditSafetyTest extends TestCase
             customerActive: false
         );
         $item = $sale->items()->sole();
+        $beforeMovements = DB::table('stock_movements')->count();
 
         $this->put(route('sales.update', $sale), $this->payload(
             saleItemIds: [$item->id],
@@ -267,10 +269,12 @@ class SaleEditSafetyTest extends TestCase
 
         $this->assertSame($customer->id, $sale->customer_id);
         $this->assertSame('2026-07-15', $sale->sale_date);
+        $this->assertSame($item->id, $updatedItem->id);
         $this->assertSame($product->id, $updatedItem->product_id);
         $this->assertSame('1.00', $updatedItem->qty);
         $this->assertSame('10.00', $updatedItem->selling_price);
         $this->assertSame('9.0000', $product->fresh()->stock_qty);
+        $this->assertSame($beforeMovements, DB::table('stock_movements')->count());
     }
 
     private function existingSale(bool $productActive = true, bool $customerActive = true): array

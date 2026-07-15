@@ -35,6 +35,13 @@ class SaleDecimalServiceTest extends TestCase
         $this->assertSame('10.02', $service->netTotal('10.01', '0.02', '0.01'));
     }
 
+    public function test_stored_money_totals_are_summed_without_float_arithmetic(): void
+    {
+        $service = new SaleDecimalService;
+
+        $this->assertSame('190.03', $service->sumMoney(['190.00', '0.01', '0.02']));
+    }
+
     public function test_line_profit_uses_the_same_money_rounding(): void
     {
         $service = new SaleDecimalService;

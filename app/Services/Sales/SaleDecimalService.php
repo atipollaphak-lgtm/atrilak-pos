@@ -61,6 +61,17 @@ class SaleDecimalService
         );
     }
 
+    public function sumMoney(iterable $values): string
+    {
+        $total = BigDecimal::zero()->toScale(self::MONEY_SCALE);
+
+        foreach ($values as $value) {
+            $total = $total->plus($this->money($value));
+        }
+
+        return (string) $total;
+    }
+
     public function nonNegativeDifference(mixed $expected, mixed $actual): string
     {
         $difference = $this->decimal($this->money($expected))

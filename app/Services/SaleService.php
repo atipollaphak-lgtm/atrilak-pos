@@ -13,8 +13,10 @@ use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\SaleValidationService;
 use App\Services\Sales\StockService;
+use Brick\Math\BigDecimal;
 use DomainException;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -302,6 +304,12 @@ class SaleService
                 }
             }
 
+            if (! $this->saleItemsHaveChanged($lockedSale->items, $newItemsForStock)) {
+                $this->updateSaleHeader($lockedSale, $data);
+
+                return $lockedSale;
+            }
+
             $productIds = $lockedSale->items
                 ->pluck('product_id')
                 ->merge(array_column($newItemsForStock, 'product_id'))
@@ -344,26 +352,85 @@ class SaleService
                 'ขายออกจากการแก้ไขบิล '.$lockedSale->sale_no
             );
 
-            $deliveryFee = $this->saleValidationService
-                ->money($data['delivery_fee'] ?? 0);
-            $discount = $this->saleValidationService
-                ->money($data['discount'] ?? 0);
-            $netTotal = $this->saleValidationService->calculateNetTotal(
-                $grandTotal,
-                $deliveryFee,
-                $discount
-            );
-
-            $lockedSale->update([
-                'customer_id' => $data['customer_id'] ?? null,
-                'sale_date' => $data['sale_date'],
-                'total_amount' => $netTotal,
-                'delivery_fee' => $deliveryFee,
-                'discount' => $discount,
-            ]);
+            $this->updateSaleHeader($lockedSale, $data, $grandTotal);
 
             return $lockedSale;
         });
+    }
+
+    private function saleItemsHaveChanged(Collection $existingItems, array $submittedItems): bool
+    {
+        if ($existingItems->count() !== count($submittedItems)) {
+            return true;
+        }
+
+        foreach ($existingItems->sortBy('id')->values() as $index => $existingItem) {
+            $submittedItem = $submittedItems[$index] ?? null;
+
+            if (! is_array($submittedItem)
+                || (int) ($submittedItem['sale_item_id'] ?? 0) !== (int) $existingItem->id
+                || (int) ($submittedItem['product_id'] ?? 0) !== (int) $existingItem->product_id
+                || $this->nullableId($submittedItem['product_unit_id'] ?? null)
+                    !== $this->nullableId($existingItem->product_unit_id)
+                || ! $this->decimalEquals($submittedItem['qty'] ?? null, $existingItem->qty)
+                || ! $this->decimalEquals(
+                    $submittedItem['selling_price'] ?? null,
+                    $existingItem->selling_price
+                )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function updateSaleHeader(
+        Sale $sale,
+        array $data,
+        ?string $itemsTotal = null
+    ): void {
+        $deliveryFee = $this->saleValidationService
+            ->money($data['delivery_fee'] ?? 0);
+        $discount = $this->saleValidationService
+            ->money($data['discount'] ?? 0);
+
+        if ($itemsTotal === null
+            && $deliveryFee === $this->saleValidationService->money($sale->delivery_fee)
+            && $discount === $this->saleValidationService->money($sale->discount)) {
+            $netTotal = $this->saleValidationService->money($sale->total_amount);
+        } else {
+            $itemsTotal ??= $this->saleValidationService
+                ->calculateStoredItemsTotal($sale->items);
+            $netTotal = $this->saleValidationService->calculateNetTotal(
+                $itemsTotal,
+                $deliveryFee,
+                $discount
+            );
+        }
+
+        $sale->update([
+            'customer_id' => $data['customer_id'] ?? null,
+            'sale_date' => $data['sale_date'],
+            'total_amount' => $netTotal,
+            'delivery_fee' => $deliveryFee,
+            'discount' => $discount,
+        ]);
+    }
+
+    private function nullableId(mixed $value): ?int
+    {
+        return $value === null || $value === '' ? null : (int) $value;
+    }
+
+    private function decimalEquals(mixed $left, mixed $right): bool
+    {
+        if ($left === null || $left === '') {
+            return false;
+        }
+
+        return BigDecimal::of((string) $left)->isEqualTo(
+            BigDecimal::of((string) $right)
+        );
     }
 
     public function deleteSale(Sale $sale): void
