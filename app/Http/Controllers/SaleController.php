@@ -210,9 +210,30 @@ class SaleController extends Controller
     {
         $sale->load('items.product', 'items.productUnit', 'customer');
 
-        $customers = Customer::where('active', true)->get();
+        $customers = Customer::query()
+            ->where(function ($query) use ($sale): void {
+                $query->where('active', true);
 
-        $products = Product::where('active', true)->get();
+                if ($sale->customer_id !== null) {
+                    $query->orWhere('id', $sale->customer_id);
+                }
+            })
+            ->orderBy('name')
+            ->get();
+
+        $historicalProductIds = $sale->items
+            ->pluck('product_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $products = Product::query()
+            ->where(function ($query) use ($historicalProductIds): void {
+                $query->where('active', true)
+                    ->orWhereIn('id', $historicalProductIds);
+            })
+            ->orderBy('name')
+            ->get();
 
         return view(
             'sales.edit',

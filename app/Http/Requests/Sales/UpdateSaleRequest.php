@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Sales;
 
+use App\Models\Sale;
 use Brick\Math\BigDecimal;
 use Brick\Math\Exception\MathException;
 use Closure;
@@ -55,6 +56,7 @@ class UpdateSaleRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             $this->validateArrayLengths($validator);
             $this->validateDeliveryAddressOwnership($validator);
+            $this->validateActiveReferences($validator);
         });
     }
 
@@ -143,6 +145,60 @@ class UpdateSaleRequest extends FormRequest
         }
     }
 
+    private function validateActiveReferences(Validator $validator): void
+    {
+        $sale = $this->route('sale');
+
+        if (! $sale instanceof Sale) {
+            return;
+        }
+
+        $customerId = $this->input('customer_id');
+
+        if ($this->isPositiveInteger($customerId)
+            && (int) $customerId !== (int) $sale->customer_id
+            && DB::table('customers')->where('id', $customerId)->where('active', false)->exists()) {
+            $validator->errors()->add('customer_id', 'ลูกค้าที่ปิดใช้งานเลือกใช้กับใบขายนี้ไม่ได้');
+        }
+
+        $submittedProductIds = collect($this->normalizedItems())
+            ->pluck('product_id')
+            ->filter(fn ($productId) => $this->isPositiveInteger($productId))
+            ->map(fn ($productId) => (int) $productId)
+            ->unique();
+
+        if ($submittedProductIds->isEmpty()) {
+            return;
+        }
+
+        $inactiveProductIds = DB::table('products')
+            ->whereIn('id', $submittedProductIds)
+            ->where('active', false)
+            ->pluck('id')
+            ->map(fn ($productId) => (int) $productId);
+
+        if ($inactiveProductIds->isEmpty()) {
+            return;
+        }
+
+        $historicalItems = $sale->items()
+            ->pluck('product_id', 'id')
+            ->mapWithKeys(fn ($productId, $saleItemId) => [(int) $saleItemId => (int) $productId]);
+
+        foreach ($this->normalizedItems() as $item) {
+            $productId = (int) ($item['product_id'] ?? 0);
+            $saleItemId = (int) ($item['sale_item_id'] ?? 0);
+            $isOriginalHistoricalReference = $saleItemId > 0
+                && $historicalItems->get($saleItemId) === $productId;
+
+            if ($inactiveProductIds->contains($productId) && ! $isOriginalHistoricalReference) {
+                $validator->errors()->add('product_id', 'สินค้าที่ปิดใช้งานเลือกเพิ่มในใบขายไม่ได้');
+
+                return;
+            }
+        }
+    }
+
     private function decimalRule(int $scale, int $integerDigits, bool $strictlyPositive): Closure
     {
         return function (string $attribute, mixed $value, Closure $fail) use ($scale, $integerDigits, $strictlyPositive): void {
@@ -153,9 +209,16 @@ class UpdateSaleRequest extends FormRequest
             $decimal = is_int($value) || is_float($value) || is_string($value)
                 ? (string) $value
                 : '';
+            $attributeLabel = $this->attributeLabel($attribute);
 
             if (! preg_match('/^\d{1,'.$integerDigits.'}(?:\.\d{1,'.$scale.'})?$/D', $decimal)) {
-                $fail('รูปแบบ :attribute ไม่ถูกต้องหรือมีทศนิยมเกิน '.$scale.' ตำแหน่ง');
+                $hasTooManyDecimalPlaces = preg_match('/^\d+(?:\.(\d+))?$/D', $decimal, $matches) === 1
+                    && isset($matches[1])
+                    && strlen($matches[1]) > $scale;
+
+                $fail($hasTooManyDecimalPlaces
+                    ? $attributeLabel.'รับได้สูงสุด '.$scale.' ตำแหน่งทศนิยม'
+                    : $attributeLabel.'ไม่ถูกต้อง');
 
                 return;
             }
@@ -163,16 +226,32 @@ class UpdateSaleRequest extends FormRequest
             try {
                 $number = BigDecimal::of($decimal);
             } catch (MathException) {
-                $fail('รูปแบบ :attribute ไม่ถูกต้อง');
+                $fail($attributeLabel.'ไม่ถูกต้อง');
 
                 return;
             }
 
             if ($strictlyPositive ? $number->isLessThanOrEqualTo(0) : $number->isLessThan(0)) {
                 $fail($strictlyPositive
-                    ? ':attribute ต้องมากกว่า 0'
-                    : ':attribute ต้องไม่น้อยกว่า 0');
+                    ? $attributeLabel.'ต้องมากกว่า 0'
+                    : $attributeLabel.'ต้องไม่น้อยกว่า 0');
             }
+        };
+    }
+
+    private function attributeLabel(string $attribute): string
+    {
+        if (preg_match('/^normalized_items\.(\d+)\.(qty|selling_price)$/D', $attribute, $matches) === 1) {
+            $rowNumber = (int) $matches[1] + 1;
+            $fieldName = $matches[2] === 'qty' ? 'จำนวนสินค้า' : 'ราคาขาย';
+
+            return $fieldName.'รายการที่ '.$rowNumber.' ';
+        }
+
+        return match ($attribute) {
+            'discount' => 'ส่วนลด ',
+            'delivery_fee' => 'ค่าขนส่ง ',
+            default => $attribute.' ',
         };
     }
 
