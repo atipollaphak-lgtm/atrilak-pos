@@ -8,6 +8,8 @@
 
 @section('content')
 
+    @include('partials.flash-messages')
+
     <div class="card">
         <div class="card-header">
             ข้อมูลการรับเข้าสินค้า
@@ -61,7 +63,7 @@
                     @foreach ($purchase->items as $item)
                         <tr>
                             <td>{{ $item->product->name ?? '-' }}</td>
-                            <td>{{ number_format($item->qty) }}</td>
+                            <td>{{ rtrim(rtrim(number_format($item->qty, 4, '.', ''), '0'), '.') }}</td>
                             <td>{{ number_format($item->cost_price, 2) }}</td>
                             <td>{{ number_format($item->total, 2) }}</td>
                         </tr>
@@ -83,8 +85,9 @@
             <a href="{{ route('purchases.edit', $purchase) }}" class="btn btn-warning">
                 แก้ไข
             </a>
-            <form action="{{ route('purchases.destroy', $purchase) }}" method="POST" style="display:inline-block;"
-                onsubmit="return confirm('ยืนยันลบรายการรับเข้านี้? สต๊อกจะถูกปรับออก');">
+            <form action="{{ route('purchases.destroy', $purchase) }}" method="POST"
+                class="purchase-delete-form d-inline-block"
+                data-confirm-message="ยืนยันลบรายการรับเข้านี้? สต๊อกจะถูกปรับออก">
 
                 @csrf
                 @method('DELETE')
@@ -100,4 +103,8 @@
         </div>
     </div>
 
+@stop
+
+@section('js')
+    <script src="{{ asset('js/modules/purchase.js') }}"></script>
 @stop

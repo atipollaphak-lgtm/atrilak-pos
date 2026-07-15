@@ -67,28 +67,28 @@ class CompetingStockWritersTest extends TestCase
         $this->assertDatabaseCount('purchase_items', 0);
     }
 
-    public function test_duplicate_purchase_lines_share_one_working_stock_balance(): void
+    public function test_duplicate_purchase_lines_are_rejected_without_stock_writes(): void
     {
         $product = $this->product(stock: 10, cost: 5);
         $supplier = Supplier::query()->create(['name' => 'Test supplier', 'active' => true]);
 
-        app(PurchaseService::class)->create([
-            'supplier_id' => $supplier->id,
-            'purchase_date' => '2026-07-14',
-            'items' => [
-                ['product_id' => $product->id, 'qty' => 2, 'cost_price' => 10],
-                ['product_id' => $product->id, 'qty' => 3, 'cost_price' => 20],
-            ],
-        ]);
-
-        $movements = StockMovement::query()->where('product_id', $product->id)->orderBy('id')->get();
-        $this->assertCount(2, $movements);
-        $this->assertEquals(10, $movements[0]->stock_before);
-        $this->assertEquals(12, $movements[0]->stock_after);
-        $this->assertEquals(12, $movements[1]->stock_before);
-        $this->assertEquals(15, $movements[1]->stock_after);
-        $this->assertEquals(15, $product->fresh()->stock_qty);
-        $this->assertEquals(8.66, $product->fresh()->cost_price);
+        try {
+            app(PurchaseService::class)->create([
+                'supplier_id' => $supplier->id,
+                'purchase_date' => '2026-07-14',
+                'items' => [
+                    ['product_id' => $product->id, 'qty' => 2, 'cost_price' => 10],
+                    ['product_id' => $product->id, 'qty' => 3, 'cost_price' => 20],
+                ],
+            ]);
+            $this->fail('Duplicate purchase products should be rejected.');
+        } catch (DomainException) {
+            $this->assertDatabaseCount('purchases', 0);
+            $this->assertDatabaseCount('purchase_items', 0);
+            $this->assertDatabaseCount('stock_movements', 0);
+            $this->assertEquals(10, $product->fresh()->stock_qty);
+            $this->assertEquals(5, $product->fresh()->cost_price);
+        }
     }
 
     public function test_failed_purchase_update_rolls_back_document_stock_and_movements(): void
