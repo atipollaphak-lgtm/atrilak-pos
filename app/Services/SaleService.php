@@ -105,13 +105,13 @@ class SaleService
                     ->generate($saleDate);
 
                 $grandTotal = array_key_exists('grand_total', $data)
-                    ? $data['grand_total']
+                    ? $this->saleValidationService->money($data['grand_total'])
                     : $this->saleValidationService->calculateItemsTotal($items);
                 $deliveryType = $data['delivery_type'] ?? 'delivery';
-                $discount = $data['discount'] ?? 0;
+                $discount = $this->saleValidationService->money($data['discount'] ?? 0);
 
-                $deliveryFee = 0;
-                $minimumProfit = 0;
+                $deliveryFee = '0.00';
+                $minimumProfit = '0.00';
                 $deliveryZoneId = null;
 
                 if ($deliveryType === 'delivery') {
@@ -119,15 +119,21 @@ class SaleService
                         ->find($data['customer_delivery_address_id'] ?? null);
 
                     if ($address && $address->deliveryZone) {
-                        $deliveryFee = (float) $address->deliveryZone->base_delivery_fee;
-                        $minimumProfit = (float) $address->deliveryZone->minimum_profit;
+                        $deliveryFee = $this->saleValidationService
+                            ->money($address->deliveryZone->base_delivery_fee);
+                        $minimumProfit = $this->saleValidationService
+                            ->money($address->deliveryZone->minimum_profit);
                         $deliveryZoneId = $address->deliveryZone->id;
                     }
                 } else {
-                    $deliveryFee = 0;
+                    $deliveryFee = '0.00';
                 }
 
-                $netTotal = $grandTotal + $deliveryFee - $discount;
+                $netTotal = $this->saleValidationService->calculateNetTotal(
+                    $grandTotal,
+                    $deliveryFee,
+                    $discount
+                );
 
                 $sale = new Sale;
 
@@ -338,9 +344,15 @@ class SaleService
                 'ขายออกจากการแก้ไขบิล '.$lockedSale->sale_no
             );
 
-            $deliveryFee = $data['delivery_fee'] ?? 0;
-            $discount = $data['discount'] ?? 0;
-            $netTotal = $grandTotal + $deliveryFee - $discount;
+            $deliveryFee = $this->saleValidationService
+                ->money($data['delivery_fee'] ?? 0);
+            $discount = $this->saleValidationService
+                ->money($data['discount'] ?? 0);
+            $netTotal = $this->saleValidationService->calculateNetTotal(
+                $grandTotal,
+                $deliveryFee,
+                $discount
+            );
 
             $lockedSale->update([
                 'customer_id' => $data['customer_id'] ?? null,

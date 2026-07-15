@@ -112,6 +112,49 @@ class TechnicianCommissionCharacterizationTest extends TestCase
         $this->assertEquals(45.00, $commission->commission_amount);
     }
 
+    public function test_decimal_commissions_keep_sale_quantity_and_line_total_policies(): void
+    {
+        $percentProduct = Product::create([
+            'name' => 'Decimal percent commission product',
+            'cost_price' => '0.10',
+            'selling_price' => '0.50',
+            'stock_qty' => 10,
+        ]);
+        TechnicianCommissionRule::create([
+            'product_id' => $percentProduct->id,
+            'name' => 'Decimal percent rule',
+            'rule_type' => 'percent',
+            'rule_value' => '10.00',
+            'active' => true,
+        ]);
+        $percentSale = $this->createSaleWithItem($percentProduct, 0.1, 0.5);
+
+        $percentCommission = (new TechnicianCommissionService)->createFromSale($percentSale);
+
+        $this->assertNotNull($percentCommission);
+        $this->assertSame('0.01', (string) $percentCommission->commission_amount);
+
+        $amountProduct = Product::create([
+            'name' => 'Decimal amount commission product',
+            'cost_price' => '0.10',
+            'selling_price' => '1.00',
+            'stock_qty' => 10,
+        ]);
+        TechnicianCommissionRule::create([
+            'product_id' => $amountProduct->id,
+            'name' => 'Decimal amount rule',
+            'rule_type' => 'amount',
+            'rule_value' => '0.25',
+            'active' => true,
+        ]);
+        $amountSale = $this->createSaleWithItem($amountProduct, 0.03, 1.00);
+
+        $amountCommission = (new TechnicianCommissionService)->createFromSale($amountSale);
+
+        $this->assertNotNull($amountCommission);
+        $this->assertSame('0.01', (string) $amountCommission->commission_amount);
+    }
+
     private function createSaleWithItem(Product $product, float $qty, float $price): Sale
     {
         $sale = Sale::create([

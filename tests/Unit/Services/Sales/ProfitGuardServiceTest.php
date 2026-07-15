@@ -50,4 +50,17 @@ class ProfitGuardServiceTest extends TestCase
         $this->assertEquals(-25.0, $result['total_profit']);
         $this->assertEquals(25.0, $result['short_amount']);
     }
+
+    public function test_decimal_profit_comparison_is_deterministic(): void
+    {
+        $result = (new ProfitGuardService)->check([
+            'delivery_type' => 'delivery',
+            'delivery_fee' => '0.02',
+            'minimum_profit' => '0.03',
+        ], '0.01');
+
+        $this->assertTrue($result['passed']);
+        $this->assertSame('0.03', (string) $result['total_profit']);
+        $this->assertSame('0.00', (string) $result['short_amount']);
+    }
 }

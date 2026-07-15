@@ -9,6 +9,13 @@ use Illuminate\Support\Facades\DB;
 
 class SaleValidationService
 {
+    private SaleDecimalService $decimalService;
+
+    public function __construct(?SaleDecimalService $decimalService = null)
+    {
+        $this->decimalService = $decimalService ?? new SaleDecimalService;
+    }
+
     public function assertValidItems(array $items): void
     {
         if ($items === []) {
@@ -57,15 +64,20 @@ class SaleValidationService
 
     public function calculateItemsTotal(array $items): string
     {
-        $total = BigDecimal::zero();
+        return $this->decimalService->itemsTotal($items);
+    }
 
-        foreach ($items as $item) {
-            $qty = BigDecimal::of((string) $item['qty']);
-            $price = BigDecimal::of((string) $item['selling_price']);
-            $total = $total->plus($qty->multipliedBy($price));
-        }
+    public function money(mixed $value): string
+    {
+        return $this->decimalService->money($value);
+    }
 
-        return (string) $total;
+    public function calculateNetTotal(
+        mixed $subtotal,
+        mixed $deliveryFee,
+        mixed $discount
+    ): string {
+        return $this->decimalService->netTotal($subtotal, $deliveryFee, $discount);
     }
 
     private function positiveDecimal(

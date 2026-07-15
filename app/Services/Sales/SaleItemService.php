@@ -8,6 +8,13 @@ use Illuminate\Support\Collection;
 
 class SaleItemService
 {
+    private SaleDecimalService $decimalService;
+
+    public function __construct(?SaleDecimalService $decimalService = null)
+    {
+        $this->decimalService = $decimalService ?? new SaleDecimalService;
+    }
+
     public function createItems(Sale $sale, array $items, Collection $lockedProducts): void
     {
         foreach ($items as $item) {
@@ -23,9 +30,9 @@ class SaleItemService
 
             $productUnitId = $item['product_unit_id'] ?? null;
 
-            $lineTotal = $qty * $price;
+            $lineTotal = $this->decimalService->lineTotal($qty, $price);
             $costPrice = $product->cost_price ?? 0;
-            $lineProfit = ($price - $costPrice) * $qty;
+            $lineProfit = $this->decimalService->lineProfit($qty, $price, $costPrice);
 
             $sale->items()->create([
                 'product_id' => $product->id,
