@@ -83,9 +83,13 @@ trait CreatesCompetingStockWriterTestSchema
             $table->id();
             $table->foreignId('stock_count_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_id')->constrained()->cascadeOnDelete();
-            $table->integer('system_qty')->default(0);
-            $table->integer('actual_qty')->default(0);
-            $table->integer('difference')->default(0);
+            $table->decimal('system_qty', 19, 4)->default(0);
+            $table->decimal('actual_qty', 19, 4)->default(0);
+            $table->decimal('difference', 19, 4)->default(0);
+            $table->unique(
+                ['stock_count_id', 'product_id'],
+                'stock_count_items_stock_count_product_unique'
+            );
             $table->timestamps();
         });
 

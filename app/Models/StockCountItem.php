@@ -14,6 +14,12 @@ class StockCountItem extends Model
         'difference',
     ];
 
+    protected $casts = [
+        'system_qty' => 'decimal:4',
+        'actual_qty' => 'decimal:4',
+        'difference' => 'decimal:4',
+    ];
+
     public function stockCount()
     {
         return $this->belongsTo(StockCount::class);

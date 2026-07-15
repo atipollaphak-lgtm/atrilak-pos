@@ -113,6 +113,69 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
     }
 
+    public function test_stock_count_and_purchase_create_form_a_valid_serial_order(): void
+    {
+        $product = $this->product('Stock count purchase', 10);
+        $results = $this->runConcurrently(
+            $this->stockCount([[$product->id, '8.2500']]),
+            $this->purchaseCreate([[$product->id, 3, 5]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains((float) $product->fresh()->stock_qty, [8.25, 11.25]);
+        $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
+    }
+
+    public function test_stock_count_and_manual_adjustment_form_a_valid_serial_order(): void
+    {
+        $product = $this->product('Stock count adjustment', 10);
+        $results = $this->runConcurrently(
+            $this->stockCount([[$product->id, '8.2500']]),
+            [
+                'operation' => 'product_update',
+                'product_id' => $product->id,
+                'data' => $this->productUpdateData($product, 7),
+            ]
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains((float) $product->fresh()->stock_qty, [7.0, 8.25]);
+        $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
+    }
+
+    public function test_two_stock_counts_are_serialized_with_continuous_movements(): void
+    {
+        $product = $this->product('Two stock counts', 10);
+        $results = $this->runConcurrently(
+            $this->stockCount([[$product->id, '8.2500']]),
+            $this->stockCount([[$product->id, '7.5000']])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains((float) $product->fresh()->stock_qty, [7.5, 8.25]);
+        $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_counts', 2);
+        $this->assertDatabaseCount('stock_count_items', 2);
+    }
+
+    public function test_stock_counts_with_reverse_product_order_do_not_deadlock(): void
+    {
+        $first = $this->product('Count first', 10);
+        $second = $this->product('Count second', 10);
+        $results = $this->runConcurrently(
+            $this->stockCount([[$first->id, 8], [$second->id, 9]]),
+            $this->stockCount([[$second->id, 7], [$first->id, 6]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains(
+            [(float) $first->fresh()->stock_qty, (float) $second->fresh()->stock_qty],
+            [[8.0, 9.0], [6.0, 7.0]]
+        );
+        $this->assertMovementChain($first, 10, (float) $first->fresh()->stock_qty);
+        $this->assertMovementChain($second, 10, (float) $second->fresh()->stock_qty);
+    }
+
     public function test_manual_adjustment_and_sale_create_form_a_valid_serial_order(): void
     {
         $product = $this->product('Manual adjust', 10);
@@ -194,6 +257,29 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         $this->assertFalse($result['ok']);
         $this->assertDatabaseCount('purchases', 0);
         $this->assertDatabaseCount('purchase_items', 0);
+        $this->assertDatabaseCount('stock_movements', 0);
+        $this->assertEquals(10, $product->fresh()->stock_qty);
+    }
+
+    public function test_stock_count_lock_timeout_has_no_partial_writes(): void
+    {
+        $product = $this->product('Stock count timeout', 10);
+        $blocker = $this->blockerConnection();
+        $blocker->beginTransaction();
+
+        try {
+            $blocker->table('products')->where('id', $product->id)->lockForUpdate()->first();
+            $result = $this->runWorker($this->stockCount([[$product->id, 8]]) + [
+                'lock_timeout_ms' => 150,
+                'statement_timeout_ms' => 1000,
+            ]);
+        } finally {
+            $blocker->rollBack();
+        }
+
+        $this->assertFalse($result['ok']);
+        $this->assertDatabaseCount('stock_counts', 0);
+        $this->assertDatabaseCount('stock_count_items', 0);
         $this->assertDatabaseCount('stock_movements', 0);
         $this->assertEquals(10, $product->fresh()->stock_qty);
     }
@@ -287,6 +373,20 @@ SQL);
                     'product_id' => $line[0],
                     'qty' => $line[1],
                     'cost_price' => $line[2],
+                ], $lines),
+            ],
+        ];
+    }
+
+    private function stockCount(array $lines): array
+    {
+        return [
+            'operation' => 'stock_count',
+            'data' => [
+                'count_date' => '2026-07-14',
+                'items' => array_map(fn (array $line) => [
+                    'product_id' => $line[0],
+                    'actual_qty' => $line[1],
                 ], $lines),
             ],
         ];
