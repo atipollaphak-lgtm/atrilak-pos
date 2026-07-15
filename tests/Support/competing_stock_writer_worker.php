@@ -3,6 +3,7 @@
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Quotation;
+use App\Models\Sale;
 use App\Services\ProductUpdateService;
 use App\Services\PurchaseService;
 use App\Services\SaleService;
@@ -35,6 +36,13 @@ try {
     $operation = $payload['operation'] ?? null;
     $result = match ($operation) {
         'sale_create' => ['sale_id' => app(SaleService::class)->createSale($payload['data'])->id],
+        'sale_update' => ['sale_id' => app(SaleService::class)->updateSale(
+            Sale::findOrFail($payload['sale_id']),
+            $payload['data']
+        )->id],
+        'sale_delete' => tap([], fn () => app(SaleService::class)->deleteSale(
+            Sale::findOrFail($payload['sale_id'])
+        )),
         'purchase_create' => ['purchase_id' => app(PurchaseService::class)->create($payload['data'])->id],
         'purchase_update' => ['purchase_id' => app(PurchaseService::class)->update(
             Purchase::findOrFail($payload['purchase_id']),

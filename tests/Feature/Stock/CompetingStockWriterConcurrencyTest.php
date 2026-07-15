@@ -288,6 +288,133 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         $this->assertSame(2, Sale::query()->pluck('sale_no')->unique()->count());
     }
 
+    public function test_sale_update_and_purchase_create_are_serialized(): void
+    {
+        $product = $this->product('Sale update purchase', 8);
+        $sale = $this->existingSale($product, 2);
+
+        $results = $this->runConcurrently(
+            $this->saleUpdate($sale, [[$product->id, 3, 10]]),
+            $this->purchaseCreate([[$product->id, 4, 5]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertEquals(3, $sale->fresh()->items()->sole()->qty);
+        $this->assertDatabaseCount('purchases', 1);
+        $this->assertMovementChain($product, 10, 11);
+    }
+
+    public function test_sale_update_and_stock_count_form_a_valid_serial_order(): void
+    {
+        $product = $this->product('Sale update stock count', 8);
+        $sale = $this->existingSale($product, 2);
+
+        $results = $this->runConcurrently(
+            $this->saleUpdate($sale, [[$product->id, 3, 10]]),
+            $this->stockCount([[$product->id, 9]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains((float) $product->fresh()->stock_qty, [8.0, 9.0]);
+        $this->assertEquals(3, $sale->fresh()->items()->sole()->qty);
+        $this->assertDatabaseCount('stock_counts', 1);
+        $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
+    }
+
+    public function test_sale_update_and_manual_adjustment_form_a_valid_serial_order(): void
+    {
+        $product = $this->product('Sale update adjustment', 8);
+        $sale = $this->existingSale($product, 2);
+
+        $results = $this->runConcurrently(
+            $this->saleUpdate($sale, [[$product->id, 3, 10]]),
+            [
+                'operation' => 'product_update',
+                'product_id' => $product->id,
+                'data' => $this->productUpdateData($product, 9),
+            ]
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains((float) $product->fresh()->stock_qty, [8.0, 9.0]);
+        $this->assertEquals(3, $sale->fresh()->items()->sole()->qty);
+        $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
+    }
+
+    public function test_sale_delete_and_purchase_create_are_serialized(): void
+    {
+        $product = $this->product('Sale delete purchase', 8);
+        $sale = $this->existingSale($product, 2);
+
+        $results = $this->runConcurrently(
+            $this->saleDelete($sale),
+            $this->purchaseCreate([[$product->id, 4, 5]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertDatabaseMissing('sales', ['id' => $sale->id]);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertDatabaseCount('purchases', 1);
+        $this->assertMovementChain($product, 10, 14);
+    }
+
+    public function test_sale_delete_and_stock_count_form_a_valid_serial_order(): void
+    {
+        $product = $this->product('Sale delete stock count', 8);
+        $sale = $this->existingSale($product, 2);
+
+        $results = $this->runConcurrently(
+            $this->saleDelete($sale),
+            $this->stockCount([[$product->id, 9]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains((float) $product->fresh()->stock_qty, [9.0, 11.0]);
+        $this->assertDatabaseMissing('sales', ['id' => $sale->id]);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertDatabaseCount('stock_counts', 1);
+        $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
+    }
+
+    public function test_sale_delete_and_manual_adjustment_form_a_valid_serial_order(): void
+    {
+        $product = $this->product('Sale delete adjustment', 8);
+        $sale = $this->existingSale($product, 2);
+
+        $results = $this->runConcurrently(
+            $this->saleDelete($sale),
+            [
+                'operation' => 'product_update',
+                'product_id' => $product->id,
+                'data' => $this->productUpdateData($product, 9),
+            ]
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertContains((float) $product->fresh()->stock_qty, [9.0, 11.0]);
+        $this->assertDatabaseMissing('sales', ['id' => $sale->id]);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertMovementChain($product, 10, (float) $product->fresh()->stock_qty);
+    }
+
+    public function test_quotation_conversion_and_sale_update_are_serialized(): void
+    {
+        $product = $this->product('Quotation sale update', 8);
+        $sale = $this->existingSale($product, 2);
+        $quotation = $this->quotation($product, 2);
+
+        $results = $this->runConcurrently(
+            ['operation' => 'quotation_convert', 'quotation_id' => $quotation->id],
+            $this->saleUpdate($sale, [[$product->id, 3, 10]])
+        );
+
+        $this->assertAllSucceeded($results);
+        $this->assertSame('converted', $quotation->fresh()->status);
+        $this->assertEquals(3, $sale->fresh()->items()->sole()->qty);
+        $this->assertDatabaseCount('sales', 2);
+        $this->assertMovementChain($product, 10, 5);
+    }
+
     public function test_same_quotation_converts_to_at_most_one_sale(): void
     {
         $product = $this->product('One quotation', 10);
@@ -404,6 +531,37 @@ SQL);
         ]);
     }
 
+    private function existingSale(Product $product, float $qty): Sale
+    {
+        $sale = Sale::query()->create([
+            'sale_no' => 'SAL-COMPETING-'.$product->id,
+            'sale_date' => '2026-07-14',
+            'total_amount' => $qty * 10,
+            'delivery_fee' => 0,
+            'delivery_type' => 'pickup',
+            'discount' => 0,
+        ]);
+        $sale->items()->create([
+            'product_id' => $product->id,
+            'qty' => $qty,
+            'selling_price' => 10,
+            'cost_price' => $product->cost_price,
+            'total' => $qty * 10,
+            'profit' => (10 - $product->cost_price) * $qty,
+        ]);
+        StockMovement::query()->create([
+            'product_id' => $product->id,
+            'type' => 'OUT',
+            'qty' => $qty,
+            'stock_before' => $product->stock_qty + $qty,
+            'stock_after' => $product->stock_qty,
+            'reference_type' => 'sale',
+            'reference_id' => $sale->id,
+        ]);
+
+        return $sale;
+    }
+
     private function quotation(Product $product, float $qty): Quotation
     {
         $quotation = Quotation::query()->create([
@@ -439,6 +597,33 @@ SQL);
                 'discount' => 0,
                 'items' => $items,
             ],
+        ];
+    }
+
+    private function saleUpdate(Sale $sale, array $lines): array
+    {
+        return [
+            'operation' => 'sale_update',
+            'sale_id' => $sale->id,
+            'data' => [
+                'customer_id' => null,
+                'sale_date' => '2026-07-15',
+                'delivery_fee' => 0,
+                'discount' => 0,
+                'items' => array_map(fn (array $line) => [
+                    'product_id' => $line[0],
+                    'qty' => $line[1],
+                    'selling_price' => $line[2],
+                ], $lines),
+            ],
+        ];
+    }
+
+    private function saleDelete(Sale $sale): array
+    {
+        return [
+            'operation' => 'sale_delete',
+            'sale_id' => $sale->id,
         ];
     }
 

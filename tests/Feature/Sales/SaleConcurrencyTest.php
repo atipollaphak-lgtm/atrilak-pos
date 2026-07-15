@@ -165,6 +165,96 @@ class SaleConcurrencyTest extends TestCase
         $this->assertMovementChain($product, 10, 10 - $finalQty);
     }
 
+    public function test_concurrent_update_and_delete_of_the_same_sale_leave_no_partial_state(): void
+    {
+        $product = $this->createProduct('Concurrent update delete product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+
+        $results = $this->runConcurrently(
+            $this->updateOperation($sale, [$this->line($product, 3, 10)]),
+            ['operation' => 'delete', 'sale_id' => $sale->id]
+        );
+
+        $this->assertTrue($results[1]['ok'], json_encode($results));
+        $this->assertContains(collect($results)->where('ok', true)->count(), [1, 2]);
+        $this->assertDatabaseMissing('sales', ['id' => $sale->id]);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertEquals(10.0000, $product->fresh()->stock_qty);
+        $this->assertMovementChain($product, 10, 10);
+    }
+
+    public function test_two_concurrent_deletes_of_the_same_sale_restore_stock_once(): void
+    {
+        $product = $this->createProduct('Concurrent double delete product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+        $operation = ['operation' => 'delete', 'sale_id' => $sale->id];
+
+        $results = $this->runConcurrently($operation, $operation);
+
+        $this->assertSame(1, collect($results)->where('ok', true)->count());
+        $this->assertSame(1, collect($results)->where('ok', false)->count());
+        $this->assertDatabaseMissing('sales', ['id' => $sale->id]);
+        $this->assertDatabaseCount('sale_items', 0);
+        $this->assertEquals(10.0000, $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 2);
+        $this->assertMovementChain($product, 10, 10);
+    }
+
+    public function test_update_lock_timeout_rolls_back_header_items_stock_and_movements(): void
+    {
+        $product = $this->createProduct('Update timeout product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+        $blocker = $this->blockerConnection();
+        $blocker->beginTransaction();
+
+        try {
+            $blocker->table('products')->where('id', $product->id)->lockForUpdate()->first();
+            $result = $this->runWorker($this->updateOperation(
+                $sale,
+                [$this->line($product, 3, 10)]
+            ) + [
+                'lock_timeout_ms' => 150,
+                'statement_timeout_ms' => 1000,
+            ]);
+        } finally {
+            $blocker->rollBack();
+        }
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame('2026-07-13', $sale->fresh()->sale_date);
+        $this->assertEquals(2, $sale->fresh()->items()->sole()->qty);
+        $this->assertEquals(8.0000, $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 1);
+        $this->assertMovementChain($product, 10, 8);
+    }
+
+    public function test_delete_lock_timeout_rolls_back_sale_items_stock_and_movements(): void
+    {
+        $product = $this->createProduct('Delete timeout product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+        $blocker = $this->blockerConnection();
+        $blocker->beginTransaction();
+
+        try {
+            $blocker->table('products')->where('id', $product->id)->lockForUpdate()->first();
+            $result = $this->runWorker([
+                'operation' => 'delete',
+                'sale_id' => $sale->id,
+                'lock_timeout_ms' => 150,
+                'statement_timeout_ms' => 1000,
+            ]);
+        } finally {
+            $blocker->rollBack();
+        }
+
+        $this->assertFalse($result['ok']);
+        $this->assertDatabaseHas('sales', ['id' => $sale->id]);
+        $this->assertDatabaseHas('sale_items', ['sale_id' => $sale->id]);
+        $this->assertEquals(8.0000, $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 1);
+        $this->assertMovementChain($product, 10, 8);
+    }
+
     public function test_reversed_multi_product_requests_do_not_deadlock(): void
     {
         $first = $this->createProduct('First ordered product', 20);
