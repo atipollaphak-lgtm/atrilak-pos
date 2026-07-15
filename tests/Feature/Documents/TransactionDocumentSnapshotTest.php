@@ -69,44 +69,85 @@ class TransactionDocumentSnapshotTest extends TestCase
         $sale = $this->createSale($context);
 
         $context['product']->update(['name' => 'Changed Product']);
+        $context['product']->forceFill([
+            'sku' => 'CHANGED-SKU',
+            'product_code' => 'CHANGED-CODE',
+        ])->save();
         $context['unit']->update(['name' => 'Changed Pack']);
-        $context['customer']->update(['name' => 'Changed Customer', 'tax_number' => 'CHANGED-TAX']);
+        $context['customer']->update([
+            'name' => 'Changed Customer',
+            'phone' => '0999999999',
+            'address' => 'Changed Customer Address',
+            'tax_number' => 'CHANGED-TAX',
+        ]);
         $context['setting']->update(['store_name' => 'Changed Store', 'tax_number' => 'CHANGED-STORE-TAX']);
+        $context['technician']->update(['name' => 'Changed Technician']);
+        $context['address']->update([
+            'name' => 'Changed Site',
+            'receiver_name' => 'Changed Receiver',
+            'receiver_phone' => '0999999998',
+            'address' => 'Changed Delivery Address',
+            'landmark' => 'Changed Landmark',
+        ]);
         $context['productUnit']->delete();
-        $sale->forceFill(['customer_delivery_address_id' => null])->save();
+        $context['technician']->delete();
+        $context['address']->delete();
         $context['customer']->delete();
 
         $sale = $sale->fresh()->load([
             'customer',
+            'customerDeliveryAddress',
+            'technician',
             'items.product.unitRelation',
             'items.productUnit.unit',
         ]);
         $setting = Setting::query()->first();
         $documents = collect(['delivery-note', 'tax-invoice', 'quotation'])
-            ->map(function (string $type) use ($sale, $setting): string {
+            ->mapWithKeys(function (string $type) use ($sale, $setting): array {
                 $document = app(CommercialDocumentService::class)
                     ->buildSaleDocument($sale, $type);
 
-                return view(
+                return [$type => view(
                     'sales.invoice_v2',
                     compact('sale', 'setting', 'document')
-                )->render();
+                )->render()];
             });
-        $documents->push(view('sales.invoice', compact('sale', 'setting'))->render());
-        $documents->push(view('sales.print', compact('sale', 'setting'))->render());
-        $html = $documents->implode("\n");
+        $documents->put('legacy-invoice', view(
+            'sales.invoice',
+            compact('sale', 'setting')
+        )->render());
+        $documents->put('sale-print', view(
+            'sales.print',
+            compact('sale', 'setting')
+        )->render());
 
-        $this->assertStringContainsString('Snapshot Store', $html);
-        $this->assertStringContainsString('STORE-TAX', $html);
-        $this->assertStringContainsString('Snapshot Customer', $html);
-        $this->assertStringContainsString('CUSTOMER-TAX', $html);
-        $this->assertStringContainsString('Snapshot Product', $html);
-        $this->assertStringContainsString('Snapshot Pack', $html);
-        $this->assertStringNotContainsString('Changed Store', $html);
-        $this->assertStringNotContainsString('Changed Customer', $html);
-        $this->assertStringNotContainsString('Changed Product', $html);
+        foreach ($documents as $renderer => $html) {
+            $this->assertStringContainsString('Snapshot Store', $html, $renderer);
+            $this->assertStringContainsString('Snapshot Customer', $html, $renderer);
+            $this->assertStringContainsString('Snapshot Product', $html, $renderer);
+            $this->assertStringNotContainsString('Changed Store', $html, $renderer);
+            $this->assertStringNotContainsString('Changed Customer', $html, $renderer);
+            $this->assertStringNotContainsString('Changed Product', $html, $renderer);
+        }
+
+        foreach (['delivery-note', 'tax-invoice', 'quotation', 'legacy-invoice'] as $renderer) {
+            $this->assertStringContainsString('Snapshot Pack', $documents[$renderer], $renderer);
+        }
+
+        $this->assertStringContainsString('STORE-TAX', $documents['tax-invoice']);
+        $this->assertStringContainsString('CUSTOMER-TAX', $documents['tax-invoice']);
+        $this->assertStringContainsString('Snapshot Technician', $documents['legacy-invoice']);
+        $this->assertStringNotContainsString('Changed Technician', $documents['legacy-invoice']);
         $this->assertNull($sale->customer_id);
+        $this->assertNull($sale->technician_id);
+        $this->assertNull($sale->customer_delivery_address_id);
         $this->assertNull($sale->items->sole()->product_unit_id);
+        $this->assertSame('Snapshot Site', $sale->delivery_address_name_snapshot);
+        $this->assertSame('Snapshot Receiver', $sale->delivery_receiver_name_snapshot);
+        $this->assertSame('Snapshot Delivery Address', $sale->delivery_full_address_snapshot);
+        $this->assertSame('Snapshot Landmark', $sale->delivery_landmark_snapshot);
+        $this->assertSame('SKU-SNAPSHOT', $sale->items->sole()->product_sku_snapshot);
+        $this->assertSame('PRODUCT-SNAPSHOT', $sale->items->sole()->product_code_snapshot);
     }
 
     public function test_legacy_sale_with_null_snapshots_falls_back_to_current_relations(): void
@@ -132,14 +173,34 @@ class TransactionDocumentSnapshotTest extends TestCase
         ]);
         $sale->load(['customer', 'items.product.unitRelation', 'items.productUnit.unit']);
         $setting = $context['setting'];
-        $document = app(CommercialDocumentService::class)
-            ->buildSaleDocument($sale, 'delivery-note');
-        $html = view('sales.invoice_v2', compact('sale', 'setting', 'document'))->render();
+        $documents = collect(['delivery-note', 'tax-invoice', 'quotation'])
+            ->mapWithKeys(function (string $type) use ($sale, $setting): array {
+                $document = app(CommercialDocumentService::class)
+                    ->buildSaleDocument($sale, $type);
 
-        $this->assertStringContainsString('Snapshot Store', $html);
-        $this->assertStringContainsString('Snapshot Customer', $html);
-        $this->assertStringContainsString('Snapshot Product', $html);
-        $this->assertStringContainsString('Snapshot Pack', $html);
+                return [$type => view(
+                    'sales.invoice_v2',
+                    compact('sale', 'setting', 'document')
+                )->render()];
+            });
+        $documents->put('legacy-invoice', view(
+            'sales.invoice',
+            compact('sale', 'setting')
+        )->render());
+        $documents->put('sale-print', view(
+            'sales.print',
+            compact('sale', 'setting')
+        )->render());
+
+        foreach ($documents as $renderer => $html) {
+            $this->assertStringContainsString('Snapshot Store', $html, $renderer);
+            $this->assertStringContainsString('Snapshot Customer', $html, $renderer);
+            $this->assertStringContainsString('Snapshot Product', $html, $renderer);
+        }
+
+        foreach (['delivery-note', 'tax-invoice', 'quotation', 'legacy-invoice'] as $renderer) {
+            $this->assertStringContainsString('Snapshot Pack', $documents[$renderer], $renderer);
+        }
     }
 
     public function test_sale_update_recaptures_changed_customer_and_preserves_or_refreshes_item_snapshots(): void
@@ -221,8 +282,8 @@ class TransactionDocumentSnapshotTest extends TestCase
         $this->assertSame('PRODUCT-SNAPSHOT', $quotationItem->product_code_snapshot);
 
         $context['setting']->update(['store_name' => 'Changed Store']);
-        $context['customer']->update(['name' => 'Changed Customer']);
         $context['product']->update(['name' => 'Changed Product']);
+        $context['customer']->delete();
 
         $quotation = $quotation->fresh()->load(['customer', 'items.product']);
         $html = view('quotations.print', compact('quotation'))->render();
@@ -231,8 +292,8 @@ class TransactionDocumentSnapshotTest extends TestCase
         $this->assertStringContainsString('Snapshot Customer', $html);
         $this->assertStringContainsString('Snapshot Product', $html);
         $this->assertStringNotContainsString('Changed Store', $html);
-        $this->assertStringNotContainsString('Changed Customer', $html);
         $this->assertStringNotContainsString('Changed Product', $html);
+        $this->assertNull($quotation->customer_id);
     }
 
     public function test_sale_item_snapshot_master_queries_are_batched(): void

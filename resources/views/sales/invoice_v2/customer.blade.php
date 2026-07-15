@@ -10,9 +10,11 @@
             </td>
 
             <td style="width: 45%;">
-                {{ $sale->customer_name_snapshot !== null
-                    ? $sale->customer_name_snapshot
-                    : ($sale->customer->name ?? 'ลูกค้าทั่วไป') }}
+                {{ \App\Support\DocumentSnapshotValue::resolve(
+                    $sale->customer_name_snapshot,
+                    $sale->customer?->name,
+                    'ลูกค้าทั่วไป'
+                ) }}
             </td>
 
             <td class="info-label">
@@ -20,9 +22,10 @@
             </td>
 
             <td style="width: 25%;">
-                {{ $sale->customer_phone_snapshot !== null
-                    ? $sale->customer_phone_snapshot
-                    : ($sale->customer->phone ?? '-') }}
+                {{ \App\Support\DocumentSnapshotValue::resolve(
+                    $sale->customer_phone_snapshot,
+                    $sale->customer?->phone
+                ) }}
             </td>
         </tr>
 
@@ -32,9 +35,10 @@
             </td>
 
             <td colspan="3">
-                {{ $sale->customer_address_snapshot !== null
-                    ? $sale->customer_address_snapshot
-                    : ($sale->customer->address ?? '-') }}
+                {{ \App\Support\DocumentSnapshotValue::resolve(
+                    $sale->customer_address_snapshot,
+                    $sale->customer?->address
+                ) }}
             </td>
         </tr>
 
@@ -45,9 +49,10 @@
                 </td>
 
                 <td>
-                    {{ $sale->customer_tax_number_snapshot !== null
-                        ? $sale->customer_tax_number_snapshot
-                        : ($sale->customer->tax_number ?? '-') }}
+                    {{ \App\Support\DocumentSnapshotValue::resolve(
+                        $sale->customer_tax_number_snapshot,
+                        $sale->customer?->tax_number
+                    ) }}
                 </td>
 
                 <td class="info-label">
@@ -56,12 +61,16 @@
 
                 <td>
                     @php
-                        $customerBranchType = $sale->customer_branch_type_snapshot !== null
-                            ? $sale->customer_branch_type_snapshot
-                            : ($sale->customer->branch_type ?? 'สำนักงานใหญ่');
-                        $customerBranchNumber = $sale->customer_branch_number_snapshot !== null
-                            ? $sale->customer_branch_number_snapshot
-                            : ($sale->customer->branch_number ?? null);
+                        $customerBranchType = \App\Support\DocumentSnapshotValue::resolve(
+                            $sale->customer_branch_type_snapshot,
+                            $sale->customer?->branch_type,
+                            'สำนักงานใหญ่'
+                        );
+                        $customerBranchNumber = \App\Support\DocumentSnapshotValue::resolve(
+                            $sale->customer_branch_number_snapshot,
+                            $sale->customer?->branch_number,
+                            null
+                        );
                     @endphp
                     @if ($customerBranchType === 'สาขา')
                         สาขา {{ $customerBranchNumber ?? '-' }}

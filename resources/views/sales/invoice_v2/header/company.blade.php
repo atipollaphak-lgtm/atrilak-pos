@@ -11,24 +11,35 @@
 
         $logoExists = $storageLogoPath ? file_exists(public_path('storage/' . $storageLogoPath)) : false;
 
-        $storeName = $sale->store_name_snapshot !== null
-            ? $sale->store_name_snapshot
-            : ($setting->store_name ?? 'อตรีลักษณ์ คอนกรีต');
-        $storeAddress = $sale->store_address_snapshot !== null
-            ? $sale->store_address_snapshot
-            : ($setting->store_address ?? 'ที่อยู่ร้าน');
-        $storePhone = $sale->store_phone_snapshot !== null
-            ? $sale->store_phone_snapshot
-            : ($setting->store_phone ?? '-');
-        $storeTaxNumber = $sale->store_tax_number_snapshot !== null
-            ? $sale->store_tax_number_snapshot
-            : ($setting->tax_number ?? null);
-        $storeBranchType = $sale->store_branch_type_snapshot !== null
-            ? $sale->store_branch_type_snapshot
-            : ($setting->branch_type ?? 'head_office');
-        $storeBranchNumber = $sale->store_branch_number_snapshot !== null
-            ? $sale->store_branch_number_snapshot
-            : ($setting->branch_number ?? null);
+        $storeName = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_name_snapshot,
+            $setting?->store_name,
+            'อตรีลักษณ์ คอนกรีต'
+        );
+        $storeAddress = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_address_snapshot,
+            $setting?->store_address,
+            'ที่อยู่ร้าน'
+        );
+        $storePhone = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_phone_snapshot,
+            $setting?->store_phone
+        );
+        $storeTaxNumber = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_tax_number_snapshot,
+            $setting?->tax_number,
+            null
+        );
+        $storeBranchType = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_branch_type_snapshot,
+            $setting?->branch_type,
+            'head_office'
+        );
+        $storeBranchNumber = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_branch_number_snapshot,
+            $setting?->branch_number,
+            null
+        );
     @endphp
 
     @if ($logoUrl)

@@ -33,9 +33,10 @@
                 </td>
 
                 <td class="item-name">
-                    {{ $item->product_name_snapshot !== null
-                        ? $item->product_name_snapshot
-                        : ($item->product->name ?? '-') }}
+                    {{ \App\Support\DocumentSnapshotValue::resolve(
+                        $item->product_name_snapshot,
+                        $item->product?->name
+                    ) }}
                 </td>
 
                 <td class="qty">
@@ -43,12 +44,12 @@
                 </td>
 
                 <td class="unit">
-                    {{ $item->unit_name_snapshot !== null
-                        ? $item->unit_name_snapshot
-                        : ($item->productUnit?->unit?->name
+                    {{ \App\Support\DocumentSnapshotValue::resolve(
+                        $item->unit_name_snapshot,
+                        $item->productUnit?->unit?->name
                             ?? $item->product?->unitRelation?->name
                             ?? $item->product?->unit
-                            ?? '-') }}
+                    ) }}
                 </td>
 
                 <td class="price">

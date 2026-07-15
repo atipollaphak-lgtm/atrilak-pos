@@ -140,18 +140,24 @@
             }
         }
 
-        $storeName = $quotation->store_name_snapshot !== null
-            ? $quotation->store_name_snapshot
-            : ($setting->store_name ?? 'ATRILAK POS');
-        $storeAddress = $quotation->store_address_snapshot !== null
-            ? $quotation->store_address_snapshot
-            : ($setting->store_address ?? '');
-        $storePhone = $quotation->store_phone_snapshot !== null
-            ? $quotation->store_phone_snapshot
-            : ($setting->store_phone ?? '-');
-        $storeTaxNumber = $quotation->store_tax_number_snapshot !== null
-            ? $quotation->store_tax_number_snapshot
-            : ($setting->tax_number ?? '-');
+        $storeName = \App\Support\DocumentSnapshotValue::resolve(
+            $quotation->store_name_snapshot,
+            $setting?->store_name,
+            'ATRILAK POS'
+        );
+        $storeAddress = \App\Support\DocumentSnapshotValue::resolve(
+            $quotation->store_address_snapshot,
+            $setting?->store_address,
+            ''
+        );
+        $storePhone = \App\Support\DocumentSnapshotValue::resolve(
+            $quotation->store_phone_snapshot,
+            $setting?->store_phone
+        );
+        $storeTaxNumber = \App\Support\DocumentSnapshotValue::resolve(
+            $quotation->store_tax_number_snapshot,
+            $setting?->tax_number
+        );
     @endphp
 
     <div class="container">
@@ -207,9 +213,11 @@
             <tr>
                 <td colspan="2">
                     <strong>ลูกค้า:</strong>
-                    {{ $quotation->customer_name_snapshot !== null
-                        ? $quotation->customer_name_snapshot
-                        : ($quotation->customer->name ?? 'ลูกค้าทั่วไป') }}
+                    {{ \App\Support\DocumentSnapshotValue::resolve(
+                        $quotation->customer_name_snapshot,
+                        $quotation->customer?->name,
+                        'ลูกค้าทั่วไป'
+                    ) }}
                 </td>
             </tr>
 
@@ -240,9 +248,10 @@
                         </td>
 
                         <td>
-                            {{ $item->product_name_snapshot !== null
-                                ? $item->product_name_snapshot
-                                : ($item->product->name ?? '-') }}
+                            {{ \App\Support\DocumentSnapshotValue::resolve(
+                                $item->product_name_snapshot,
+                                $item->product?->name
+                            ) }}
                         </td>
 
                         <td class="text-right">
