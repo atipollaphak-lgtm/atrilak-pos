@@ -47,6 +47,7 @@
     <form id="sale-edit-form" action="{{ route('sales.update', $sale->id) }}" method="POST">
         @csrf
         @method('PUT')
+        <input type="hidden" name="revision" value="{{ old('revision', $sale->revision) }}">
 
         <div class="card">
             <div class="card-header">ข้อมูลบิล</div>

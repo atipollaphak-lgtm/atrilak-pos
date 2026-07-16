@@ -314,6 +314,7 @@ class SaleEditSafetyTest extends TestCase
         string $saleDate = '2026-07-14'
     ): array {
         return [
+            'revision' => 1,
             'customer_id' => $customerId,
             'sale_date' => $saleDate,
             'sale_item_id' => $saleItemIds,

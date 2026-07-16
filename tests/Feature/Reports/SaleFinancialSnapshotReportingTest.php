@@ -201,7 +201,7 @@ class SaleFinancialSnapshotReportingTest extends TestCase
                 'qty' => '2.00',
                 'selling_price' => '200.00',
             ]],
-        ]);
+        ], (int) $this->sale->fresh()->revision);
         $this->product->update(['cost_price' => '999.00']);
 
         $summary = app(SaleFinancialSnapshotService::class)

@@ -30,6 +30,7 @@ class UpdateSaleRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'revision' => ['required', 'integer', 'min:1'],
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'customer_delivery_address_id' => ['nullable', 'integer', 'exists:customer_delivery_addresses,id'],
             'technician_id' => ['nullable', 'integer', 'exists:technicians,id'],
@@ -57,6 +58,9 @@ class UpdateSaleRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'revision.required' => 'ข้อมูลใบขายไม่ครบถ้วน กรุณาโหลดหน้าแก้ไขใหม่อีกครั้ง',
+            'revision.integer' => 'ข้อมูลรุ่นของใบขายไม่ถูกต้อง กรุณาโหลดหน้าแก้ไขใหม่อีกครั้ง',
+            'revision.min' => 'ข้อมูลรุ่นของใบขายไม่ถูกต้อง กรุณาโหลดหน้าแก้ไขใหม่อีกครั้ง',
             'normalized_items.*.product_id.required' => 'กรุณาเลือกสินค้ารายการที่ :position',
             'normalized_items.*.qty.required' => 'กรุณาระบุจำนวนสินค้ารายการที่ :position',
             'normalized_items.*.selling_price.required' => 'กรุณาระบุราคาขายรายการที่ :position',

@@ -43,7 +43,11 @@ try {
         ];
     } elseif ($operation === 'update') {
         $sale = Sale::findOrFail($payload['sale_id']);
-        $updated = $service->updateSale($sale, $payload['data']);
+        $updated = $service->updateSale(
+            $sale,
+            $payload['data'],
+            (int) $payload['expected_revision']
+        );
         $result = ['ok' => true, 'sale_id' => $updated->id];
     } elseif ($operation === 'delete') {
         $sale = Sale::findOrFail($payload['sale_id']);

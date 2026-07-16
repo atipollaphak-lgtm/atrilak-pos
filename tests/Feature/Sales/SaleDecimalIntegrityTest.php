@@ -133,7 +133,7 @@ class SaleDecimalIntegrityTest extends TestCase
                     'selling_price' => '0.50',
                 ],
             ],
-        ]);
+        ], (int) $sale->fresh()->revision);
 
         $updated = $sale->fresh('items');
         $this->assertSame(['0.01', '0.02'], $updated->items->pluck('total')->all());

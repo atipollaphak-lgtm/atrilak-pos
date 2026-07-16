@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Sales;
 
+use App\Exceptions\StaleSaleRevisionException;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\Sale;
@@ -162,15 +163,39 @@ class SaleConcurrencyTest extends TestCase
             ]])
         );
 
-        $this->assertTrue(collect($results)->every(fn (array $result) => $result['ok']));
+        $this->assertSame(1, collect($results)->where('ok', true)->count(), json_encode($results));
+        $this->assertSame(1, collect($results)->where('exception', StaleSaleRevisionException::class)->count());
 
         $finalQty = (float) $sale->fresh()->items()->sole()->qty;
         $this->assertContains($finalQty, [3.0, 4.0]);
         $this->assertSame($originalItemId, $sale->fresh()->items()->sole()->id);
+        $this->assertSame(2, $sale->fresh()->revision);
         $this->assertEquals(10 - $finalQty, $product->fresh()->stock_qty);
         $this->assertDatabaseCount('sales', 1);
         $this->assertDatabaseCount('sale_items', 1);
         $this->assertMovementChain($product, 10, 10 - $finalQty);
+    }
+
+    public function test_identical_concurrent_updates_with_the_same_revision_write_stock_once(): void
+    {
+        $product = $this->createProduct('Identical concurrent update product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+        $itemId = $sale->items()->sole()->id;
+        $operation = $this->updateOperation($sale, [[
+            'sale_item_id' => $itemId,
+            ...$this->line($product, 3, 10),
+        ]]);
+
+        $results = $this->runConcurrently($operation, $operation);
+
+        $this->assertSame(1, collect($results)->where('ok', true)->count(), json_encode($results));
+        $this->assertSame(1, collect($results)->where('exception', StaleSaleRevisionException::class)->count());
+        $this->assertSame(2, $sale->fresh()->revision);
+        $this->assertSame($itemId, $sale->fresh()->items()->sole()->id);
+        $this->assertSame('3.00', $sale->fresh()->items()->sole()->qty);
+        $this->assertSame('7.0000', $product->fresh()->stock_qty);
+        $this->assertSame(2, StockMovement::query()->where('reference_type', 'sale_edit')->count());
+        $this->assertMovementChain($product, 10, 7);
     }
 
     public function test_concurrent_create_and_converted_unit_update_use_base_quantity_and_keep_item_identity(): void
@@ -266,6 +291,7 @@ class SaleConcurrencyTest extends TestCase
 
         $this->assertFalse($result['ok']);
         $this->assertSame('2026-07-13', $sale->fresh()->sale_date);
+        $this->assertSame(1, $sale->fresh()->revision);
         $this->assertEquals(2, $sale->fresh()->items()->sole()->qty);
         $this->assertEquals(8.0000, $product->fresh()->stock_qty);
         $this->assertDatabaseCount('stock_movements', 1);
@@ -659,6 +685,7 @@ SQL);
         return [
             'operation' => 'update',
             'sale_id' => $sale->id,
+            'expected_revision' => (int) $sale->fresh()->revision,
             'data' => [
                 'customer_id' => null,
                 'sale_date' => '2026-07-14',

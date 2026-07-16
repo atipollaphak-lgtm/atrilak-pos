@@ -40,6 +40,13 @@ class Sale extends Model
         'delivery_landmark_snapshot',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'revision' => 'integer',
+        ];
+    }
+
     public function customer()
     {
         return $this->belongsTo(Customer::class);

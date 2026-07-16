@@ -38,7 +38,8 @@ try {
         'sale_create' => ['sale_id' => app(SaleService::class)->createSale($payload['data'])->id],
         'sale_update' => ['sale_id' => app(SaleService::class)->updateSale(
             Sale::findOrFail($payload['sale_id']),
-            $payload['data']
+            $payload['data'],
+            (int) $payload['expected_revision']
         )->id],
         'sale_delete' => tap([], fn () => app(SaleService::class)->deleteSale(
             Sale::findOrFail($payload['sale_id'])

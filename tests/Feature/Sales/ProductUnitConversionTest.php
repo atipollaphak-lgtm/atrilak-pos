@@ -423,7 +423,7 @@ class ProductUnitConversionTest extends TestCase
             ]],
             'delivery_fee' => 0,
             'discount' => 0,
-        ]);
+        ], (int) $sale->fresh()->revision);
 
         $this->assertSame('49.0000', $product->fresh()->stock_qty);
         $this->assertSame('24.0000', StockMovement::where('type', 'IN')->sole()->qty);
@@ -451,7 +451,7 @@ class ProductUnitConversionTest extends TestCase
             ]],
             'delivery_fee' => 0,
             'discount' => 0,
-        ]));
+        ], (int) $sale->fresh()->revision));
 
         $this->assertSame('9.0000', $product->fresh()->stock_qty);
         $this->assertSame($before, DB::table('stock_movements')->count());
@@ -533,7 +533,7 @@ class ProductUnitConversionTest extends TestCase
             ]],
             'delivery_fee' => 0,
             'discount' => 0,
-        ]));
+        ], (int) $sale->fresh()->revision));
 
         $this->assertSame('8.0000', $product->fresh()->stock_qty);
         $this->assertNull($sale->fresh()->items()->sole()->base_qty);
@@ -554,7 +554,7 @@ class ProductUnitConversionTest extends TestCase
             'product_unit_id' => $case->id,
             'qty' => '1.00',
             'selling_price' => '180.00',
-        ]]));
+        ]]), (int) $sale->fresh()->revision);
 
         $updated = $sale->fresh()->items()->sole();
         $this->assertSame($item->id, $updated->id);
@@ -581,7 +581,7 @@ class ProductUnitConversionTest extends TestCase
             'product_unit_id' => $case->id,
             'qty' => '2.00',
             'selling_price' => '200.00',
-        ]]));
+        ]]), (int) $sale->fresh()->revision);
 
         $updated = $sale->fresh()->items()->sole();
         $this->assertSame($item->id, $updated->id);
@@ -606,7 +606,7 @@ class ProductUnitConversionTest extends TestCase
             'product_unit_id' => $dozen->id,
             'qty' => '1.00',
             'selling_price' => '180.00',
-        ]]));
+        ]]), (int) $sale->fresh()->revision);
 
         $updated = $sale->fresh()->items()->sole();
         $this->assertSame($item->id, $updated->id);
@@ -630,7 +630,7 @@ class ProductUnitConversionTest extends TestCase
             'product_unit_id' => null,
             'qty' => '2.00',
             'selling_price' => '10.00',
-        ]]));
+        ]]), (int) $sale->fresh()->revision);
 
         $updated = $sale->fresh()->items()->sole();
         $this->assertSame($item->id, $updated->id);
@@ -669,7 +669,8 @@ class ProductUnitConversionTest extends TestCase
                 'product_unit_id' => $unit->id,
                 'qty' => '3.00',
                 'selling_price' => '10.00',
-            ]])
+            ]]),
+            (int) $sale->fresh()->revision
         ));
         $this->expectDomainFailure(fn () => app(SaleService::class)->deleteSale($sale));
 
@@ -686,6 +687,7 @@ class ProductUnitConversionTest extends TestCase
         $sale = $this->deliverySale([$this->line($product, '2.00', '180.00', $case)], '20.00', '140.00');
         $item = $sale->items()->sole();
         $beforeMovements = StockMovement::count();
+        $beforeRevision = $sale->fresh()->revision;
 
         $this->expectDomainFailure(fn () => app(SaleService::class)->updateSale(
             $sale,
@@ -695,13 +697,15 @@ class ProductUnitConversionTest extends TestCase
                 'product_unit_id' => $case->id,
                 'qty' => '2.00',
                 'selling_price' => '100.00',
-            ]])
+            ]]),
+            (int) $sale->fresh()->revision
         ));
 
         $this->assertSame('180.00', $item->fresh()->selling_price);
         $this->assertSame('120.00', $item->fresh()->profit);
         $this->assertSame('52.0000', $product->fresh()->stock_qty);
         $this->assertSame($beforeMovements, StockMovement::count());
+        $this->assertSame($beforeRevision, $sale->fresh()->revision);
     }
 
     public function test_update_adds_and_removes_lines_selectively_and_preserves_retained_identity(): void
@@ -729,7 +733,7 @@ class ProductUnitConversionTest extends TestCase
             'product_unit_id' => null,
             'qty' => '3.00',
             'selling_price' => '10.00',
-        ]]));
+        ]]), (int) $sale->fresh()->revision);
 
         $updated = $sale->fresh()->items()->orderBy('id')->get();
         $this->assertCount(2, $updated);
@@ -764,7 +768,7 @@ class ProductUnitConversionTest extends TestCase
             'product_unit_id' => null,
             'qty' => '5.00',
             'selling_price' => '10.00',
-        ]]));
+        ]]), (int) $sale->fresh()->revision);
 
         $this->assertSame('47.0000', $product->fresh()->stock_qty);
         $this->assertSame(

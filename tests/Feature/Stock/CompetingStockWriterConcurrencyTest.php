@@ -637,6 +637,7 @@ SQL);
         return [
             'operation' => 'sale_update',
             'sale_id' => $sale->id,
+            'expected_revision' => (int) $sale->fresh()->revision,
             'data' => [
                 'customer_id' => null,
                 'sale_date' => '2026-07-15',

@@ -355,6 +355,7 @@ class SaleRequestShapeTest extends TestCase
     private function updatePayload(Sale $sale, Product $product): array
     {
         return [
+            'revision' => 1,
             'sale_date' => '2026-07-15',
             'sale_item_id' => [$sale->items()->sole()->id],
             'product_unit_id' => [null],

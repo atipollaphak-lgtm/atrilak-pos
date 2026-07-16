@@ -32,12 +32,11 @@ class SaleUpdateTest extends TestCase
     public function test_update_sale_atomically_replaces_multiple_items_and_preserves_totals(): void
     {
         [$sale, $firstProduct, $secondProduct] = $this->createExistingSale();
-
         $this->service()->updateSale($sale, $this->updateData(
             [$firstProduct->id, $secondProduct->id],
             [1, 4],
             [120, 70]
-        ));
+        ), (int) $sale->fresh()->revision);
 
         $sale->refresh();
 
@@ -88,7 +87,7 @@ class SaleUpdateTest extends TestCase
                 [$firstProduct->id, $secondProduct->id],
                 [1, 4],
                 [120, 70]
-            ));
+            ), (int) $sale->fresh()->revision);
             $this->fail('Expected update failure was not thrown.');
         } catch (RuntimeException $exception) {
             $this->assertSame('Failure after old stock restore', $exception->getMessage());
@@ -115,7 +114,7 @@ class SaleUpdateTest extends TestCase
                 [$firstProduct->id, $secondProduct->id],
                 [1, 4],
                 [120, 70]
-            ));
+            ), (int) $sale->fresh()->revision);
             $this->fail('Expected update failure was not thrown.');
         } catch (RuntimeException $exception) {
             $this->assertSame('Failure after old items delete', $exception->getMessage());
@@ -143,7 +142,7 @@ class SaleUpdateTest extends TestCase
                 [$firstProduct->id, $secondProduct->id],
                 [1, 4],
                 [120, 70]
-            ));
+            ), (int) $sale->fresh()->revision);
             $this->fail('Expected update failure was not thrown.');
         } catch (RuntimeException $exception) {
             $this->assertSame('Failure during new item creation', $exception->getMessage());
@@ -170,7 +169,7 @@ class SaleUpdateTest extends TestCase
                 [$firstProduct->id, $secondProduct->id],
                 [1, 4],
                 [120, 70]
-            ));
+            ), (int) $sale->fresh()->revision);
             $this->fail('Expected update failure was not thrown.');
         } catch (RuntimeException $exception) {
             $this->assertSame('Failure while updating sale header', $exception->getMessage());

@@ -55,7 +55,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
         $updated = app(SaleService::class)->updateSale($sale, $this->updateData($sale, [
             'customer_id' => 321,
             'sale_date' => '2026-07-16',
-        ]));
+        ]), (int) $sale->fresh()->revision);
 
         $afterItem = $updated->fresh()->items()->sole();
 
@@ -75,7 +75,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
         $updated = app(SaleService::class)->updateSale($sale, $this->updateData($sale, [
             'delivery_fee' => '25.00',
             'discount' => '5.00',
-        ]));
+        ]), (int) $sale->fresh()->revision);
 
         $this->assertSame($item->id, $updated->fresh()->items()->sole()->id);
         $this->assertSame('210', (string) $updated->fresh()->total_amount);
@@ -161,7 +161,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
 
         app(SaleService::class)->updateSale($sale, $this->updateData($sale, [
             'items' => $items,
-        ]));
+        ]), (int) $sale->fresh()->revision);
 
         $this->assertDatabaseHas('sale_items', ['id' => $firstItem->id]);
         $this->assertDatabaseHas('sale_items', ['id' => $secondItem->id]);
@@ -178,7 +178,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
 
         app(SaleService::class)->updateSale($sale, $this->updateData($sale, [
             'items' => $items,
-        ]));
+        ]), (int) $sale->fresh()->revision);
 
         $this->assertDatabaseHas('sale_items', ['id' => $oldItem->id]);
         $this->assertSame($beforeMovements + 2, StockMovement::count());

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\StaleSaleRevisionException;
 use App\Models\CustomerDeliveryAddress;
 use App\Models\Quotation;
 use App\Models\Sale;
@@ -362,13 +363,21 @@ class SaleService
         });
     }
 
-    public function updateSale(Sale $sale, array $data): Sale
+    public function updateSale(
+        Sale $sale,
+        array $data,
+        int $expectedRevision
+    ): Sale
     {
-        return DB::transaction(function () use ($sale, $data) {
+        return DB::transaction(function () use ($sale, $data, $expectedRevision) {
             $lockedSale = Sale::query()
                 ->whereKey($sale->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ((int) $lockedSale->revision !== $expectedRevision) {
+                throw new StaleSaleRevisionException;
+            }
 
             $lockedItems = SaleItem::query()
                 ->where('sale_id', $lockedSale->getKey())
@@ -436,6 +445,8 @@ class SaleService
                         $lockedCommissions
                     );
                 }
+
+                $this->advanceRevision($lockedSale);
 
                 return $lockedSale;
             }
@@ -509,8 +520,16 @@ class SaleService
                 );
             }
 
+            $this->advanceRevision($lockedSale);
+
             return $lockedSale;
         });
+    }
+
+    private function advanceRevision(Sale $sale): void
+    {
+        $sale->revision = (int) $sale->revision + 1;
+        $sale->save();
     }
 
     private function saleItemsHaveChanged(Collection $existingItems, array $submittedItems): bool

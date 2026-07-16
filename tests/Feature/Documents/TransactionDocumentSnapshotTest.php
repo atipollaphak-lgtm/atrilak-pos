@@ -232,7 +232,7 @@ class TransactionDocumentSnapshotTest extends TestCase
                 $this->submittedLine($items[0], '3.00'),
                 $this->submittedLine($items[1], '1.00'),
             ],
-        ])->fresh();
+        ], (int) $sale->fresh()->revision)->fresh();
         $updatedItems = $updated->items()->orderBy('id')->get();
 
         $this->assertSame('Replacement Customer', $updated->customer_name_snapshot);
@@ -254,7 +254,7 @@ class TransactionDocumentSnapshotTest extends TestCase
             'delivery_fee' => '0.00',
             'discount' => '0.00',
             'items' => [$this->submittedLine($item, '2.00')],
-        ]);
+        ], (int) $sale->fresh()->revision);
 
         $this->assertSame($item->id, $sale->fresh()->items()->sole()->id);
         $this->assertSame('Snapshot Product', $sale->fresh()->items()->sole()->product_name_snapshot);

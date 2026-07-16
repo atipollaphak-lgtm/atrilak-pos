@@ -44,7 +44,7 @@ class QuotationOriginSaleConsistencyCharacterizationTest extends TestCase
         $updated = app(SaleService::class)->updateSale($sale, array_replace(
             $this->updatePayload($sale),
             ['sale_date' => '2026-07-16']
-        ));
+        ), (int) $sale->fresh()->revision);
 
         $this->assertSame($quotation->id, $updated->fresh()->quotation_id);
         $this->assertSame($itemId, $updated->fresh()->items()->sole()->id);
@@ -62,7 +62,7 @@ class QuotationOriginSaleConsistencyCharacterizationTest extends TestCase
         $payload['items'][0]['qty'] = '3.00';
         $payload['items'][0]['selling_price'] = '12.00';
 
-        $updated = app(SaleService::class)->updateSale($sale, $payload)->fresh();
+        $updated = app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision)->fresh();
         $updatedItem = $updated->items()->sole();
 
         $this->assertSame($quotation->id, $updated->quotation_id);

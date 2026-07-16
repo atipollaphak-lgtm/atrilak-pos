@@ -65,7 +65,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         app(SaleService::class)->updateSale($sale, array_replace(
             $this->updatePayload($sale),
             ['customer_id' => null]
-        ));
+        ), (int) $sale->fresh()->revision);
 
         $this->assertSame(
             $before,
@@ -81,7 +81,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         app(SaleService::class)->updateSale($sale, array_replace(
             $this->updatePayload($sale),
             ['sale_date' => '2026-07-16']
-        ));
+        ), (int) $sale->fresh()->revision);
 
         $replacement = TechnicianCommission::query()->sole();
         $this->assertSame($commission->id, $replacement->id);
@@ -94,7 +94,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $payload = $this->updatePayload($sale);
         $payload['items'][0]['qty'] = '3.00';
 
-        app(SaleService::class)->updateSale($sale, $payload);
+        app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision);
 
         $replacement = TechnicianCommission::query()->sole();
         $this->assertSame($commission->id, $replacement->id);
@@ -147,7 +147,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
 
         $this->expectException(\DomainException::class);
 
-        app(SaleService::class)->updateSale($sale, $payload);
+        app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision);
     }
 
     public function test_batched_commission_blocks_item_update_even_if_status_is_pending(): void
@@ -169,7 +169,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
 
         $this->expectException(\DomainException::class);
 
-        app(SaleService::class)->updateSale($sale, $payload);
+        app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision);
     }
 
     public function test_paid_commission_allows_customer_only_update(): void
@@ -177,7 +177,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         [$sale, , $commission] = $this->createCommissionedSale();
         $commission->update(['status' => 'paid', 'paid_at' => now()]);
 
-        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale));
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale), (int) $sale->fresh()->revision);
 
         $this->assertSame('paid', $commission->fresh()->status);
         $this->assertDatabaseHas('sales', ['id' => $sale->id]);
@@ -192,7 +192,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $payload = $this->updatePayload($sale);
         $payload['items'][0]['selling_price'] = '20.00';
 
-        app(SaleService::class)->updateSale($sale, $payload);
+        app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision);
 
         $this->assertSame($commission->id, TechnicianCommission::query()->sole()->id);
         $this->assertEquals(4.00, $commission->fresh()->commission_amount);
@@ -224,11 +224,12 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $beforeCommission = $this->commissionSnapshot($commission);
         $beforeMovements = StockMovement::query()->count();
         $beforeStock = $product->stock_qty;
+        $beforeRevision = $sale->fresh()->revision;
         $payload = $this->updatePayload($sale);
         $payload['items'][0]['selling_price'] = '1.00';
 
         try {
-            app(SaleService::class)->updateSale($sale, $payload);
+            app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision);
             $this->fail('Expected Profit Guard rejection.');
         } catch (\DomainException) {
             // Expected.
@@ -239,6 +240,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertSame($beforeStock, $product->fresh()->stock_qty);
         $this->assertSame($beforeMovements, StockMovement::query()->count());
         $this->assertSame($beforeCommission, $this->commissionSnapshot($commission->fresh()));
+        $this->assertSame($beforeRevision, $sale->fresh()->revision);
     }
 
     public function test_failure_during_pending_commission_refresh_rolls_back_sale_stock_and_items(): void
@@ -248,6 +250,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $product = $item->product;
         $beforeMovements = StockMovement::query()->count();
         $beforeStock = $product->stock_qty;
+        $beforeRevision = $sale->fresh()->revision;
         $throw = true;
         TechnicianCommission::updating(function () use (&$throw): void {
             if ($throw) {
@@ -259,7 +262,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $payload['items'][0]['qty'] = '3.00';
 
         try {
-            app(SaleService::class)->updateSale($sale, $payload);
+            app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision);
             $this->fail('Expected commission refresh failure.');
         } catch (\RuntimeException $exception) {
             $this->assertSame('Commission refresh failure', $exception->getMessage());
@@ -270,6 +273,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertSame($beforeStock, $product->fresh()->stock_qty);
         $this->assertSame($beforeMovements, StockMovement::query()->count());
         $this->assertEquals(2.50, $commission->fresh()->commission_amount);
+        $this->assertSame($beforeRevision, $sale->fresh()->revision);
     }
 
     public function test_quotation_conversion_and_replay_keep_commission_empty(): void

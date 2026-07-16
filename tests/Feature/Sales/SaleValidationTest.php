@@ -277,6 +277,7 @@ class SaleValidationTest extends TestCase
         ];
 
         foreach ($payloads as $payload) {
+            $payload['revision'] = 1;
             $this->from(route('sales.edit', $sale))
                 ->put(route('sales.update', $sale), $payload)
                 ->assertRedirect(route('sales.edit', $sale))
@@ -291,6 +292,7 @@ class SaleValidationTest extends TestCase
         $item = $sale->items()->sole();
 
         $this->put(route('sales.update', $sale), [
+            'revision' => 1,
             'sale_date' => '2026-07-14',
             'sale_item_id' => [$item->id, null],
             'product_unit_id' => [null, null],
@@ -418,6 +420,7 @@ class SaleValidationTest extends TestCase
         $this->app->instance(SaleService::class, $service);
 
         $response = $this->from(route('sales.edit', $sale))->put(route('sales.update', $sale), [
+            'revision' => 1,
             'sale_date' => '2026-07-14',
             'sale_item_id' => [$item->id],
             'product_unit_id' => [null],

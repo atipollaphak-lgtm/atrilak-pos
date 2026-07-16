@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\StaleSaleRevisionException;
 use App\Http\Requests\Sales\StoreSaleV1Request;
 use App\Http\Requests\Sales\StoreSaleV2Request;
 use App\Http\Requests\Sales\UpdateSaleRequest;
@@ -246,13 +247,21 @@ class SaleController extends Controller
         $validated = $request->validated();
 
         try {
-            app(SaleService::class)->updateSale($sale, [
-                'customer_id' => $validated['customer_id'] ?? null,
-                'sale_date' => $validated['sale_date'],
-                'items' => $request->normalizedItems(),
-                'delivery_fee' => $validated['delivery_fee'] ?? 0,
-                'discount' => $validated['discount'] ?? 0,
-            ]);
+            app(SaleService::class)->updateSale(
+                $sale,
+                [
+                    'customer_id' => $validated['customer_id'] ?? null,
+                    'sale_date' => $validated['sale_date'],
+                    'items' => $request->normalizedItems(),
+                    'delivery_fee' => $validated['delivery_fee'] ?? 0,
+                    'discount' => $validated['discount'] ?? 0,
+                ],
+                (int) $validated['revision']
+            );
+        } catch (StaleSaleRevisionException $exception) {
+            return redirect()
+                ->route('sales.edit', $sale->id)
+                ->with('error', $exception->getMessage());
         } catch (DomainException $exception) {
             return back()->withInput()->with('error', $exception->getMessage());
         } catch (Throwable $exception) {
