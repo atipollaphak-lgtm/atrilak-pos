@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\Setting;
 use App\Models\Technician;
 use App\Services\CommercialDocumentService;
+use App\Services\Sales\SaleFinancialSnapshotService;
 use App\Services\SaleService;
 use DomainException;
 use Illuminate\Http\Request;
@@ -170,7 +171,7 @@ class SaleController extends Controller
         }
     }
 
-    public function show(Sale $sale)
+    public function show(Sale $sale, SaleFinancialSnapshotService $financialSnapshots)
     {
         $sale->load([
             'customer',
@@ -178,11 +179,9 @@ class SaleController extends Controller
             'items.product',
         ]);
 
-        $totalCost = $sale->items->sum(function ($item) {
-            return $item->cost_price * $item->qty;
-        });
-
-        $profit = $sale->items->sum('profit');
+        $financialSummary = $financialSnapshots->saleSummary($sale);
+        $totalCost = $financialSummary['cost'];
+        $profit = $financialSummary['profit'];
 
         return view(
             'sales.show',

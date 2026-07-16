@@ -100,20 +100,14 @@
 
                 <tbody>
                     @forelse ($sales as $sale)
-                        @php
-                            $cost = $sale->items->sum(function ($item) {
-                                return $item->cost_price * $item->qty;
-                            });
-
-                            $profit = $sale->items->sum('profit');
-                        @endphp
+                        @php($financial = $financialsBySaleId[$sale->id])
 
                         <tr>
                             <td>{{ $sale->sale_no }}</td>
                             <td>{{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}</td>
-                            <td class="text-right">{{ number_format($sale->total_amount, 2) }}</td>
-                            <td class="text-right">{{ number_format($cost, 2) }}</td>
-                            <td class="text-right">{{ number_format($profit, 2) }}</td>
+                            <td class="text-right">{{ number_format($financial['revenue'], 2) }}</td>
+                            <td class="text-right">{{ number_format($financial['cost'], 2) }}</td>
+                            <td class="text-right">{{ number_format($financial['profit'], 2) }}</td>
                             <td>
                                 <a href="{{ route('sales.show', $sale) }}" class="btn btn-sm btn-info">
                                     ดูบิล

@@ -42,10 +42,10 @@ class TransactionDocumentSnapshotTest extends TestCase
         $this->assertSame('Snapshot Pack', $item->unit_name_snapshot);
         $this->assertSame('PACK', $item->unit_code_snapshot);
         $this->assertSame('2.00', $item->qty);
-        $this->assertSame('10.00', $item->selling_price);
-        $this->assertSame('20.00', $item->total);
+        $this->assertSame('60.00', $item->selling_price);
+        $this->assertSame('120.00', $item->total);
         $this->assertSame('4.00', $item->cost_price);
-        $this->assertSame('12.00', $item->profit);
+        $this->assertSame('24.00', $item->profit);
         $this->assertSame('12.0000', $item->conversion_rate_used);
         $this->assertSame('24.0000', $item->base_qty);
     }
@@ -208,8 +208,8 @@ class TransactionDocumentSnapshotTest extends TestCase
         $context = $this->context();
         $second = $this->product('Second Product', 'Second Unit', 'SECOND');
         $sale = $this->createSale($context, $context['productUnit'], [
-            $this->line($context['product'], $context['productUnit'], '2.00', '10.00'),
-            $this->line($second['product'], $second['productUnit'], '1.00', '15.00'),
+            $this->line($context['product'], $context['productUnit'], '2.00', '60.00'),
+            $this->line($second['product'], $second['productUnit'], '1.00', '60.00'),
         ]);
         $items = $sale->items()->orderBy('id')->get();
         $newCustomer = Customer::query()->create([
@@ -406,7 +406,7 @@ class TransactionDocumentSnapshotTest extends TestCase
         if ($useDefaultProductUnit) {
             $productUnit ??= $context['productUnit'];
         }
-        $items ??= [$this->line($context['product'], $productUnit, '2.00', '10.00')];
+        $items ??= [$this->line($context['product'], $productUnit, '2.00', '60.00')];
 
         return app(SaleService::class)->createSale([
             'customer_id' => $context['customer']->id,

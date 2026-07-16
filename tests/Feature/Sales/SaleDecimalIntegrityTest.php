@@ -59,7 +59,7 @@ class SaleDecimalIntegrityTest extends TestCase
         );
         $this->assertSame('0.03', (string) $lineTotal);
         $this->assertSame('0.02', (string) $sale->total_amount);
-        $this->assertSame(['0.00', '0.01'], $sale->items->pluck('profit')->all());
+        $this->assertSame(['0.01', '0.02'], $sale->items->pluck('profit')->all());
     }
 
     public function test_decimal_base_quantity_and_movement_chain_remain_at_scale_four(): void

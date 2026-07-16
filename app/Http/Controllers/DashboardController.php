@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
-use Carbon\Carbon;
-use App\Models\Customer;
-use App\Models\Supplier;
 use App\Models\SaleItem;
+use App\Models\Supplier;
+use App\Services\Sales\SaleFinancialSnapshotService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(SaleFinancialSnapshotService $financialSnapshots)
     {
         $today = Carbon::today();
 
@@ -48,14 +49,9 @@ class DashboardController extends Controller
         $todaySales = Sale::whereDate('sale_date', $today)
             ->sum('total_amount');
 
-        $todayProfit = Sale::with('items')
+        $todayProfit = $financialSnapshots->sumProfit(Sale::with('items')
             ->whereDate('sale_date', $today)
-            ->get()
-            ->sum(function ($sale) {
-                return $sale->items->sum(function ($item) {
-                    return ($item->selling_price - $item->cost_price) * $item->qty;
-                });
-            });
+            ->get());
 
         $month = date('m');
         $year = date('Y');
@@ -72,7 +68,7 @@ class DashboardController extends Controller
         foreach ($items as $item) {
             $productId = $item->product_id;
 
-            if (!isset($bestProducts[$productId])) {
+            if (! isset($bestProducts[$productId])) {
                 $bestProducts[$productId] = [
                     'name' => $item->product->name ?? '-',
                     'unit' => $item->product->unitRelation->name
@@ -127,21 +123,16 @@ class DashboardController extends Controller
             date('Y')
         )->sum('total_amount');
 
-        $monthProfit = Sale::with('items')
+        $monthProfit = $financialSnapshots->sumProfit(Sale::with('items')
             ->whereMonth('sale_date', date('m'))
             ->whereYear('sale_date', date('Y'))
-            ->get()
-            ->sum(function ($sale) {
-                return $sale->items->sum(function ($item) {
-                    return ($item->selling_price - $item->cost_price)
-                        * $item->qty;
-                });
-            });
+            ->get());
         $stockValue = Product::where('active', true)
             ->get()
             ->sum(function ($product) {
                 return $product->stock_qty * $product->cost_price;
             });
+
         return view(
 
             'dashboard',

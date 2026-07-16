@@ -7,10 +7,13 @@ use App\Models\ProductUnit;
 use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Services\Sales\ProductUnitConversionService;
+use App\Services\Sales\SaleDecimalService;
 use App\Services\SaleService;
 use App\ValueObjects\Sales\ResolvedSaleLine;
 use DomainException;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\CreatesSaleTransactionTestSchema;
 use Tests\TestCase;
 
@@ -22,10 +25,19 @@ class ProductUnitConversionTest extends TestCase
     {
         parent::setUp();
         $this->createSaleTransactionTestSchema();
+        Schema::create('delivery_zones', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->decimal('base_delivery_fee', 12, 2)->default(0);
+            $table->decimal('minimum_profit', 12, 2)->default(0);
+            $table->boolean('active')->default(true);
+            $table->timestamps();
+        });
     }
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('delivery_zones');
         $this->dropSaleTransactionTestSchema();
         parent::tearDown();
     }
@@ -47,7 +59,7 @@ class ProductUnitConversionTest extends TestCase
         $this->assertCount(3, $items);
         $this->assertSame(['2.0000', '36.0000', '24.0000'], $items->pluck('base_qty')->all());
         $this->assertSame(['1.0000', '12.0000', '24.0000'], $items->pluck('conversion_rate_used')->all());
-        $this->assertEquals([10.00, 285.00, 175.00], $items->pluck('profit')->map(fn ($value) => (float) $value)->all());
+        $this->assertEquals([10.00, 120.00, 60.00], $items->pluck('profit')->map(fn ($value) => (float) $value)->all());
         $this->assertSame('38.0000', $product->fresh()->stock_qty);
         $this->assertSame(['2.0000', '36.0000', '24.0000'], StockMovement::orderBy('id')->pluck('qty')->all());
         $this->assertEquals(500.00, $sale->total_amount);
@@ -113,6 +125,114 @@ class ProductUnitConversionTest extends TestCase
         $this->assertSame('case', $item->unit_code_snapshot);
         $this->assertSame('12.0000', $product->fresh()->stock_qty);
         $this->assertSame('48.0000', StockMovement::sole()->qty);
+        $this->assertSame('360.00', $item->total);
+        $this->assertSame('120.00', $item->profit);
+        $this->assertSame(
+            '240.00',
+            app(SaleDecimalService::class)
+                ->storedLineCost($item->total, $item->profit)
+        );
+    }
+
+    public function test_factor_one_sale_retains_base_unit_profit_behavior(): void
+    {
+        $product = $this->product('Factor one profit', '10.0000');
+
+        $item = $this->sale([
+            $this->line($product, '2.00', '10.00'),
+        ])->items()->sole();
+
+        $this->assertSame('20.00', $item->total);
+        $this->assertSame('10.00', $item->profit);
+    }
+
+    public function test_mixed_units_use_base_cost_per_line_and_preserve_the_invariant(): void
+    {
+        $product = $this->product('Mixed unit profit', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+
+        $items = $this->sale([
+            $this->line($product, '2.00', '180.00', $case),
+            $this->line($product, '5.00', '10.00'),
+        ])->items()->orderBy('id')->get();
+
+        $this->assertSame(['120.00', '25.00'], $items->pluck('profit')->all());
+        $this->assertSame(
+            '145.00',
+            app(SaleDecimalService::class)
+                ->sumMoney($items->pluck('profit'))
+        );
+
+        foreach ($items as $item) {
+            $cost = app(SaleDecimalService::class)
+                ->storedLineCost($item->total, $item->profit);
+            $this->assertSame(
+                $item->total,
+                app(SaleDecimalService::class)
+                    ->addMoney($cost, $item->profit)
+            );
+        }
+    }
+
+    public function test_fractional_base_cost_rounding_is_deterministic(): void
+    {
+        $product = $this->product('Fractional cost rounding', '10.0000');
+        $fractional = $this->unit($product, 'fractional', '0.3333');
+
+        $item = $this->sale([
+            $this->line($product, '1.25', '2.00', $fractional),
+        ])->items()->sole();
+
+        $this->assertSame('0.4166', $item->base_qty);
+        $this->assertSame('2.50', $item->total);
+        $this->assertSame('0.42', $item->profit);
+    }
+
+    public function test_negative_product_profit_can_be_offset_by_delivery_fee(): void
+    {
+        $product = $this->product('Negative line', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+
+        $sale = $this->deliverySale(
+            [$this->line($product, '2.00', '50.00', $case)],
+            '200.00',
+            '50.00'
+        );
+
+        $this->assertSame('-140.00', $sale->items()->sole()->profit);
+    }
+
+    public function test_profit_guard_uses_corrected_base_cost_profit(): void
+    {
+        $product = $this->product('Guard pass', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+
+        $sale = $this->deliverySale(
+            [$this->line($product, '2.00', '180.00', $case)],
+            '20.00',
+            '140.00'
+        );
+
+        $this->assertSame('120.00', $sale->items()->sole()->profit);
+    }
+
+    public function test_profit_guard_rejects_legacy_false_pass_and_rolls_back_everything(): void
+    {
+        $product = $this->product('Guard rollback', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+
+        $this->expectDomainFailure(fn () => $this->deliverySale(
+            [$this->line($product, '2.00', '180.00', $case)],
+            '20.00',
+            '300.00'
+        ));
+
+        $this->assertSame(0, Sale::count());
+        $this->assertSame(0, DB::table('sale_items')->count());
+        $this->assertSame(0, StockMovement::count());
+        $this->assertSame(0, DB::table('technician_commissions')->count());
+        $this->assertSame('100.0000', $product->fresh()->stock_qty);
+        $this->assertSame(0, DB::table('sale_number_counters')->count());
     }
 
     public function test_resolved_lines_preserve_order_source_and_aggregate_mixed_units(): void
@@ -158,7 +278,7 @@ class ProductUnitConversionTest extends TestCase
     {
         $product = $this->product('Backend authority', '50.0000');
         $case = $this->unit($product, 'case', '24.0000');
-        $line = array_merge($this->line($product, '1.00', '10.00', $case), [
+        $line = array_merge($this->line($product, '1.00', '130.00', $case), [
             'conversion_rate_used' => '2.0000',
             'base_qty' => '2.0000',
             'unit_name_snapshot' => 'forged',
@@ -232,7 +352,7 @@ class ProductUnitConversionTest extends TestCase
         }
 
         $unit->update(['conversion_confirmed_at' => now()]);
-        $sale = $this->sale([$this->line($product, '1.00', '10.00', $unit->fresh())]);
+        $sale = $this->sale([$this->line($product, '1.00', '70.00', $unit->fresh())]);
 
         $this->assertSame('12.0000', $sale->items()->sole()->base_qty);
         $this->assertSame('8.0000', $product->fresh()->stock_qty);
@@ -274,7 +394,7 @@ class ProductUnitConversionTest extends TestCase
     {
         $product = $this->product('Snapshot delete', '50.0000');
         $unit = $this->unit($product, 'dozen', '12.0000');
-        $sale = $this->sale([$this->line($product, '2.00', '10.00', $unit)]);
+        $sale = $this->sale([$this->line($product, '2.00', '70.00', $unit)]);
 
         $unit->update(['conversion_rate' => '99.0000', 'conversion_confirmed_at' => null]);
         app(SaleService::class)->deleteSale($sale);
@@ -287,7 +407,7 @@ class ProductUnitConversionTest extends TestCase
     {
         $product = $this->product('Snapshot update', '50.0000');
         $unit = $this->unit($product, 'dozen', '12.0000');
-        $sale = $this->sale([$this->line($product, '2.00', '10.00', $unit)]);
+        $sale = $this->sale([$this->line($product, '2.00', '70.00', $unit)]);
         $oldItem = $sale->items()->sole();
         $unit->update(['conversion_rate' => '99.0000', 'conversion_confirmed_at' => null]);
 
@@ -472,6 +592,39 @@ class ProductUnitConversionTest extends TestCase
             'sale_date' => '2026-07-14',
             'grand_total' => collect($items)->sum(fn (array $item) => (float) $item['qty'] * (float) $item['selling_price']),
             'delivery_type' => 'pickup',
+            'discount' => 0,
+            'items' => $items,
+        ]);
+    }
+
+    private function deliverySale(array $items, string $deliveryFee, string $minimumProfit): Sale
+    {
+        $customerId = DB::table('customers')->insertGetId([
+            'name' => 'Synthetic customer',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $zoneId = DB::table('delivery_zones')->insertGetId([
+            'name' => 'Synthetic zone',
+            'base_delivery_fee' => $deliveryFee,
+            'minimum_profit' => $minimumProfit,
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $addressId = DB::table('customer_delivery_addresses')->insertGetId([
+            'customer_id' => $customerId,
+            'delivery_zone_id' => $zoneId,
+            'name' => 'Synthetic address',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return app(SaleService::class)->createSale([
+            'customer_id' => $customerId,
+            'customer_delivery_address_id' => $addressId,
+            'sale_date' => '2026-07-14',
+            'delivery_type' => 'delivery',
             'discount' => 0,
             'items' => $items,
         ]);

@@ -21,6 +21,37 @@ class SaleItemService
         Collection $lockedProducts,
         array $snapshots = []
     ): void {
+        $this->createItemsUsingCostQuantity(
+            $sale,
+            $items,
+            $lockedProducts,
+            $snapshots,
+            false
+        );
+    }
+
+    public function createItemsForNewSale(
+        Sale $sale,
+        array $items,
+        Collection $lockedProducts,
+        array $snapshots = []
+    ): void {
+        $this->createItemsUsingCostQuantity(
+            $sale,
+            $items,
+            $lockedProducts,
+            $snapshots,
+            true
+        );
+    }
+
+    private function createItemsUsingCostQuantity(
+        Sale $sale,
+        array $items,
+        Collection $lockedProducts,
+        array $snapshots,
+        bool $useBaseQuantityForCost
+    ): void {
         foreach ($items as $index => $item) {
 
             $product = $lockedProducts->get((int) $item['product_id']);
@@ -36,7 +67,14 @@ class SaleItemService
 
             $lineTotal = $this->decimalService->lineTotal($qty, $price);
             $costPrice = $product->cost_price ?? 0;
-            $lineProfit = $this->decimalService->lineProfit($qty, $price, $costPrice);
+            $lineProfit = $useBaseQuantityForCost
+                ? $this->decimalService->lineProfitFromBaseQuantity(
+                    $qty,
+                    $price,
+                    $item['base_qty'],
+                    $costPrice
+                )
+                : $this->decimalService->lineProfit($qty, $price, $costPrice);
 
             $sale->items()->create(array_merge([
                 'product_id' => $product->id,

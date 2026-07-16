@@ -31,6 +31,30 @@ class SaleDecimalService
         );
     }
 
+    public function lineCost(mixed $baseQty, mixed $costPrice): string
+    {
+        return $this->money(
+            $this->decimal($baseQty)->multipliedBy($this->decimal($costPrice))
+        );
+    }
+
+    public function lineProfitFromBaseQuantity(
+        mixed $saleQty,
+        mixed $sellingPrice,
+        mixed $baseQty,
+        mixed $costPrice
+    ): string {
+        return $this->subtractMoney(
+            $this->lineTotal($saleQty, $sellingPrice),
+            $this->lineCost($baseQty, $costPrice)
+        );
+    }
+
+    public function storedLineCost(mixed $lineTotal, mixed $lineProfit): string
+    {
+        return $this->subtractMoney($lineTotal, $lineProfit);
+    }
+
     public function itemsTotal(array $items): string
     {
         $total = BigDecimal::zero()->toScale(self::MONEY_SCALE);
@@ -58,6 +82,13 @@ class SaleDecimalService
     {
         return $this->money(
             $this->decimal($this->money($left))->plus($this->money($right))
+        );
+    }
+
+    public function subtractMoney(mixed $left, mixed $right): string
+    {
+        return $this->money(
+            $this->decimal($this->money($left))->minus($this->money($right))
         );
     }
 

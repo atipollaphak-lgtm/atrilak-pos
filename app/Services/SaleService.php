@@ -8,6 +8,7 @@ use App\Models\Sale;
 use App\Services\Sales\CommissionService;
 use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
+use App\Services\Sales\SaleDecimalService;
 use App\Services\Sales\SaleIdempotencyService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
@@ -42,6 +43,8 @@ class SaleService
 
     protected TransactionDocumentSnapshotService $documentSnapshotService;
 
+    protected SaleDecimalService $saleDecimalService;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -52,7 +55,8 @@ class SaleService
         ProductUnitConversionService $productUnitConversionService,
         SaleValidationService $saleValidationService,
         SaleIdempotencyService $saleIdempotencyService,
-        ?TransactionDocumentSnapshotService $documentSnapshotService = null
+        ?TransactionDocumentSnapshotService $documentSnapshotService = null,
+        ?SaleDecimalService $saleDecimalService = null
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -65,6 +69,7 @@ class SaleService
         $this->saleIdempotencyService = $saleIdempotencyService;
         $this->documentSnapshotService = $documentSnapshotService
             ?? new TransactionDocumentSnapshotService;
+        $this->saleDecimalService = $saleDecimalService ?? new SaleDecimalService;
     }
 
     public function createSale(array $data, ?int $quotationId = null)
@@ -185,9 +190,11 @@ class SaleService
                     ->saleItemSnapshots($items, $lockedProducts, true);
 
                 $this->saleItemService
-                    ->createItems($sale, $items, $lockedProducts, $itemSnapshots);
+                    ->createItemsForNewSale($sale, $items, $lockedProducts, $itemSnapshots);
 
-                $productProfit = $sale->items()->sum('profit');
+                $productProfit = $this->saleDecimalService->sumMoney(
+                    $sale->items()->pluck('profit')
+                );
 
                 $profitGuardResult = $this->profitGuardService->check(
                     [
