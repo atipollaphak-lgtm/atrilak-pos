@@ -20,6 +20,11 @@ class Sale extends Model
         'delivery_fee',
         'delivery_type',
         'discount',
+        'payment_method',
+        'cash_amount',
+        'promptpay_amount',
+        'received_amount',
+        'change_amount',
         'store_name_snapshot',
         'store_address_snapshot',
         'store_phone_snapshot',
@@ -44,6 +49,10 @@ class Sale extends Model
     {
         return [
             'revision' => 'integer',
+            'cash_amount' => 'decimal:2',
+            'promptpay_amount' => 'decimal:2',
+            'received_amount' => 'decimal:2',
+            'change_amount' => 'decimal:2',
         ];
     }
 
