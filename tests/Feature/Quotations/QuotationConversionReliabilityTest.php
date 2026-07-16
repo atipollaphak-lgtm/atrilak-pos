@@ -32,8 +32,8 @@ class QuotationConversionReliabilityTest extends TestCase
 
     public function test_conversion_and_retry_return_the_same_sale_without_duplicate_writes(): void
     {
-        $product = $this->product(stock: 10, active: false);
-        $quotation = $this->quotation($product, qty: 2, price: 30, headerTotal: 99);
+        $product = $this->product(stock: 10);
+        $quotation = $this->quotation($product, qty: 2, price: 30, headerTotal: 60);
         $service = app(SaleService::class);
 
         $sale = $service->createSaleFromQuotation($quotation);
@@ -42,7 +42,7 @@ class QuotationConversionReliabilityTest extends TestCase
         $this->assertSame($sale->id, $replayedSale->id);
         $this->assertSame($quotation->id, $sale->quotation_id);
         $this->assertSame('converted', $quotation->fresh()->status);
-        $this->assertEquals(99, $sale->total_amount);
+        $this->assertEquals(60, $sale->total_amount);
         $this->assertEquals(60, $sale->items()->sole()->total);
         $this->assertNull($sale->items()->sole()->product_unit_id);
         $this->assertSame('1.0000', $sale->items()->sole()->conversion_rate_used);

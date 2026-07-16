@@ -108,6 +108,154 @@ class ProductUnitConversionService
     }
 
     /**
+     * Resolve backend-owned Quotation Item snapshots without consulting the
+     * current Product Unit conversion rate.
+     *
+     * @return list<ResolvedSaleLine>
+     */
+    public function resolveStoredQuotationLines(
+        Collection $quotationItems,
+        Collection $products
+    ): array {
+        $unitIds = $quotationItems
+            ->pluck('product_unit_id')
+            ->filter(fn ($id) => $id !== null && $id !== '')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->sort()
+            ->values();
+        $units = $unitIds->isEmpty()
+            ? collect()
+            : ProductUnit::query()
+                ->whereIn('id', $unitIds->all())
+                ->orderBy('id')
+                ->get()
+                ->keyBy('id');
+        $legacyUnits = $this->legacyUnits(
+            $quotationItems->map(fn ($item): array => [
+                'product_id' => $item->product_id,
+            ])->all(),
+            $products
+        );
+
+        return $quotationItems->values()->map(function (
+            $item,
+            int $index
+        ) use ($products, $units, $legacyUnits): ResolvedSaleLine {
+            $itemNumber = $index + 1;
+            $productId = (int) ($item->product_id ?? 0);
+            $product = $products->get($productId);
+
+            if ($productId <= 0 || $product === null) {
+                throw new DomainException("ไม่พบสินค้าของรายการใบเสนอราคาที่ {$itemNumber}");
+            }
+
+            if (! $product->active) {
+                throw new DomainException("สินค้าของรายการใบเสนอราคาที่ {$itemNumber} ถูกปิดใช้งาน");
+            }
+
+            $qty = $this->saleQuantity($item->qty);
+            $productUnitId = $item->product_unit_id === null
+                ? null
+                : (int) $item->product_unit_id;
+            $storedRate = $item->conversion_rate_used;
+            $storedBaseQty = $item->base_qty;
+
+            if ($storedBaseQty === null) {
+                if ($productUnitId !== null) {
+                    throw new DomainException("รายการใบเสนอราคาที่ {$itemNumber} ไม่มีจำนวนหน่วยฐานที่เชื่อถือได้");
+                }
+
+                if ($item->unit_name_snapshot !== null || $item->unit_code_snapshot !== null) {
+                    throw new DomainException("รายการใบเสนอราคาที่ {$itemNumber} มีข้อมูลหน่วยขายแต่ไม่มีจำนวนหน่วยฐาน");
+                }
+
+                $rate = $storedRate === null
+                    ? BigDecimal::one()->toScale(4)
+                    : $this->storedPositiveDecimal(
+                        $storedRate,
+                        4,
+                        "อัตราแปลงของรายการใบเสนอราคาที่ {$itemNumber} ไม่ถูกต้อง"
+                    );
+
+                if (! $rate->isEqualTo(BigDecimal::one())) {
+                    throw new DomainException("รายการใบเสนอราคาที่ {$itemNumber} ไม่สามารถใช้ factor 1 ได้");
+                }
+
+                $legacyUnit = $product->unit_id === null
+                    ? null
+                    : $legacyUnits->get((int) $product->unit_id);
+
+                return new ResolvedSaleLine(
+                    originalIndex: $index,
+                    productId: $productId,
+                    productUnitId: null,
+                    saleQty: (string) $qty,
+                    sellingPrice: (string) $item->selling_price,
+                    conversionRateUsed: '1.0000',
+                    baseQty: $this->calculateBaseQuantity($qty, $rate),
+                    unitNameSnapshot: $legacyUnit?->name ?? $product->unit,
+                    unitCodeSnapshot: $legacyUnit?->code,
+                    resolutionSource: ResolvedSaleLine::SOURCE_LEGACY_FACTOR_ONE,
+                    sourceLine: ['quotation_item_id' => (int) $item->getKey()],
+                );
+            }
+
+            $baseQty = $this->storedPositiveDecimal(
+                $storedBaseQty,
+                self::BASE_SCALE,
+                "จำนวนหน่วยฐานของรายการใบเสนอราคาที่ {$itemNumber} ไม่ถูกต้อง"
+            );
+
+            if ($productUnitId !== null) {
+                $unit = $units->get($productUnitId);
+
+                if ($unit === null) {
+                    throw new DomainException("ไม่พบหน่วยขายของรายการใบเสนอราคาที่ {$itemNumber}");
+                }
+
+                if ((int) $unit->product_id !== $productId) {
+                    throw new DomainException("หน่วยขายของรายการใบเสนอราคาที่ {$itemNumber} ไม่ตรงกับสินค้า");
+                }
+            }
+
+            if ($storedRate === null) {
+                $rate = $baseQty->dividedBy(
+                    $qty,
+                    4,
+                    RoundingMode::HALF_UP
+                );
+            } else {
+                $rate = $this->storedPositiveDecimal(
+                    $storedRate,
+                    4,
+                    "อัตราแปลงของรายการใบเสนอราคาที่ {$itemNumber} ไม่ถูกต้อง"
+                );
+            }
+
+            $reproducedBaseQty = $this->calculateBaseQuantity($qty, $rate);
+
+            if (! BigDecimal::of($reproducedBaseQty)->isEqualTo($baseQty)) {
+                throw new DomainException("อัตราแปลงและจำนวนหน่วยฐานของรายการใบเสนอราคาที่ {$itemNumber} ไม่สอดคล้องกัน");
+            }
+
+            return new ResolvedSaleLine(
+                originalIndex: $index,
+                productId: $productId,
+                productUnitId: $productUnitId,
+                saleQty: (string) $qty,
+                sellingPrice: (string) $item->selling_price,
+                conversionRateUsed: (string) $rate,
+                baseQty: (string) $baseQty,
+                unitNameSnapshot: $item->unit_name_snapshot,
+                unitCodeSnapshot: $item->unit_code_snapshot,
+                resolutionSource: ResolvedSaleLine::SOURCE_STORED_SNAPSHOT,
+                sourceLine: ['quotation_item_id' => (int) $item->getKey()],
+            );
+        })->all();
+    }
+
+    /**
      * @param  list<ResolvedSaleLine>  $lines
      * @return array<int, string>
      */
@@ -219,6 +367,25 @@ class ProductUnitConversionService
         } catch (MathException) {
             throw new DomainException('อัตราแปลงสต๊อกไม่ถูกต้อง');
         }
+    }
+
+    private function storedPositiveDecimal(
+        mixed $value,
+        int $scale,
+        string $message
+    ): BigDecimal {
+        try {
+            $decimal = BigDecimal::of((string) $value)
+                ->toScale($scale, RoundingMode::UNNECESSARY);
+        } catch (MathException) {
+            throw new DomainException($message);
+        }
+
+        if ($decimal->isLessThanOrEqualTo(BigDecimal::zero())) {
+            throw new DomainException($message);
+        }
+
+        return $decimal;
     }
 
     private function legacyUnits(array $items, ?Collection $products): Collection

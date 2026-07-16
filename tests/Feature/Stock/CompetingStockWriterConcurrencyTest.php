@@ -429,6 +429,38 @@ class CompetingStockWriterConcurrencyTest extends TestCase
         $this->assertMovementChain($product, 10, 8);
     }
 
+    public function test_same_converted_unit_quotation_uses_stored_base_quantity_once(): void
+    {
+        $product = $this->product('One converted quotation', 100);
+        $quotation = $this->quotation($product, 2);
+        $quotation->update(['total_amount' => '360.00']);
+        $quotation->items()->update([
+            'conversion_rate_used' => '24.0000',
+            'base_qty' => '48.0000',
+            'selling_price' => '180.00',
+            'total' => '360.00',
+            'unit_name_snapshot' => 'Historical Case',
+            'unit_code_snapshot' => 'HCASE',
+        ]);
+        $operation = ['operation' => 'quotation_convert', 'quotation_id' => $quotation->id];
+
+        $results = $this->runConcurrently($operation, $operation);
+
+        $this->assertAllSucceeded($results);
+        $this->assertSame(1, collect($results)->pluck('sale_id')->unique()->count());
+        $this->assertDatabaseCount('sales', 1);
+        $this->assertDatabaseCount('sale_items', 1);
+        $this->assertDatabaseCount('stock_movements', 1);
+        $this->assertDatabaseCount('technician_commissions', 0);
+        $saleItem = Sale::query()->sole()->items()->sole();
+        $this->assertSame('24.0000', $saleItem->conversion_rate_used);
+        $this->assertSame('48.0000', $saleItem->base_qty);
+        $this->assertSame('Historical Case', $saleItem->unit_name_snapshot);
+        $this->assertSame('48.0000', StockMovement::query()->sole()->qty);
+        $this->assertSame('52.0000', $product->fresh()->stock_qty);
+        $this->assertMovementChain($product, 100, 52);
+    }
+
     public function test_reverse_product_order_does_not_deadlock(): void
     {
         $first = $this->product('First', 10);

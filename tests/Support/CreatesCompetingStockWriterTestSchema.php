@@ -11,6 +11,7 @@ trait CreatesCompetingStockWriterTestSchema
 
     protected function createCompetingStockWriterTestSchema(): void
     {
+        Schema::dropAllTables();
         $this->createSaleTransactionTestSchema();
 
         Schema::create('categories', function (Blueprint $table) {
@@ -113,9 +114,17 @@ trait CreatesCompetingStockWriterTestSchema
             $table->id();
             $table->foreignId('quotation_id')->constrained()->cascadeOnDelete();
             $table->foreignId('product_id')->nullable()->constrained()->nullOnDelete();
-            $table->integer('qty');
+            $table->foreignId('product_unit_id')
+                ->nullable()
+                ->constrained('product_units')
+                ->nullOnDelete();
+            $table->decimal('conversion_rate_used', 15, 4)->nullable();
+            $table->decimal('base_qty', 19, 4)->nullable();
+            $table->decimal('qty', 15, 2);
             $table->decimal('selling_price', 15, 2);
             $table->decimal('total', 15, 2);
+            $table->string('unit_name_snapshot')->nullable();
+            $table->string('unit_code_snapshot')->nullable();
             $table->timestamps();
         });
 
