@@ -32,12 +32,6 @@ use App\Http\Controllers\DeliveryZoneController;
 use App\Http\Controllers\CustomerDeliveryAddressController;
 use App\Http\Controllers\PricingManagementController;
 
-Route::resource(
-    'units',
-    UnitController::class
-);
-
-
 Route::get('/', function () {
     return view('welcome');
 });
@@ -66,18 +60,6 @@ Route::middleware(['auth'])->group(function () {
 
     Route::delete('/profile', [ProfileController::class, 'destroy'])
         ->name('profile.destroy');
-
-    Route::post('/units/seed', [UnitController::class, 'seed'])
-        ->name('units.seed');
-
-    Route::post('/units/merge', [UnitController::class, 'merge'])
-        ->name('units.merge');
-
-    Route::resource('units', UnitController::class)->except([
-        'create',
-        'show',
-        'edit',
-    ]);
 
     // Cashier ขึ้นไป
     Route::middleware(['role:cashier'])->group(function () {
@@ -276,6 +258,13 @@ Route::middleware(['auth'])->group(function () {
             'units',
             UnitController::class
         );
+
+        Route::post('/units/seed', [UnitController::class, 'seed'])
+            ->name('units.seed');
+
+        Route::post('/units/merge', [UnitController::class, 'merge'])
+            ->name('units.merge');
+
         Route::resource(
             'technician-commission-rules',
             TechnicianCommissionRuleController::class
