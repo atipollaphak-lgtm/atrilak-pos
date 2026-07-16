@@ -13,6 +13,7 @@ use App\Models\Setting;
 use App\Models\Technician;
 use App\Models\Unit;
 use App\Services\CommercialDocumentService;
+use App\Services\Sales\SaleDecimalService;
 use App\Services\SaleService;
 use App\Services\TransactionDocumentSnapshotService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -407,6 +408,7 @@ class TransactionDocumentSnapshotTest extends TestCase
             $productUnit ??= $context['productUnit'];
         }
         $items ??= [$this->line($context['product'], $productUnit, '2.00', '60.00')];
+        $total = app(SaleDecimalService::class)->itemsTotal($items);
 
         return app(SaleService::class)->createSale([
             'customer_id' => $context['customer']->id,
@@ -415,6 +417,10 @@ class TransactionDocumentSnapshotTest extends TestCase
             'sale_date' => '2026-07-15',
             'delivery_type' => 'pickup',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => $total,
+            'received_amount' => '0.00',
             'items' => $items,
         ]);
     }

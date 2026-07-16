@@ -38,6 +38,10 @@ class SaleDecimalIntegrityTest extends TestCase
             'sale_date' => '2026-07-15',
             'delivery_type' => 'pickup',
             'discount' => '0.01',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '0.02',
+            'received_amount' => '0.00',
             'items' => [
                 [
                     'product_id' => $product->id,
@@ -74,6 +78,10 @@ class SaleDecimalIntegrityTest extends TestCase
         $sale = app(SaleService::class)->createSale([
             'sale_date' => '2026-07-15',
             'delivery_type' => 'pickup',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '0.06',
+            'received_amount' => '0.00',
             'items' => [
                 [
                     'product_id' => $product->id,
@@ -109,6 +117,10 @@ class SaleDecimalIntegrityTest extends TestCase
         $sale = $service->createSale([
             'sale_date' => '2026-07-15',
             'delivery_type' => 'pickup',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '0.05',
+            'received_amount' => '0.00',
             'items' => [[
                 'product_id' => $product->id,
                 'qty' => '0.10',

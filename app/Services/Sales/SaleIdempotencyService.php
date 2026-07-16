@@ -18,6 +18,10 @@ class SaleIdempotencyService
             'sale_date' => (string) $data['sale_date'],
             'delivery_type' => (string) ($data['delivery_type'] ?? 'delivery'),
             'discount' => $this->normalizeDecimal($data['discount'] ?? 0),
+            'payment_method' => (string) ($data['payment_method'] ?? ''),
+            'cash_amount' => $this->normalizeDecimal($data['cash_amount'] ?? 0),
+            'promptpay_amount' => $this->normalizeDecimal($data['promptpay_amount'] ?? 0),
+            'received_amount' => $this->normalizeDecimal($data['received_amount'] ?? 0),
             'items' => array_map(fn (array $item): array => [
                 'product_id' => $this->normalizeId($item['product_id'] ?? null),
                 'product_unit_id' => $this->normalizeId($item['product_unit_id'] ?? null),

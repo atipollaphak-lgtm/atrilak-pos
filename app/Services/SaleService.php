@@ -15,6 +15,7 @@ use App\Services\Sales\SaleIdempotencyService;
 use App\Services\Sales\SaleItemQuantityService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
+use App\Services\Sales\SalePaymentResolver;
 use App\Services\Sales\SaleValidationService;
 use App\Services\Sales\StockService;
 use App\ValueObjects\Sales\ResolvedSaleLine;
@@ -51,6 +52,8 @@ class SaleService
 
     protected SaleItemQuantityService $saleItemQuantityService;
 
+    protected SalePaymentResolver $salePaymentResolver;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -63,7 +66,8 @@ class SaleService
         SaleIdempotencyService $saleIdempotencyService,
         ?TransactionDocumentSnapshotService $documentSnapshotService = null,
         ?SaleDecimalService $saleDecimalService = null,
-        ?SaleItemQuantityService $saleItemQuantityService = null
+        ?SaleItemQuantityService $saleItemQuantityService = null,
+        ?SalePaymentResolver $salePaymentResolver = null
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -79,6 +83,8 @@ class SaleService
         $this->saleDecimalService = $saleDecimalService ?? new SaleDecimalService;
         $this->saleItemQuantityService = $saleItemQuantityService
             ?? new SaleItemQuantityService;
+        $this->salePaymentResolver = $salePaymentResolver
+            ?? new SalePaymentResolver($this->saleDecimalService);
     }
 
     public function createSale(array $data, ?int $quotationId = null)
@@ -126,7 +132,8 @@ class SaleService
                     $lockedProducts,
                     $quotationId,
                     $idempotencyKey,
-                    $payloadHash
+                    $payloadHash,
+                    true
                 );
             });
         } catch (QueryException $exception) {
@@ -206,7 +213,7 @@ class SaleService
                 'grand_total' => $lockedQuotation->total_amount,
                 'delivery_type' => 'pickup',
                 'discount' => 0,
-            ], $resolvedLines, $lockedProducts, (int) $lockedQuotation->getKey());
+            ], $resolvedLines, $lockedProducts, (int) $lockedQuotation->getKey(), null, null, false);
 
             $lockedQuotation->update(['status' => 'converted']);
 
@@ -223,7 +230,8 @@ class SaleService
         Collection $lockedProducts,
         ?int $quotationId = null,
         ?string $idempotencyKey = null,
-        ?string $payloadHash = null
+        ?string $payloadHash = null,
+        bool $requiresPayment = true
     ): Sale {
         $requiredBaseQtyByProduct = $this->productUnitConversionService
             ->aggregateBaseQuantityByProduct($resolvedLines);
@@ -236,7 +244,6 @@ class SaleService
         );
 
         $saleDate = $data['sale_date'];
-        $saleNo = $this->saleNumberService->generate($saleDate);
         $grandTotal = array_key_exists('grand_total', $data)
             ? $this->saleValidationService->money($data['grand_total'])
             : $this->saleValidationService->calculateItemsTotal($items);
@@ -263,6 +270,16 @@ class SaleService
             $deliveryFee,
             $discount
         );
+        $payment = $requiresPayment
+            ? $this->salePaymentResolver->resolve(
+                $netTotal,
+                $data['payment_method'] ?? null,
+                $data['cash_amount'] ?? null,
+                $data['promptpay_amount'] ?? null,
+                $data['received_amount'] ?? null
+            )
+            : null;
+        $saleNo = $this->saleNumberService->generate($saleDate);
         $sale = new Sale;
         $sale->sale_no = $saleNo;
 
@@ -283,6 +300,11 @@ class SaleService
         $sale->delivery_fee = $deliveryFee;
         $sale->delivery_type = $deliveryType;
         $sale->discount = $discount;
+
+        if ($payment !== null) {
+            $sale->fill($payment);
+        }
+
         $sale->fill($this->documentSnapshotService->saleHeaderSnapshots(
             $this->nullableId($data['customer_id'] ?? null),
             $this->nullableId($data['technician_id'] ?? null),
@@ -367,8 +389,7 @@ class SaleService
         Sale $sale,
         array $data,
         int $expectedRevision
-    ): Sale
-    {
+    ): Sale {
         return DB::transaction(function () use ($sale, $data, $expectedRevision) {
             $lockedSale = Sale::query()
                 ->whereKey($sale->getKey())

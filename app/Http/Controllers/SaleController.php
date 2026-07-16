@@ -97,6 +97,10 @@ class SaleController extends Controller
                 'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
                 'delivery_type' => $validated['delivery_type'] ?? 'delivery',
                 'discount' => $validated['discount'] ?? 0,
+                'payment_method' => $validated['payment_method'],
+                'cash_amount' => $validated['cash_amount'],
+                'promptpay_amount' => $validated['promptpay_amount'],
+                'received_amount' => $validated['received_amount'],
                 'idempotency_key' => $validated['idempotency_key'],
                 'items' => $request->normalizedItems(),
             ]);
@@ -150,6 +154,10 @@ class SaleController extends Controller
                 'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
                 'delivery_type' => $validated['delivery_type'] ?? 'delivery',
                 'discount' => $validated['discount'] ?? 0,
+                'payment_method' => $validated['payment_method'],
+                'cash_amount' => $validated['cash_amount'],
+                'promptpay_amount' => $validated['promptpay_amount'],
+                'received_amount' => $validated['received_amount'],
                 'idempotency_key' => $validated['idempotency_key'],
                 'items' => $validated['items'],
             ]);

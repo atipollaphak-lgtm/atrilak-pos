@@ -202,6 +202,10 @@ class SaleNumberIdempotencyTest extends TestCase
             'sale_date' => '2026-07-14',
             'delivery_type' => 'pickup',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '20.00',
+            'received_amount' => '0.00',
             'items' => [[
                 'product_id' => $product->id,
                 'product_unit_id' => null,

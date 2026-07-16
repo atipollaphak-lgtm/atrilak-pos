@@ -119,6 +119,10 @@ class SalesAndStockCharacterizationTest extends TestCase
             'grand_total' => 1000,
             'discount' => 75,
             'delivery_type' => 'pickup',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '925.00',
+            'received_amount' => '0.00',
             'items' => [[
                 'product_id' => $product->id,
                 'qty' => 1,
@@ -155,6 +159,10 @@ class SalesAndStockCharacterizationTest extends TestCase
             'discount' => 50,
             'delivery_type' => 'delivery',
             'customer_delivery_address_id' => $address->id,
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '1030.00',
+            'received_amount' => '0.00',
             'items' => [[
                 'product_id' => $product->id,
                 'qty' => 1,

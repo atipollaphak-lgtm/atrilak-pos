@@ -6,6 +6,7 @@ use App\Http\Middleware\RoleMiddleware;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Services\Sales\SaleDecimalService;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -74,6 +75,7 @@ class SaleRequestShapeTest extends TestCase
         $payload['product_id'] = [$product->id, '', ''];
         $payload['qty'] = ['2.00', '', ''];
         $payload['selling_price'] = ['10.00', '', ''];
+        $payload['promptpay_amount'] = '20.00';
 
         $this->post(route('sales.store'), $payload)
             ->assertOk()
@@ -337,19 +339,23 @@ class SaleRequestShapeTest extends TestCase
             'selling_price' => ['10.00'],
             'delivery_fee' => '0.00',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '10.00',
+            'received_amount' => '0.00',
         ];
     }
 
     private function v2Payload(array $items, int $key): array
     {
-        return [
+        return array_merge([
             'idempotency_key' => $this->key($key),
             'sale_date' => '2026-07-15',
             'delivery_type' => 'pickup',
             'items' => $items,
             'delivery_fee' => '0.00',
             'discount' => '0.00',
-        ];
+        ], $this->paymentForItems($items));
     }
 
     private function updatePayload(Sale $sale, Product $product): array
@@ -374,6 +380,22 @@ class SaleRequestShapeTest extends TestCase
             'product_unit_id' => null,
             'qty' => $qty,
             'selling_price' => '10.00',
+        ];
+    }
+
+    private function paymentForItems(array $items): array
+    {
+        try {
+            $total = app(SaleDecimalService::class)->itemsTotal($items);
+        } catch (\Throwable) {
+            $total = '0.00';
+        }
+
+        return [
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => $total,
+            'received_amount' => '0.00',
         ];
     }
 

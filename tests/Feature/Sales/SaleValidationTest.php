@@ -178,6 +178,10 @@ class SaleValidationTest extends TestCase
             'product_id' => [$product->id, ''],
             'qty' => ['2.00', ''],
             'selling_price' => ['25.00', ''],
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '50.00',
+            'received_amount' => '0.00',
         ]);
 
         $response->assertOk()->assertJsonPath('success', true);
@@ -320,6 +324,7 @@ class SaleValidationTest extends TestCase
             ['product_id' => $product->id, 'product_unit_id' => $baseUnit->id, 'qty' => '1.00', 'selling_price' => '10.00'],
             ['product_id' => $product->id, 'product_unit_id' => $packUnit->id, 'qty' => '2.00', 'selling_price' => '100.00'],
         ];
+        $payload['promptpay_amount'] = '220.00';
 
         $this->postJson(route('sales.v2.store'), $payload)
             ->assertOk()
@@ -445,6 +450,10 @@ class SaleValidationTest extends TestCase
             'delivery_type' => 'pickup',
             'discount' => '0.00',
             'delivery_fee' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '10.00',
+            'received_amount' => '0.00',
             'items' => [[
                 'product_id' => $product->id,
                 'product_unit_id' => null,

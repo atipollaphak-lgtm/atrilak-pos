@@ -830,11 +830,17 @@ class ProductUnitConversionTest extends TestCase
 
     private function sale(array $items): Sale
     {
+        $total = app(SaleDecimalService::class)->itemsTotal($items);
+
         return app(SaleService::class)->createSale([
             'sale_date' => '2026-07-14',
             'grand_total' => collect($items)->sum(fn (array $item) => (float) $item['qty'] * (float) $item['selling_price']),
             'delivery_type' => 'pickup',
             'discount' => 0,
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => $total,
+            'received_amount' => '0.00',
             'items' => $items,
         ]);
     }
@@ -873,12 +879,22 @@ class ProductUnitConversionTest extends TestCase
             'updated_at' => now(),
         ]);
 
+        $total = app(SaleDecimalService::class)->netTotal(
+            app(SaleDecimalService::class)->itemsTotal($items),
+            $deliveryFee,
+            '0.00'
+        );
+
         return app(SaleService::class)->createSale([
             'customer_id' => $customerId,
             'customer_delivery_address_id' => $addressId,
             'sale_date' => '2026-07-14',
             'delivery_type' => 'delivery',
             'discount' => 0,
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => $total,
+            'received_amount' => '0.00',
             'items' => $items,
         ]);
     }

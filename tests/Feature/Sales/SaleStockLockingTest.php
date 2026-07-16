@@ -4,6 +4,7 @@ namespace Tests\Feature\Sales;
 
 use App\Models\Product;
 use App\Models\StockMovement;
+use App\Services\Sales\SaleDecimalService;
 use App\Services\SaleService;
 use DomainException;
 use Tests\Support\CreatesSaleTransactionTestSchema;
@@ -90,11 +91,17 @@ class SaleStockLockingTest extends TestCase
 
     private function createData(array $items): array
     {
+        $total = app(SaleDecimalService::class)->itemsTotal($items);
+
         return [
             'sale_date' => '2026-07-13',
             'grand_total' => collect($items)->sum(fn (array $item) => $item['qty'] * $item['selling_price']),
             'delivery_type' => 'pickup',
             'discount' => 0,
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => $total,
+            'received_amount' => '0.00',
             'items' => $items,
         ];
     }

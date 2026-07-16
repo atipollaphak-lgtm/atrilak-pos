@@ -47,6 +47,11 @@ class QuotationConversionReliabilityTest extends TestCase
         $this->assertNull($sale->items()->sole()->product_unit_id);
         $this->assertSame('1.0000', $sale->items()->sole()->conversion_rate_used);
         $this->assertSame('2.0000', $sale->items()->sole()->base_qty);
+        $this->assertNull($sale->payment_method);
+        $this->assertNull($sale->cash_amount);
+        $this->assertNull($sale->promptpay_amount);
+        $this->assertNull($sale->received_amount);
+        $this->assertNull($sale->change_amount);
         $this->assertSame($sale->id, $quotation->fresh()->convertedSale->id);
         $this->assertEquals(8, $product->fresh()->stock_qty);
         $this->assertDatabaseCount('sales', 1);

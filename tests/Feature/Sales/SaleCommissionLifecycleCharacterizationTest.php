@@ -324,6 +324,10 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
             'technician_id' => $technician->id,
             'delivery_type' => 'pickup',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '20.00',
+            'received_amount' => '0.00',
             'items' => [[
                 'product_id' => $product->id,
                 'product_unit_id' => null,

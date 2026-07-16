@@ -103,6 +103,11 @@ trait CreatesSaleTransactionTestSchema
             $table->string('delivery_type')->default('delivery');
             $table->decimal('discount', 12, 2)->default(0);
             $table->bigInteger('revision')->default(1);
+            $table->string('payment_method', 20)->nullable();
+            $table->decimal('cash_amount', 15, 2)->nullable();
+            $table->decimal('promptpay_amount', 15, 2)->nullable();
+            $table->decimal('received_amount', 15, 2)->nullable();
+            $table->decimal('change_amount', 15, 2)->nullable();
             $table->string('store_name_snapshot')->nullable();
             $table->text('store_address_snapshot')->nullable();
             $table->string('store_phone_snapshot')->nullable();
