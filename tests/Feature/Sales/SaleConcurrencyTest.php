@@ -149,20 +149,64 @@ class SaleConcurrencyTest extends TestCase
     {
         $product = $this->createProduct('Concurrent update product', 8);
         $sale = $this->createExistingSale($product, 2, 10);
+        $originalItemId = $sale->items()->sole()->id;
 
         $results = $this->runConcurrently(
-            $this->updateOperation($sale, [$this->line($product, 3, 10)]),
-            $this->updateOperation($sale, [$this->line($product, 4, 10)])
+            $this->updateOperation($sale, [[
+                'sale_item_id' => $originalItemId,
+                ...$this->line($product, 3, 10),
+            ]]),
+            $this->updateOperation($sale, [[
+                'sale_item_id' => $originalItemId,
+                ...$this->line($product, 4, 10),
+            ]])
         );
 
         $this->assertTrue(collect($results)->every(fn (array $result) => $result['ok']));
 
         $finalQty = (float) $sale->fresh()->items()->sole()->qty;
         $this->assertContains($finalQty, [3.0, 4.0]);
+        $this->assertSame($originalItemId, $sale->fresh()->items()->sole()->id);
         $this->assertEquals(10 - $finalQty, $product->fresh()->stock_qty);
         $this->assertDatabaseCount('sales', 1);
         $this->assertDatabaseCount('sale_items', 1);
         $this->assertMovementChain($product, 10, 10 - $finalQty);
+    }
+
+    public function test_concurrent_create_and_converted_unit_update_use_base_quantity_and_keep_item_identity(): void
+    {
+        $product = $this->createProduct('Concurrent converted update product', 52);
+        $unit = $this->createProductUnit($product, 'box', '24.0000');
+        $sale = $this->createExistingConvertedSale($product, $unit, 2, 180, 100);
+        $originalItemId = $sale->items()->sole()->id;
+
+        $results = $this->runConcurrently(
+            $this->createOperation([$this->line($product, 4, 10)]),
+            $this->updateOperation($sale, [[
+                'sale_item_id' => $originalItemId,
+                'product_id' => $product->id,
+                'product_unit_id' => $unit->id,
+                'qty' => 1,
+                'selling_price' => 180,
+            ]])
+        );
+
+        $this->assertTrue(collect($results)->every(fn (array $result) => $result['ok']));
+        $updatedItem = $sale->fresh()->items()->sole();
+        $this->assertSame($originalItemId, $updatedItem->id);
+        $this->assertSame('1.00', $updatedItem->qty);
+        $this->assertSame('24.0000', $updatedItem->base_qty);
+        $this->assertSame('24.0000', $updatedItem->conversion_rate_used);
+        $this->assertEquals(72.0000, $product->fresh()->stock_qty);
+        $this->assertSame(
+            ['48.0000', '24.0000'],
+            StockMovement::query()
+                ->where('reference_type', 'sale_edit')
+                ->orderBy('id')
+                ->pluck('qty')
+                ->all()
+        );
+        $this->assertMovementChain($product, 100, 72);
     }
 
     public function test_concurrent_update_and_delete_of_the_same_sale_leave_no_partial_state(): void
@@ -248,6 +292,135 @@ class SaleConcurrencyTest extends TestCase
         }
 
         $this->assertFalse($result['ok']);
+        $this->assertDatabaseHas('sales', ['id' => $sale->id]);
+        $this->assertDatabaseHas('sale_items', ['sale_id' => $sale->id]);
+        $this->assertEquals(8.0000, $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 1);
+        $this->assertMovementChain($product, 10, 8);
+    }
+
+    public function test_concurrent_commission_payment_blocks_sale_update(): void
+    {
+        $product = $this->createProduct('Commission payment update product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+        $technicianId = DB::table('technicians')->insertGetId([
+            'name' => 'Concurrent paid technician',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $commissionId = DB::table('technician_commissions')->insertGetId([
+            'sale_id' => $sale->id,
+            'technician_id' => $technicianId,
+            'commission_amount' => 5,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $blocker = $this->blockerConnection();
+        $blocker->beginTransaction();
+        $process = null;
+
+        try {
+            $blocker->table('technician_commissions')
+                ->where('id', $commissionId)
+                ->lockForUpdate()
+                ->first();
+            $process = $this->workerProcess($this->updateOperation(
+                $sale,
+                [$this->line($product, 3, 10)]
+            ));
+            $process->start();
+            usleep(250000);
+            $blocker->table('technician_commissions')
+                ->where('id', $commissionId)
+                ->update([
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            $blocker->commit();
+            $process->wait();
+        } finally {
+            if ($blocker->transactionLevel() > 0) {
+                $blocker->rollBack();
+            }
+            if ($process?->isRunning()) {
+                $process->stop();
+            }
+        }
+
+        $this->assertSame(0, $process?->getExitCode(), $process?->getErrorOutput());
+        $result = json_decode($process?->getOutput() ?? '', true, flags: JSON_THROW_ON_ERROR);
+        $this->assertFalse($result['ok']);
+        $this->assertDatabaseHas('technician_commissions', [
+            'id' => $commissionId,
+            'status' => 'paid',
+        ]);
+        $this->assertSame('2026-07-13', $sale->fresh()->sale_date);
+        $this->assertEquals(2, $sale->fresh()->items()->sole()->qty);
+        $this->assertEquals(8.0000, $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 1);
+        $this->assertMovementChain($product, 10, 8);
+    }
+
+    public function test_concurrent_commission_batching_blocks_sale_delete(): void
+    {
+        $product = $this->createProduct('Commission batch delete product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+        $technicianId = DB::table('technicians')->insertGetId([
+            'name' => 'Concurrent batched technician',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $commissionId = DB::table('technician_commissions')->insertGetId([
+            'sale_id' => $sale->id,
+            'technician_id' => $technicianId,
+            'commission_amount' => 5,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $blocker = $this->blockerConnection();
+        $blocker->beginTransaction();
+        $process = null;
+
+        try {
+            $blocker->table('technician_commissions')
+                ->where('id', $commissionId)
+                ->lockForUpdate()
+                ->first();
+            $process = $this->workerProcess([
+                'operation' => 'delete',
+                'sale_id' => $sale->id,
+            ]);
+            $process->start();
+            usleep(250000);
+            $blocker->table('technician_commissions')
+                ->where('id', $commissionId)
+                ->update([
+                    'payment_batch_id' => 99,
+                    'updated_at' => now(),
+                ]);
+            $blocker->commit();
+            $process->wait();
+        } finally {
+            if ($blocker->transactionLevel() > 0) {
+                $blocker->rollBack();
+            }
+            if ($process?->isRunning()) {
+                $process->stop();
+            }
+        }
+
+        $this->assertSame(0, $process?->getExitCode(), $process?->getErrorOutput());
+        $result = json_decode($process?->getOutput() ?? '', true, flags: JSON_THROW_ON_ERROR);
+        $this->assertFalse($result['ok']);
+        $this->assertDatabaseHas('technician_commissions', [
+            'id' => $commissionId,
+            'payment_batch_id' => 99,
+        ]);
         $this->assertDatabaseHas('sales', ['id' => $sale->id]);
         $this->assertDatabaseHas('sale_items', ['sale_id' => $sale->id]);
         $this->assertEquals(8.0000, $product->fresh()->stock_qty);
@@ -410,6 +583,46 @@ SQL);
             'type' => 'OUT',
             'qty' => $qty,
             'stock_before' => $product->stock_qty + $qty,
+            'stock_after' => $product->stock_qty,
+            'reference_type' => 'sale',
+            'reference_id' => $sale->id,
+        ]);
+
+        return $sale;
+    }
+
+    private function createExistingConvertedSale(
+        Product $product,
+        ProductUnit $unit,
+        float $qty,
+        float $price,
+        float $stockBefore
+    ): Sale {
+        $baseQty = $qty * (float) $unit->conversion_rate;
+        $sale = Sale::create([
+            'sale_no' => 'SAL-CONCURRENT-CONVERTED-'.$product->id,
+            'sale_date' => '2026-07-13',
+            'total_amount' => $qty * $price,
+            'delivery_fee' => 0,
+            'delivery_type' => 'pickup',
+            'discount' => 0,
+        ]);
+        $sale->items()->create([
+            'product_id' => $product->id,
+            'product_unit_id' => $unit->id,
+            'conversion_rate_used' => $unit->conversion_rate,
+            'base_qty' => $baseQty,
+            'qty' => $qty,
+            'selling_price' => $price,
+            'cost_price' => $product->cost_price,
+            'total' => $qty * $price,
+            'profit' => ($qty * $price) - ($baseQty * $product->cost_price),
+        ]);
+        StockMovement::create([
+            'product_id' => $product->id,
+            'type' => 'OUT',
+            'qty' => $baseQty,
+            'stock_before' => $stockBefore,
             'stock_after' => $product->stock_qty,
             'reference_type' => 'sale',
             'reference_id' => $sale->id,

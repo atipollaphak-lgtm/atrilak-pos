@@ -203,7 +203,7 @@ class TransactionDocumentSnapshotTest extends TestCase
         }
     }
 
-    public function test_sale_update_recaptures_changed_customer_and_preserves_or_refreshes_item_snapshots(): void
+    public function test_sale_update_recaptures_customer_and_preserves_same_identity_item_snapshots(): void
     {
         $context = $this->context();
         $second = $this->product('Second Product', 'Second Unit', 'SECOND');
@@ -237,7 +237,7 @@ class TransactionDocumentSnapshotTest extends TestCase
 
         $this->assertSame('Replacement Customer', $updated->customer_name_snapshot);
         $this->assertSame('Snapshot Store', $updated->store_name_snapshot);
-        $this->assertSame('Changed Product', $updatedItems[0]->product_name_snapshot);
+        $this->assertSame('Snapshot Product', $updatedItems[0]->product_name_snapshot);
         $this->assertSame('Second Product', $updatedItems[1]->product_name_snapshot);
     }
 

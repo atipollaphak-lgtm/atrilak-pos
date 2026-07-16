@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Models\CustomerDeliveryAddress;
 use App\Models\Quotation;
 use App\Models\Sale;
+use App\Models\SaleItem;
 use App\Services\Sales\CommissionService;
 use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
 use App\Services\Sales\SaleDecimalService;
 use App\Services\Sales\SaleIdempotencyService;
+use App\Services\Sales\SaleItemQuantityService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\SaleValidationService;
@@ -45,6 +47,8 @@ class SaleService
 
     protected SaleDecimalService $saleDecimalService;
 
+    protected SaleItemQuantityService $saleItemQuantityService;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -56,7 +60,8 @@ class SaleService
         SaleValidationService $saleValidationService,
         SaleIdempotencyService $saleIdempotencyService,
         ?TransactionDocumentSnapshotService $documentSnapshotService = null,
-        ?SaleDecimalService $saleDecimalService = null
+        ?SaleDecimalService $saleDecimalService = null,
+        ?SaleItemQuantityService $saleItemQuantityService = null
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -70,6 +75,8 @@ class SaleService
         $this->documentSnapshotService = $documentSnapshotService
             ?? new TransactionDocumentSnapshotService;
         $this->saleDecimalService = $saleDecimalService ?? new SaleDecimalService;
+        $this->saleItemQuantityService = $saleItemQuantityService
+            ?? new SaleItemQuantityService;
     }
 
     public function createSale(array $data, ?int $quotationId = null)
@@ -322,11 +329,21 @@ class SaleService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $lockedSale->load('items');
+            $lockedItems = SaleItem::query()
+                ->where('sale_id', $lockedSale->getKey())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $lockedSale->setRelation('items', $lockedItems);
+            $lockedCommissions = $this->commissionService
+                ->lockForSale($lockedSale);
+            $this->saleItemQuantityService
+                ->assertAuthoritativeQuantities($lockedItems);
 
             $newItemsForStock = $data['items'] ?? [];
             $this->saleValidationService->assertValidItems($newItemsForStock);
-            $existingItemIds = $lockedSale->items->modelKeys();
+            $existingItemIds = $lockedItems->modelKeys();
+            $submittedExistingIds = [];
 
             foreach ($newItemsForStock as $item) {
                 $saleItemId = $item['sale_item_id'] ?? null;
@@ -334,28 +351,91 @@ class SaleService
                     && ! in_array((int) $saleItemId, $existingItemIds, true)) {
                     throw new DomainException('รายการขายไม่ตรงกับใบขาย');
                 }
+
+                if ($saleItemId !== null && $saleItemId !== '') {
+                    $saleItemId = (int) $saleItemId;
+                    if (in_array($saleItemId, $submittedExistingIds, true)) {
+                        throw new DomainException('รายการขายเดิมถูกส่งมาซ้ำ กรุณาตรวจสอบรายการสินค้า');
+                    }
+                    $submittedExistingIds[] = $saleItemId;
+                }
             }
 
-            if (! $this->saleItemsHaveChanged($lockedSale->items, $newItemsForStock)) {
+            $itemsChanged = $this->saleItemsHaveChanged($lockedItems, $newItemsForStock);
+
+            if (! $itemsChanged) {
+                $itemsTotal = $this->saleValidationService
+                    ->calculateStoredItemsTotal($lockedItems);
+                $finalNetTotal = $this->finalNetTotal($lockedSale, $data, $itemsTotal);
+                $commissionAffected = $this->headerAffectsCommission(
+                    $lockedSale,
+                    $data,
+                    $finalNetTotal
+                );
+                $this->commissionService->assertCanChange(
+                    $lockedCommissions,
+                    $commissionAffected
+                );
+
+                if ($this->headerNeedsProfitGuard($lockedSale, $data)) {
+                    $this->assertUpdateProfitGuard(
+                        $lockedSale,
+                        $data,
+                        $this->saleDecimalService->sumMoney(
+                            $lockedItems->pluck('profit')
+                        )
+                    );
+                }
+
                 $this->updateSaleHeader($lockedSale, $data);
+
+                if ($commissionAffected) {
+                    $this->commissionService->refreshPendingForSale(
+                        $lockedSale->fresh('items'),
+                        $lockedCommissions
+                    );
+                }
 
                 return $lockedSale;
             }
 
-            $productIds = $lockedSale->items
+            $productIds = $lockedItems
                 ->pluck('product_id')
                 ->merge(array_column($newItemsForStock, 'product_id'))
                 ->all();
 
             $lockedProducts = $this->stockLockService->lockProducts($productIds);
-            $newItemsForStock = $this->productUnitConversionService
-                ->resolveItems($newItemsForStock);
-
-            $itemSnapshots = $this->updatedItemSnapshots(
-                $lockedSale->items,
-                $newItemsForStock,
+            $resolvedItems = collect(
+                $this->productUnitConversionService->resolveLines(
+                    $newItemsForStock,
+                    $lockedProducts
+                )
+            )->map(fn ($line): array => $line->toArray())->all();
+            $updatePlan = $this->buildUpdatePlan(
+                $lockedItems,
+                $resolvedItems,
                 $lockedProducts
             );
+            $plannedAttributes = collect($updatePlan['lines'])->pluck('attributes');
+            $grandTotal = $this->saleDecimalService->sumMoney(
+                $plannedAttributes->pluck('total')
+            );
+            $productProfit = $this->saleDecimalService->sumMoney(
+                $plannedAttributes->pluck('profit')
+            );
+            $finalNetTotal = $this->finalNetTotal($lockedSale, $data, $grandTotal);
+            $commissionAffected = $updatePlan['commission_affected']
+                || $this->headerAffectsCommission(
+                    $lockedSale,
+                    $data,
+                    $finalNetTotal
+                );
+
+            $this->commissionService->assertCanChange(
+                $lockedCommissions,
+                $commissionAffected
+            );
+            $this->assertUpdateProfitGuard($lockedSale, $data, $productProfit);
 
             $this->stockService->restoreFromSale(
                 $lockedSale,
@@ -366,32 +446,27 @@ class SaleService
 
             $this->stockLockService->assertSufficientStock(
                 $lockedProducts,
-                $newItemsForStock
+                $plannedAttributes->all()
             );
 
-            $lockedSale->items()->delete();
-            $lockedSale->unsetRelation('items');
-
-            $this->saleItemService->createItems(
+            $this->stockService->deductLines(
                 $lockedSale,
-                $newItemsForStock,
-                $lockedProducts,
-                $itemSnapshots
-            );
-
-            $grandTotal = $this->saleValidationService
-                ->calculateItemsTotal($newItemsForStock);
-
-            $lockedSale->unsetRelation('items');
-
-            $this->stockService->deductFromSale(
-                $lockedSale,
+                $plannedAttributes,
                 $lockedProducts,
                 'sale_edit',
                 'ขายออกจากการแก้ไขบิล '.$lockedSale->sale_no
             );
 
+            $this->persistUpdatePlan($lockedSale, $updatePlan);
             $this->updateSaleHeader($lockedSale, $data, $grandTotal);
+
+            if ($commissionAffected) {
+                $lockedSale->unsetRelation('items');
+                $this->commissionService->refreshPendingForSale(
+                    $lockedSale->fresh('items'),
+                    $lockedCommissions
+                );
+            }
 
             return $lockedSale;
         });
@@ -421,9 +496,9 @@ class SaleService
         ?string $itemsTotal = null
     ): void {
         $deliveryFee = $this->saleValidationService
-            ->money($data['delivery_fee'] ?? 0);
+            ->money($data['delivery_fee'] ?? $sale->delivery_fee);
         $discount = $this->saleValidationService
-            ->money($data['discount'] ?? 0);
+            ->money($data['discount'] ?? $sale->discount);
 
         if ($itemsTotal === null
             && $deliveryFee === $this->saleValidationService->money($sale->delivery_fee)
@@ -440,8 +515,10 @@ class SaleService
         }
 
         $updates = [
-            'customer_id' => $data['customer_id'] ?? null,
-            'sale_date' => $data['sale_date'],
+            'customer_id' => array_key_exists('customer_id', $data)
+                ? $data['customer_id']
+                : $sale->customer_id,
+            'sale_date' => $data['sale_date'] ?? $sale->sale_date,
             'total_amount' => $netTotal,
             'delivery_fee' => $deliveryFee,
             'discount' => $discount,
@@ -484,14 +561,16 @@ class SaleService
         $sale->update($updates);
     }
 
-    private function updatedItemSnapshots(
+    private function buildUpdatePlan(
         Collection $existingItems,
         array $submittedItems,
         Collection $lockedProducts
     ): array {
         $freshSnapshots = $this->documentSnapshotService
-            ->saleItemSnapshots($submittedItems, $lockedProducts);
+            ->saleItemSnapshots($submittedItems, $lockedProducts, true);
         $existingItemsById = $existingItems->keyBy('id');
+        $retainedIds = [];
+        $commissionAffected = false;
         $snapshotColumns = [
             'product_name_snapshot',
             'product_sku_snapshot',
@@ -500,25 +579,189 @@ class SaleService
             'unit_code_snapshot',
         ];
 
-        return collect($submittedItems)->map(function (
+        $lines = collect($submittedItems)->map(function (
             array $submittedItem,
             int $index
-        ) use ($existingItemsById, $freshSnapshots, $snapshotColumns): array {
+        ) use (
+            $existingItemsById,
+            $freshSnapshots,
+            $snapshotColumns,
+            $lockedProducts,
+            &$retainedIds,
+            &$commissionAffected
+        ): array {
             $existingItem = $existingItemsById->get(
                 (int) ($submittedItem['sale_item_id'] ?? 0)
             );
+            $sameProduct = $existingItem !== null
+                && (int) $existingItem->product_id === (int) $submittedItem['product_id'];
+            $sameIdentity = $sameProduct
+                && $this->nullableId($existingItem->product_unit_id)
+                    === $this->nullableId($submittedItem['product_unit_id'] ?? null);
+            $sameQuantityIdentity = $sameIdentity
+                && $this->decimalEquals($existingItem->qty, $submittedItem['qty']);
 
-            if ($existingItem === null
-                || ! $this->saleItemMatches($existingItem, $submittedItem)) {
-                return $freshSnapshots[$index];
+            if ($existingItem !== null) {
+                $retainedIds[] = (int) $existingItem->id;
             }
 
-            return collect($snapshotColumns)
-                ->mapWithKeys(fn (string $column) => [
+            if ($sameQuantityIdentity) {
+                $submittedItem['conversion_rate_used'] = $existingItem->conversion_rate_used;
+                $submittedItem['base_qty'] = $this->saleItemQuantityService
+                    ->authoritativeBaseQuantity($existingItem);
+            }
+
+            $snapshots = $sameIdentity
+                ? collect($snapshotColumns)->mapWithKeys(fn (string $column) => [
                     $column => $existingItem->getAttribute($column),
-                ])
-                ->all();
+                ])->all()
+                : $freshSnapshots[$index];
+            $costPrice = $sameProduct
+                ? $existingItem->cost_price
+                : $lockedProducts->get((int) $submittedItem['product_id'])?->cost_price;
+
+            if ($costPrice === null) {
+                throw new DomainException('ไม่พบสินค้า');
+            }
+
+            $exactMatch = $existingItem !== null
+                && $this->saleItemMatches($existingItem, $submittedItem);
+            $attributes = $exactMatch
+                ? array_merge($existingItem->only([
+                    'product_id',
+                    'product_unit_id',
+                    'conversion_rate_used',
+                    'base_qty',
+                    'qty',
+                    'selling_price',
+                    'cost_price',
+                    'total',
+                    'profit',
+                ]), $snapshots)
+                : $this->saleItemService->attributesForResolvedLine(
+                    $submittedItem,
+                    $costPrice,
+                    $snapshots
+                );
+
+            if ($existingItem === null
+                || ! $sameProduct
+                || ! $this->decimalEquals($existingItem->qty, $submittedItem['qty'])
+                || ! $this->decimalEquals(
+                    $existingItem->selling_price,
+                    $submittedItem['selling_price']
+                )) {
+                $commissionAffected = true;
+            }
+
+            return [
+                'existing_item' => $existingItem,
+                'attributes' => $attributes,
+                'persist' => ! $exactMatch,
+            ];
         })->all();
+
+        $removedItems = $existingItems
+            ->reject(fn (SaleItem $item): bool => in_array(
+                (int) $item->id,
+                $retainedIds,
+                true
+            ))
+            ->values();
+
+        return [
+            'lines' => $lines,
+            'removed_items' => $removedItems,
+            'commission_affected' => $commissionAffected || $removedItems->isNotEmpty(),
+        ];
+    }
+
+    private function persistUpdatePlan(Sale $sale, array $plan): void
+    {
+        foreach ($plan['lines'] as $line) {
+            if (! $line['persist']) {
+                continue;
+            }
+
+            $item = $line['existing_item'];
+            if ($item === null) {
+                $sale->items()->create($line['attributes']);
+            } else {
+                $item->fill($line['attributes']);
+                $item->save();
+            }
+        }
+
+        $plan['removed_items']->each(fn (SaleItem $item) => $item->delete());
+        $sale->unsetRelation('items');
+    }
+
+    private function finalNetTotal(Sale $sale, array $data, string $itemsTotal): string
+    {
+        return $this->saleValidationService->calculateNetTotal(
+            $itemsTotal,
+            $data['delivery_fee'] ?? $sale->delivery_fee,
+            $data['discount'] ?? $sale->discount
+        );
+    }
+
+    private function headerAffectsCommission(
+        Sale $sale,
+        array $data,
+        string $finalNetTotal
+    ): bool {
+        return (string) ($data['sale_date'] ?? $sale->sale_date) !== (string) $sale->sale_date
+            || $this->nullableId($data['technician_id'] ?? $sale->technician_id)
+                !== $this->nullableId($sale->technician_id)
+            || ! $this->decimalEquals($finalNetTotal, $sale->total_amount);
+    }
+
+    private function headerNeedsProfitGuard(Sale $sale, array $data): bool
+    {
+        foreach (['delivery_fee', 'discount', 'delivery_type', 'customer_delivery_address_id'] as $field) {
+            if (array_key_exists($field, $data)
+                && (string) $data[$field] !== (string) $sale->getAttribute($field)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function assertUpdateProfitGuard(
+        Sale $sale,
+        array $data,
+        string $productProfit
+    ): void {
+        $deliveryType = $data['delivery_type'] ?? $sale->delivery_type;
+        $deliveryAddressId = $data['customer_delivery_address_id']
+            ?? $sale->customer_delivery_address_id;
+        $deliveryFee = $this->saleValidationService->money(
+            $data['delivery_fee'] ?? $sale->delivery_fee
+        );
+        $minimumProfit = '0.00';
+        $deliveryZoneId = null;
+
+        if ($deliveryType === 'delivery' && $deliveryAddressId !== null) {
+            $address = CustomerDeliveryAddress::with('deliveryZone')
+                ->find($deliveryAddressId);
+            if ($address?->deliveryZone !== null) {
+                $minimumProfit = $this->saleValidationService
+                    ->money($address->deliveryZone->minimum_profit);
+                $deliveryZoneId = $address->deliveryZone->id;
+            }
+        }
+
+        $result = $this->profitGuardService->check([
+            'delivery_type' => $deliveryType,
+            'delivery_fee' => $deliveryFee,
+            'delivery_zone_id' => $deliveryZoneId,
+            'minimum_profit' => $minimumProfit,
+        ], $productProfit);
+
+        if (! $result['passed']) {
+            throw new DomainException($result['message']);
+        }
     }
 
     private function saleItemMatches($existingItem, array $submittedItem): bool
@@ -564,10 +807,20 @@ class SaleService
                 );
             }
 
-            $lockedSale->load('items');
+            $lockedItems = SaleItem::query()
+                ->where('sale_id', $lockedSale->getKey())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $lockedSale->setRelation('items', $lockedItems);
+            $lockedCommissions = $this->commissionService
+                ->lockForSale($lockedSale);
+            $this->commissionService->assertCanChange($lockedCommissions, true);
+            $this->saleItemQuantityService
+                ->assertAuthoritativeQuantities($lockedItems);
 
             $lockedProducts = $this->stockLockService->lockProducts(
-                $lockedSale->items->pluck('product_id')->all()
+                $lockedItems->pluck('product_id')->all()
             );
 
             $this->stockService->restoreFromSale(

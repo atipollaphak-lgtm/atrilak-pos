@@ -66,7 +66,7 @@ class QuotationOriginSaleConsistencyCharacterizationTest extends TestCase
         $updatedItem = $updated->items()->sole();
 
         $this->assertSame($quotation->id, $updated->quotation_id);
-        $this->assertNotSame($oldItemId, $updatedItem->id);
+        $this->assertSame($oldItemId, $updatedItem->id);
         $this->assertSame('1.0000', $updatedItem->conversion_rate_used);
         $this->assertSame('3.0000', $updatedItem->base_qty);
         $this->assertSame('36', (string) $updated->total_amount);

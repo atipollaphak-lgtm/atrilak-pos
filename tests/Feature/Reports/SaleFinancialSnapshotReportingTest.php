@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Services\Sales\SaleFinancialSnapshotService;
+use App\Services\SaleService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -182,5 +183,33 @@ class SaleFinancialSnapshotReportingTest extends TestCase
         $this->assertSame('185.00', $summary['cost']);
         $this->assertSame('175.00', $summary['profit']);
         $this->assertSame('175.00', $this->sale->items()->sole()->profit);
+    }
+
+    public function test_updated_sale_reports_use_the_final_stored_financial_snapshots(): void
+    {
+        $item = $this->sale->items()->sole();
+
+        app(SaleService::class)->updateSale($this->sale, [
+            'customer_id' => null,
+            'sale_date' => '2026-07-16',
+            'delivery_fee' => '0.00',
+            'discount' => '0.00',
+            'items' => [[
+                'sale_item_id' => $item->id,
+                'product_id' => $this->product->id,
+                'product_unit_id' => null,
+                'qty' => '2.00',
+                'selling_price' => '200.00',
+            ]],
+        ]);
+        $this->product->update(['cost_price' => '999.00']);
+
+        $summary = app(SaleFinancialSnapshotService::class)
+            ->saleSummary($this->sale->fresh('items'));
+
+        $this->assertSame($item->id, $this->sale->fresh()->items()->sole()->id);
+        $this->assertSame('400.00', $summary['revenue']);
+        $this->assertSame('240.00', $summary['cost']);
+        $this->assertSame('160.00', $summary['profit']);
     }
 }

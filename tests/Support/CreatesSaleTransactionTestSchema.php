@@ -168,6 +168,8 @@ trait CreatesSaleTransactionTestSchema
             $table->foreignId('technician_id')->constrained()->cascadeOnDelete();
             $table->decimal('commission_amount', 12, 2)->default(0);
             $table->string('status')->default('pending');
+            $table->unsignedBigInteger('payment_batch_id')->nullable();
+            $table->timestamp('paid_at')->nullable();
             $table->timestamps();
         });
     }

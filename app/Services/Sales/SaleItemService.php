@@ -45,6 +45,35 @@ class SaleItemService
         );
     }
 
+    public function attributesForResolvedLine(
+        array $item,
+        mixed $costPrice,
+        array $snapshots = []
+    ): array {
+        $lineTotal = $this->decimalService->lineTotal(
+            $item['qty'],
+            $item['selling_price']
+        );
+        $lineProfit = $this->decimalService->lineProfitFromBaseQuantity(
+            $item['qty'],
+            $item['selling_price'],
+            $item['base_qty'],
+            $costPrice
+        );
+
+        return array_merge([
+            'product_id' => (int) $item['product_id'],
+            'product_unit_id' => $item['product_unit_id'] ?? null,
+            'conversion_rate_used' => $item['conversion_rate_used'],
+            'base_qty' => $item['base_qty'],
+            'qty' => $item['qty'],
+            'selling_price' => $item['selling_price'],
+            'cost_price' => $this->decimalService->money($costPrice),
+            'total' => $lineTotal,
+            'profit' => $lineProfit,
+        ], $snapshots);
+    }
+
     private function createItemsUsingCostQuantity(
         Sale $sale,
         array $items,
@@ -65,28 +94,26 @@ class SaleItemService
 
             $productUnitId = $item['product_unit_id'] ?? null;
 
-            $lineTotal = $this->decimalService->lineTotal($qty, $price);
             $costPrice = $product->cost_price ?? 0;
-            $lineProfit = $useBaseQuantityForCost
-                ? $this->decimalService->lineProfitFromBaseQuantity(
-                    $qty,
-                    $price,
-                    $item['base_qty'],
-                    $costPrice
+            $attributes = $useBaseQuantityForCost
+                ? $this->attributesForResolvedLine(
+                    $item,
+                    $costPrice,
+                    $snapshots[$index] ?? []
                 )
-                : $this->decimalService->lineProfit($qty, $price, $costPrice);
+                : array_merge([
+                    'product_id' => $product->id,
+                    'product_unit_id' => $productUnitId,
+                    'conversion_rate_used' => $item['conversion_rate_used'],
+                    'base_qty' => $item['base_qty'],
+                    'qty' => $qty,
+                    'selling_price' => $price,
+                    'cost_price' => $costPrice,
+                    'total' => $this->decimalService->lineTotal($qty, $price),
+                    'profit' => $this->decimalService->lineProfit($qty, $price, $costPrice),
+                ], $snapshots[$index] ?? []);
 
-            $sale->items()->create(array_merge([
-                'product_id' => $product->id,
-                'product_unit_id' => $productUnitId,
-                'conversion_rate_used' => $item['conversion_rate_used'],
-                'base_qty' => $item['base_qty'],
-                'qty' => $qty,
-                'selling_price' => $price,
-                'cost_price' => $costPrice,
-                'total' => $lineTotal,
-                'profit' => $lineProfit,
-            ], $snapshots[$index] ?? []));
+            $sale->items()->create($attributes);
         }
     }
 }

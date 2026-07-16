@@ -474,7 +474,7 @@ class ProductUnitConversionTest extends TestCase
         $this->assertSame('1.2145', $movement->stock_after);
     }
 
-    public function test_legacy_item_with_product_unit_but_no_snapshot_restores_sale_quantity_only(): void
+    public function test_legacy_item_with_product_unit_but_no_snapshot_blocks_delete(): void
     {
         $product = $this->product('Legacy restore', '8.0000');
         $unit = $this->unit($product, 'case', '12.0000');
@@ -494,13 +494,14 @@ class ProductUnitConversionTest extends TestCase
             'profit' => '10.00',
         ]);
 
-        app(SaleService::class)->deleteSale($sale);
+        $this->expectDomainFailure(fn () => app(SaleService::class)->deleteSale($sale));
 
-        $this->assertSame('10.0000', $product->fresh()->stock_qty);
-        $this->assertSame('2.0000', StockMovement::sole()->qty);
+        $this->assertSame('8.0000', $product->fresh()->stock_qty);
+        $this->assertDatabaseHas('sales', ['id' => $sale->id]);
+        $this->assertDatabaseCount('stock_movements', 0);
     }
 
-    public function test_update_of_legacy_item_with_unit_restores_sale_quantity_only(): void
+    public function test_update_of_legacy_item_with_unit_and_no_snapshot_is_blocked(): void
     {
         $product = $this->product('Legacy update restore', '8.0000');
         $unit = $this->unit($product, 'case', '12.0000');
@@ -520,7 +521,7 @@ class ProductUnitConversionTest extends TestCase
             'profit' => '10.00',
         ]);
 
-        app(SaleService::class)->updateSale($sale, [
+        $this->expectDomainFailure(fn () => app(SaleService::class)->updateSale($sale, [
             'customer_id' => null,
             'sale_date' => '2026-07-14',
             'items' => [[
@@ -532,11 +533,248 @@ class ProductUnitConversionTest extends TestCase
             ]],
             'delivery_fee' => 0,
             'discount' => 0,
+        ]));
+
+        $this->assertSame('8.0000', $product->fresh()->stock_qty);
+        $this->assertNull($sale->fresh()->items()->sole()->base_qty);
+        $this->assertDatabaseCount('stock_movements', 0);
+    }
+
+    public function test_converted_quantity_update_preserves_item_identity_cost_and_uses_base_profit(): void
+    {
+        $product = $this->product('Converted update', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+        $sale = $this->sale([$this->line($product, '2.00', '180.00', $case)]);
+        $item = $sale->items()->sole();
+        $product->update(['cost_price' => '9.00']);
+
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale, [[
+            'sale_item_id' => $item->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $case->id,
+            'qty' => '1.00',
+            'selling_price' => '180.00',
+        ]]));
+
+        $updated = $sale->fresh()->items()->sole();
+        $this->assertSame($item->id, $updated->id);
+        $this->assertSame('24.0000', $updated->base_qty);
+        $this->assertSame('5.00', $updated->cost_price);
+        $this->assertSame('180.00', $updated->total);
+        $this->assertSame('60.00', $updated->profit);
+        $this->assertSame('76.0000', $product->fresh()->stock_qty);
+        $this->assertSame(['48.0000', '24.0000'], StockMovement::where('reference_type', 'sale_edit')->pluck('qty')->all());
+    }
+
+    public function test_price_only_update_preserves_original_quantity_and_cost_snapshots(): void
+    {
+        $product = $this->product('Price-only update', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+        $sale = $this->sale([$this->line($product, '2.00', '180.00', $case)]);
+        $item = $sale->items()->sole();
+        $product->update(['cost_price' => '9.00']);
+        $case->update(['conversion_rate' => '12.0000']);
+
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale, [[
+            'sale_item_id' => $item->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $case->id,
+            'qty' => '2.00',
+            'selling_price' => '200.00',
+        ]]));
+
+        $updated = $sale->fresh()->items()->sole();
+        $this->assertSame($item->id, $updated->id);
+        $this->assertSame('24.0000', $updated->conversion_rate_used);
+        $this->assertSame('48.0000', $updated->base_qty);
+        $this->assertSame('5.00', $updated->cost_price);
+        $this->assertSame('160.00', $updated->profit);
+    }
+
+    public function test_unit_change_preserves_cost_but_refreshes_quantity_and_text_snapshots(): void
+    {
+        $product = $this->product('Unit update', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+        $dozen = $this->unit($product, 'dozen', '12.0000');
+        $sale = $this->sale([$this->line($product, '1.00', '180.00', $case)]);
+        $item = $sale->items()->sole();
+        $product->update(['cost_price' => '9.00']);
+
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale, [[
+            'sale_item_id' => $item->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $dozen->id,
+            'qty' => '1.00',
+            'selling_price' => '180.00',
+        ]]));
+
+        $updated = $sale->fresh()->items()->sole();
+        $this->assertSame($item->id, $updated->id);
+        $this->assertSame('5.00', $updated->cost_price);
+        $this->assertSame('12.0000', $updated->base_qty);
+        $this->assertSame('dozen', $updated->unit_name_snapshot);
+        $this->assertSame('120.00', $updated->profit);
+    }
+
+    public function test_product_replacement_uses_current_replacement_cost_and_retains_item_id(): void
+    {
+        $oldProduct = $this->product('Old product', '10.0000');
+        $replacement = $this->product('Replacement product', '10.0000');
+        $replacement->update(['cost_price' => '7.00']);
+        $sale = $this->sale([$this->line($oldProduct, '2.00', '10.00')]);
+        $item = $sale->items()->sole();
+
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale, [[
+            'sale_item_id' => $item->id,
+            'product_id' => $replacement->id,
+            'product_unit_id' => null,
+            'qty' => '2.00',
+            'selling_price' => '10.00',
+        ]]));
+
+        $updated = $sale->fresh()->items()->sole();
+        $this->assertSame($item->id, $updated->id);
+        $this->assertSame($replacement->id, $updated->product_id);
+        $this->assertSame('7.00', $updated->cost_price);
+        $this->assertSame('6.00', $updated->profit);
+        $this->assertSame('10.0000', $oldProduct->fresh()->stock_qty);
+        $this->assertSame('8.0000', $replacement->fresh()->stock_qty);
+    }
+
+    public function test_ambiguous_converted_historical_item_blocks_update_and_delete(): void
+    {
+        $product = $this->product('Ambiguous legacy', '8.0000');
+        $unit = $this->unit($product, 'case', '12.0000');
+        $sale = Sale::create([
+            'sale_no' => 'SAL-AMBIGUOUS-1',
+            'sale_date' => '2026-07-14',
+            'total_amount' => '20.00',
+            'delivery_type' => 'pickup',
+        ]);
+        $item = $sale->items()->create([
+            'product_id' => $product->id,
+            'product_unit_id' => $unit->id,
+            'qty' => '2.00',
+            'selling_price' => '10.00',
+            'cost_price' => '5.00',
+            'total' => '20.00',
+            'profit' => '10.00',
         ]);
 
-        $this->assertSame('9.0000', $product->fresh()->stock_qty);
-        $this->assertSame('2.0000', StockMovement::where('type', 'IN')->sole()->qty);
-        $this->assertSame('1.0000', $sale->fresh()->items()->sole()->base_qty);
+        $this->expectDomainFailure(fn () => app(SaleService::class)->updateSale(
+            $sale,
+            $this->updatePayload($sale, [[
+                'sale_item_id' => $item->id,
+                'product_id' => $product->id,
+                'product_unit_id' => $unit->id,
+                'qty' => '3.00',
+                'selling_price' => '10.00',
+            ]])
+        ));
+        $this->expectDomainFailure(fn () => app(SaleService::class)->deleteSale($sale));
+
+        $this->assertDatabaseHas('sales', ['id' => $sale->id]);
+        $this->assertDatabaseHas('sale_items', ['id' => $item->id]);
+        $this->assertSame('8.0000', $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 0);
+    }
+
+    public function test_update_profit_guard_uses_canonical_base_profit_and_rolls_back(): void
+    {
+        $product = $this->product('Update guard', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+        $sale = $this->deliverySale([$this->line($product, '2.00', '180.00', $case)], '20.00', '140.00');
+        $item = $sale->items()->sole();
+        $beforeMovements = StockMovement::count();
+
+        $this->expectDomainFailure(fn () => app(SaleService::class)->updateSale(
+            $sale,
+            $this->updatePayload($sale, [[
+                'sale_item_id' => $item->id,
+                'product_id' => $product->id,
+                'product_unit_id' => $case->id,
+                'qty' => '2.00',
+                'selling_price' => '100.00',
+            ]])
+        ));
+
+        $this->assertSame('180.00', $item->fresh()->selling_price);
+        $this->assertSame('120.00', $item->fresh()->profit);
+        $this->assertSame('52.0000', $product->fresh()->stock_qty);
+        $this->assertSame($beforeMovements, StockMovement::count());
+    }
+
+    public function test_update_adds_and_removes_lines_selectively_and_preserves_retained_identity(): void
+    {
+        $first = $this->product('Retained product', '100.0000');
+        $case = $this->unit($first, 'case', '24.0000');
+        $removed = $this->product('Removed product', '20.0000');
+        $added = $this->product('Added product', '20.0000');
+        $added->update(['cost_price' => '7.00']);
+        $sale = $this->sale([
+            $this->line($first, '1.00', '180.00', $case),
+            $this->line($removed, '2.00', '10.00'),
+        ]);
+        $items = $sale->items()->orderBy('id')->get();
+
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale, [[
+            'sale_item_id' => $items[0]->id,
+            'product_id' => $first->id,
+            'product_unit_id' => $case->id,
+            'qty' => '2.00',
+            'selling_price' => '180.00',
+        ], [
+            'sale_item_id' => null,
+            'product_id' => $added->id,
+            'product_unit_id' => null,
+            'qty' => '3.00',
+            'selling_price' => '10.00',
+        ]]));
+
+        $updated = $sale->fresh()->items()->orderBy('id')->get();
+        $this->assertCount(2, $updated);
+        $this->assertSame($items[0]->id, $updated[0]->id);
+        $this->assertDatabaseMissing('sale_items', ['id' => $items[1]->id]);
+        $this->assertSame('5.00', $updated[0]->cost_price);
+        $this->assertSame('7.00', $updated[1]->cost_price);
+        $this->assertSame('52.0000', $first->fresh()->stock_qty);
+        $this->assertSame('20.0000', $removed->fresh()->stock_qty);
+        $this->assertSame('17.0000', $added->fresh()->stock_qty);
+    }
+
+    public function test_update_aggregates_mixed_units_for_the_same_product(): void
+    {
+        $product = $this->product('Mixed update product', '100.0000');
+        $case = $this->unit($product, 'case', '24.0000');
+        $sale = $this->sale([
+            $this->line($product, '1.00', '180.00', $case),
+            $this->line($product, '2.00', '10.00'),
+        ]);
+        $items = $sale->items()->orderBy('id')->get();
+
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale, [[
+            'sale_item_id' => $items[0]->id,
+            'product_id' => $product->id,
+            'product_unit_id' => $case->id,
+            'qty' => '2.00',
+            'selling_price' => '180.00',
+        ], [
+            'sale_item_id' => $items[1]->id,
+            'product_id' => $product->id,
+            'product_unit_id' => null,
+            'qty' => '5.00',
+            'selling_price' => '10.00',
+        ]]));
+
+        $this->assertSame('47.0000', $product->fresh()->stock_qty);
+        $this->assertSame(
+            ['24.0000', '2.0000', '48.0000', '5.0000'],
+            StockMovement::where('reference_type', 'sale_edit')->pluck('qty')->all()
+        );
+        $this->assertSame(
+            $items->pluck('id')->all(),
+            $sale->fresh()->items()->orderBy('id')->pluck('id')->all()
+        );
     }
 
     private function product(string $name, string $stock): Product
@@ -595,6 +833,17 @@ class ProductUnitConversionTest extends TestCase
             'discount' => 0,
             'items' => $items,
         ]);
+    }
+
+    private function updatePayload(Sale $sale, array $items): array
+    {
+        return [
+            'customer_id' => $sale->customer_id,
+            'sale_date' => $sale->sale_date,
+            'delivery_fee' => $sale->delivery_fee,
+            'discount' => $sale->discount,
+            'items' => $items,
+        ];
     }
 
     private function deliverySale(array $items, string $deliveryFee, string $minimumProfit): Sale

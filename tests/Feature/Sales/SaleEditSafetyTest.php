@@ -344,6 +344,16 @@ class SaleEditSafetyTest extends TestCase
         ]);
     }
 
+    public function test_sale_edit_script_guards_repeated_submit(): void
+    {
+        $script = file_get_contents(public_path('js/modules/sale-edit.js'));
+
+        $this->assertStringContainsString("form.dataset.submitting === '1'", $script);
+        $this->assertStringContainsString("form.dataset.submitting = '1'", $script);
+        $this->assertStringContainsString('button.disabled = true', $script);
+        $this->assertStringContainsString('form.checkValidity()', $script);
+    }
+
     private function customer(string $name, bool $active = true): Customer
     {
         return Customer::query()->create([

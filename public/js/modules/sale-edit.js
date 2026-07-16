@@ -1,6 +1,7 @@
 (() => {
     const itemRows = document.getElementById('sale-items');
     const addRowButton = document.getElementById('addRow');
+    const form = document.getElementById('sale-edit-form');
 
     if (!itemRows || !addRowButton) {
         return;
@@ -81,6 +82,34 @@
         row.querySelector('.price').value = selectedOption?.dataset.price || 0;
 
         calculateTotals();
+    });
+
+    form?.addEventListener('submit', (event) => {
+        if (!form.checkValidity()) {
+            return;
+        }
+
+        if (form.dataset.submitting === '1') {
+            event.preventDefault();
+
+            return;
+        }
+
+        form.dataset.submitting = '1';
+        form.querySelectorAll('button[type="submit"]').forEach((button) => {
+            button.disabled = true;
+        });
+    });
+
+    window.addEventListener('pageshow', () => {
+        if (!form) {
+            return;
+        }
+
+        delete form.dataset.submitting;
+        form.querySelectorAll('button[type="submit"]').forEach((button) => {
+            button.disabled = false;
+        });
     });
 
     calculateTotals();

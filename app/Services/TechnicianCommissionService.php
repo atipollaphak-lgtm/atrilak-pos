@@ -18,6 +18,15 @@ class TechnicianCommissionService
 
     public function createFromSale(Sale $sale): ?TechnicianCommission
     {
+        $attributes = $this->attributesFromSale($sale);
+
+        return $attributes === null
+            ? null
+            : TechnicianCommission::create($attributes);
+    }
+
+    public function attributesFromSale(Sale $sale): ?array
+    {
         if (! $sale->technician_id) {
             return null;
         }
@@ -67,7 +76,7 @@ class TechnicianCommissionService
             return null;
         }
 
-        return TechnicianCommission::create([
+        return [
             'technician_id' => $sale->technician_id,
             'sale_id' => $sale->id,
             'commission_date' => $sale->sale_date,
@@ -78,7 +87,7 @@ class TechnicianCommissionService
             'rule_name' => 'คำนวณตามกฎสินค้า/หมวดสินค้า',
             'calculation_detail' => json_encode($calculationDetails, JSON_UNESCAPED_UNICODE),
             'remark' => 'สร้างอัตโนมัติจากบิลขาย '.$sale->sale_no,
-        ]);
+        ];
     }
 
     private function findRule($product): ?TechnicianCommissionRule

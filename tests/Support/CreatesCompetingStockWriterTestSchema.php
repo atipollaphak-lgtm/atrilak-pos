@@ -24,9 +24,7 @@ trait CreatesCompetingStockWriterTestSchema
 
         Schema::table('products', function (Blueprint $table) {
             $table->unsignedBigInteger('category_id')->nullable();
-            $table->unsignedBigInteger('unit_id')->nullable();
             $table->string('barcode')->nullable();
-            $table->string('unit')->default('piece');
             $table->boolean('vat_enabled')->default(false);
             $table->boolean('active')->default(true);
             $table->text('remark')->nullable();

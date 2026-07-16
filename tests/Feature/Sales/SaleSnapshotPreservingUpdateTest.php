@@ -131,7 +131,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
         $this->assertSame('88.0000', $product->fresh()->stock_qty);
     }
 
-    public function test_changed_item_order_is_treated_as_item_change(): void
+    public function test_changed_item_order_preserves_existing_item_ids(): void
     {
         [$sale, $product, $productUnit, $firstItem] = $this->existingSale();
         $secondItem = $sale->items()->create([
@@ -163,11 +163,11 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
             'items' => $items,
         ]));
 
-        $this->assertDatabaseMissing('sale_items', ['id' => $firstItem->id]);
-        $this->assertDatabaseMissing('sale_items', ['id' => $secondItem->id]);
+        $this->assertDatabaseHas('sale_items', ['id' => $firstItem->id]);
+        $this->assertDatabaseHas('sale_items', ['id' => $secondItem->id]);
         $this->assertSame($beforeMovements + 4, StockMovement::count());
         $this->assertSame(
-            array_column($items, 'selling_price'),
+            ['95.00', '80.00'],
             $sale->fresh()->items()->orderBy('id')->pluck('selling_price')->all()
         );
     }
@@ -180,7 +180,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
             'items' => $items,
         ]));
 
-        $this->assertDatabaseMissing('sale_items', ['id' => $oldItem->id]);
+        $this->assertDatabaseHas('sale_items', ['id' => $oldItem->id]);
         $this->assertSame($beforeMovements + 2, StockMovement::count());
     }
 

@@ -3,9 +3,13 @@
 namespace Tests\Feature\Sales;
 
 use App\Models\Category;
+use App\Models\Customer;
+use App\Models\CustomerDeliveryAddress;
+use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\Sale;
+use App\Models\StockMovement;
 use App\Models\Technician;
 use App\Models\TechnicianCommission;
 use App\Models\TechnicianCommissionRule;
@@ -53,36 +57,49 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertDatabaseCount('technician_commissions', 1);
     }
 
-    public function test_header_only_update_keeps_commission_snapshot_unchanged(): void
+    public function test_customer_only_update_keeps_commission_snapshot_unchanged(): void
     {
         [$sale, , $commission] = $this->createCommissionedSale();
         $before = $this->commissionSnapshot($commission);
 
         app(SaleService::class)->updateSale($sale, array_replace(
             $this->updatePayload($sale),
-            ['sale_date' => '2026-07-16']
+            ['customer_id' => null]
         ));
 
         $this->assertSame(
             $before,
             $this->commissionSnapshot($commission->fresh())
         );
-        $this->assertSame('2026-07-16', $sale->fresh()->sale_date);
+        $this->assertSame('2026-07-15', $sale->fresh()->sale_date);
     }
 
-    public function test_item_update_keeps_commission_snapshot_unchanged(): void
+    public function test_sale_date_update_recreates_pending_commission(): void
     {
         [$sale, , $commission] = $this->createCommissionedSale();
-        $before = $this->commissionSnapshot($commission);
+
+        app(SaleService::class)->updateSale($sale, array_replace(
+            $this->updatePayload($sale),
+            ['sale_date' => '2026-07-16']
+        ));
+
+        $replacement = TechnicianCommission::query()->sole();
+        $this->assertSame($commission->id, $replacement->id);
+        $this->assertSame('2026-07-16', $replacement->commission_date);
+    }
+
+    public function test_item_update_recreates_pending_commission_using_existing_rules(): void
+    {
+        [$sale, , $commission] = $this->createCommissionedSale();
         $payload = $this->updatePayload($sale);
         $payload['items'][0]['qty'] = '3.00';
 
         app(SaleService::class)->updateSale($sale, $payload);
 
-        $this->assertSame(
-            $before,
-            $this->commissionSnapshot($commission->fresh())
-        );
+        $replacement = TechnicianCommission::query()->sole();
+        $this->assertSame($commission->id, $replacement->id);
+        $this->assertEquals(3.75, $replacement->commission_amount);
+        $this->assertEquals(30.00, $replacement->sale_total);
         $this->assertSame('30', (string) $sale->fresh()->total_amount);
         $this->assertSame('3.00', (string) $sale->fresh()->items()->sole()->qty);
     }
@@ -97,7 +114,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertDatabaseMissing('technician_commissions', ['id' => $commission->id]);
     }
 
-    public function test_delete_currently_cascades_paid_batched_commission(): void
+    public function test_paid_batched_commission_blocks_delete(): void
     {
         [$sale, , $commission] = $this->createCommissionedSale();
         $batchId = DB::table('technician_payment_batches')->insertGetId([
@@ -116,10 +133,143 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
             'paid_at' => now(),
         ]);
 
-        app(SaleService::class)->deleteSale($sale);
+        $this->expectException(\DomainException::class);
 
-        $this->assertDatabaseMissing('technician_commissions', ['id' => $commission->id]);
-        $this->assertDatabaseHas('technician_payment_batches', ['id' => $batchId]);
+        app(SaleService::class)->deleteSale($sale);
+    }
+
+    public function test_paid_commission_blocks_item_update(): void
+    {
+        [$sale, , $commission] = $this->createCommissionedSale();
+        $commission->update(['status' => 'paid', 'paid_at' => now()]);
+        $payload = $this->updatePayload($sale);
+        $payload['items'][0]['qty'] = '3.00';
+
+        $this->expectException(\DomainException::class);
+
+        app(SaleService::class)->updateSale($sale, $payload);
+    }
+
+    public function test_batched_commission_blocks_item_update_even_if_status_is_pending(): void
+    {
+        [$sale, , $commission] = $this->createCommissionedSale();
+        $batchId = DB::table('technician_payment_batches')->insertGetId([
+            'batch_no' => 'PAY-LIFECYCLE-PENDING-0001',
+            'payment_date' => '2026-07-15',
+            'total_technicians' => 1,
+            'total_items' => 1,
+            'total_amount' => '2.50',
+            'status' => 'confirmed',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $commission->update(['payment_batch_id' => $batchId]);
+        $payload = $this->updatePayload($sale);
+        $payload['items'][0]['qty'] = '3.00';
+
+        $this->expectException(\DomainException::class);
+
+        app(SaleService::class)->updateSale($sale, $payload);
+    }
+
+    public function test_paid_commission_allows_customer_only_update(): void
+    {
+        [$sale, , $commission] = $this->createCommissionedSale();
+        $commission->update(['status' => 'paid', 'paid_at' => now()]);
+
+        app(SaleService::class)->updateSale($sale, $this->updatePayload($sale));
+
+        $this->assertSame('paid', $commission->fresh()->status);
+        $this->assertDatabaseHas('sales', ['id' => $sale->id]);
+    }
+
+    public function test_percentage_commission_is_refreshed_from_updated_stored_total(): void
+    {
+        [$sale, , $commission] = $this->createCommissionedSale(
+            ruleType: 'percent',
+            ruleValue: '10.00'
+        );
+        $payload = $this->updatePayload($sale);
+        $payload['items'][0]['selling_price'] = '20.00';
+
+        app(SaleService::class)->updateSale($sale, $payload);
+
+        $this->assertSame($commission->id, TechnicianCommission::query()->sole()->id);
+        $this->assertEquals(4.00, $commission->fresh()->commission_amount);
+    }
+
+    public function test_profit_guard_failure_keeps_pending_commission_and_every_sale_write_unchanged(): void
+    {
+        [$sale, , $commission] = $this->createCommissionedSale();
+        $customer = Customer::query()->create(['name' => 'Guard customer', 'active' => true]);
+        $zone = DeliveryZone::query()->create([
+            'name' => 'Guard zone',
+            'base_delivery_fee' => '0.00',
+            'minimum_profit' => '100.00',
+            'active' => true,
+        ]);
+        $address = CustomerDeliveryAddress::query()->create([
+            'customer_id' => $customer->id,
+            'delivery_zone_id' => $zone->id,
+            'name' => 'Guard address',
+        ]);
+        $sale->update([
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'delivery_type' => 'delivery',
+            'delivery_fee' => '0.00',
+        ]);
+        $item = $sale->items()->sole();
+        $product = $item->product;
+        $beforeCommission = $this->commissionSnapshot($commission);
+        $beforeMovements = StockMovement::query()->count();
+        $beforeStock = $product->stock_qty;
+        $payload = $this->updatePayload($sale);
+        $payload['items'][0]['selling_price'] = '1.00';
+
+        try {
+            app(SaleService::class)->updateSale($sale, $payload);
+            $this->fail('Expected Profit Guard rejection.');
+        } catch (\DomainException) {
+            // Expected.
+        }
+
+        $this->assertSame($item->id, $sale->fresh()->items()->sole()->id);
+        $this->assertSame('10.00', $item->fresh()->selling_price);
+        $this->assertSame($beforeStock, $product->fresh()->stock_qty);
+        $this->assertSame($beforeMovements, StockMovement::query()->count());
+        $this->assertSame($beforeCommission, $this->commissionSnapshot($commission->fresh()));
+    }
+
+    public function test_failure_during_pending_commission_refresh_rolls_back_sale_stock_and_items(): void
+    {
+        [$sale, , $commission] = $this->createCommissionedSale();
+        $item = $sale->items()->sole();
+        $product = $item->product;
+        $beforeMovements = StockMovement::query()->count();
+        $beforeStock = $product->stock_qty;
+        $throw = true;
+        TechnicianCommission::updating(function () use (&$throw): void {
+            if ($throw) {
+                $throw = false;
+                throw new \RuntimeException('Commission refresh failure');
+            }
+        });
+        $payload = $this->updatePayload($sale);
+        $payload['items'][0]['qty'] = '3.00';
+
+        try {
+            app(SaleService::class)->updateSale($sale, $payload);
+            $this->fail('Expected commission refresh failure.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Commission refresh failure', $exception->getMessage());
+        }
+
+        $this->assertSame($item->id, $sale->fresh()->items()->sole()->id);
+        $this->assertSame('2.00', $item->fresh()->qty);
+        $this->assertSame($beforeStock, $product->fresh()->stock_qty);
+        $this->assertSame($beforeMovements, StockMovement::query()->count());
+        $this->assertEquals(2.50, $commission->fresh()->commission_amount);
     }
 
     public function test_quotation_conversion_and_replay_keep_commission_empty(): void
@@ -148,8 +298,11 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertDatabaseCount('technician_commissions', 0);
     }
 
-    private function createCommissionedSale(?string $idempotencyKey = null): array
-    {
+    private function createCommissionedSale(
+        ?string $idempotencyKey = null,
+        string $ruleType = 'amount',
+        string $ruleValue = '1.25'
+    ): array {
         $product = $this->product();
         $technician = Technician::query()->create([
             'name' => 'Lifecycle technician',
@@ -157,9 +310,9 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         ]);
         TechnicianCommissionRule::query()->create([
             'product_id' => $product->id,
-            'name' => 'Lifecycle amount rule',
-            'rule_type' => 'amount',
-            'rule_value' => '1.25',
+            'name' => 'Lifecycle '.$ruleType.' rule',
+            'rule_type' => $ruleType,
+            'rule_value' => $ruleValue,
             'active' => true,
         ]);
         $payload = [

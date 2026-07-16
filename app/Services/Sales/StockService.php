@@ -10,6 +10,12 @@ use Illuminate\Support\Collection;
 
 class StockService
 {
+    public function __construct(
+        private ?SaleItemQuantityService $itemQuantityService = null
+    ) {
+        $this->itemQuantityService ??= new SaleItemQuantityService;
+    }
+
     public function deductFromSale(
         Sale $sale,
         Collection $lockedProducts,
@@ -18,15 +24,33 @@ class StockService
     ): void {
         $sale->loadMissing('items');
 
-        foreach ($sale->items as $item) {
+        $this->deductLines(
+            $sale,
+            $sale->items->map(fn ($item): array => [
+                'product_id' => $item->product_id,
+                'base_qty' => $this->stockQuantity($item),
+            ]),
+            $lockedProducts,
+            $referenceType,
+            $remark
+        );
+    }
 
-            $product = $lockedProducts->get((int) $item->product_id);
+    public function deductLines(
+        Sale $sale,
+        iterable $lines,
+        Collection $lockedProducts,
+        string $referenceType = 'sale',
+        string $remark = 'ขายออก'
+    ): void {
+        foreach ($lines as $line) {
+            $product = $lockedProducts->get((int) $line['product_id']);
 
             if (! $product) {
                 throw new DomainException('ไม่พบสินค้า');
             }
 
-            $qty = $this->stockQuantity($item);
+            $qty = BigDecimal::of((string) $line['base_qty']);
             $oldStock = BigDecimal::of($product->stock_qty);
             $newStock = $oldStock->minus($qty);
 
@@ -65,7 +89,9 @@ class StockService
                 throw new DomainException('ไม่พบสินค้า');
             }
 
-            $qty = $this->stockQuantity($item);
+            $qty = BigDecimal::of(
+                $this->itemQuantityService->authoritativeBaseQuantity($item)
+            );
             $oldStock = BigDecimal::of($product->stock_qty);
             $newStock = $oldStock->plus($qty);
 
