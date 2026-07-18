@@ -48,7 +48,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
 
-
     Route::get('/home', function () {
         return redirect('/dashboard');
     });
@@ -352,9 +351,6 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('/backups/{fileName}/download', [BackupController::class, 'downloadFile'])
             ->name('backups.download');
-
-        Route::post('/backups/restore', [BackupController::class, 'restore'])
-            ->name('backups.restore');
 
         Route::get('/reports/daily-profit', [ReportController::class, 'dailyProfit'])
             ->name('reports.daily-profit');

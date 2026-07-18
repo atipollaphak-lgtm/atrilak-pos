@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Services\Backup\DatabaseBackupService;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 
 class BackupController extends Controller
@@ -40,7 +39,6 @@ class BackupController extends Controller
         }
 
         return back()->with('success', 'สร้าง Backup สำเร็จ: '.$result->fileName());
-
     }
 
     public function downloadFile($fileName)
@@ -59,47 +57,5 @@ class BackupController extends Controller
         }
 
         return response()->download($filePath);
-    }
-
-    public function restore(Request $request)
-    {
-        $request->validate([
-            'backup_file' => 'required|file',
-        ]);
-
-        $pgRestorePath = 'C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe';
-
-        $database = env('DB_DATABASE');
-        $username = env('DB_USERNAME');
-        $host = env('DB_HOST');
-        $port = env('DB_PORT');
-        $password = env('DB_PASSWORD');
-
-        $filePath = $request->file('backup_file')->getRealPath();
-
-        putenv('PGPASSWORD='.$password);
-
-        $command = '"'.$pgRestorePath.'"'
-            .' -h '.$host
-            .' -p '.$port
-            .' -U '.$username
-            .' -d '.$database
-            .' -v ON_ERROR_STOP=1'
-            .' -f "'.$filePath.'"';
-
-        $output = [];
-        $resultCode = null;
-
-        exec($command.' 2>&1', $output, $resultCode);
-
-        if ($resultCode !== 0) {
-            return redirect()
-                ->route('backups.index')
-                ->with('error', 'Restore ไม่สำเร็จ: '.implode("\n", $output));
-        }
-
-        return redirect()
-            ->route('backups.index')
-            ->with('success', 'Restore Database สำเร็จ');
     }
 }
