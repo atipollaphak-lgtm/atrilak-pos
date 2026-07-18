@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Services\Sales\DailyPaymentSummaryService;
 use App\Services\Sales\SaleDecimalService;
 use App\Services\Sales\SaleFinancialSnapshotService;
 use Illuminate\Http\Request;
@@ -12,7 +13,8 @@ class ReportController extends Controller
 {
     public function __construct(
         private readonly SaleFinancialSnapshotService $financialSnapshots,
-        private readonly SaleDecimalService $decimalService
+        private readonly SaleDecimalService $decimalService,
+        private readonly DailyPaymentSummaryService $dailyPaymentSummaryService
     ) {}
 
     public function sales()
@@ -43,26 +45,7 @@ class ReportController extends Controller
         $totalSales = $this->financialSnapshots->sumRevenue($sales);
         $totalCost = $this->financialSnapshots->sumCost($sales);
         $totalProfit = $this->financialSnapshots->sumProfit($sales);
-        $paymentTotals = Sale::query()
-            ->active()
-            ->whereDate('sale_date', $date)
-            ->selectRaw("COALESCE(SUM(CASE WHEN payment_method IN ('cash', 'promptpay', 'mixed') THEN cash_amount ELSE 0 END), 0) as cash_total")
-            ->selectRaw("COALESCE(SUM(CASE WHEN payment_method IN ('cash', 'promptpay', 'mixed') THEN promptpay_amount ELSE 0 END), 0) as promptpay_total")
-            ->selectRaw("COALESCE(SUM(CASE WHEN payment_method IN ('cash', 'promptpay', 'mixed') THEN cash_amount + promptpay_amount ELSE 0 END), 0) as recorded_total")
-            ->selectRaw("SUM(CASE WHEN payment_method = 'cash' THEN 1 ELSE 0 END) as cash_count")
-            ->selectRaw("SUM(CASE WHEN payment_method = 'promptpay' THEN 1 ELSE 0 END) as promptpay_count")
-            ->selectRaw("SUM(CASE WHEN payment_method = 'mixed' THEN 1 ELSE 0 END) as mixed_count")
-            ->selectRaw('SUM(CASE WHEN payment_method IS NULL THEN 1 ELSE 0 END) as unrecorded_count')
-            ->first();
-        $paymentSummary = [
-            'cash_total' => $this->decimalService->money((string) $paymentTotals->cash_total),
-            'promptpay_total' => $this->decimalService->money((string) $paymentTotals->promptpay_total),
-            'recorded_total' => $this->decimalService->money((string) $paymentTotals->recorded_total),
-            'cash_count' => (int) $paymentTotals->cash_count,
-            'promptpay_count' => (int) $paymentTotals->promptpay_count,
-            'mixed_count' => (int) $paymentTotals->mixed_count,
-            'unrecorded_count' => (int) $paymentTotals->unrecorded_count,
-        ];
+        $paymentSummary = $this->dailyPaymentSummaryService->forBusinessDate($date);
 
         return view('reports.daily-profit', compact(
             'date',
