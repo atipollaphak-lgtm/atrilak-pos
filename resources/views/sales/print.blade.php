@@ -166,6 +166,8 @@
 
     <div class="container">
 
+        @include('sales.partials.void-document-marker', ['sale' => $sale])
+
         <div class="no-print">
             <button onclick="window.print()">พิมพ์</button>
         </div>

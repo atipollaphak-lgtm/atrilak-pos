@@ -186,6 +186,7 @@ class SaleController extends Controller
         $sale->load([
             'customer',
             'technician',
+            'voidedBy',
             'items.product',
         ]);
 

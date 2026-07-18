@@ -332,6 +332,8 @@
 
     <div class="invoice">
 
+        @include('sales.partials.void-document-marker', ['sale' => $sale])
+
         @php
             $storeName = \App\Support\DocumentSnapshotValue::resolve(
                 $sale->store_name_snapshot,

@@ -424,6 +424,8 @@
 
     <div class="invoice">
 
+        @include('sales.partials.void-document-marker', ['sale' => $sale])
+
         <div class="watermark">
             ATRILAK CONCRETE
         </div>
