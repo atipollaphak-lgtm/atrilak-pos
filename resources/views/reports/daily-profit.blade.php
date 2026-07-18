@@ -80,6 +80,23 @@
     </div>
 
     <div class="card">
+        <div class="card-header">สรุปการชำระเงิน</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4"><strong>เงินสดสุทธิที่รับจากการขาย:</strong> {{ number_format($paymentSummary['cash_total'], 2) }}</div>
+                <div class="col-md-4"><strong>พร้อมเพย์รวม:</strong> {{ number_format($paymentSummary['promptpay_total'], 2) }}</div>
+                <div class="col-md-4"><strong>ยอดขายรวมที่มีข้อมูลการชำระ:</strong> {{ number_format($paymentSummary['recorded_total'], 2) }}</div>
+            </div>
+            <div class="mt-2">
+                จำนวนบิลเงินสด: {{ $paymentSummary['cash_count'] }} |
+                จำนวนบิลพร้อมเพย์: {{ $paymentSummary['promptpay_count'] }} |
+                จำนวนบิลแบบผสม: {{ $paymentSummary['mixed_count'] }} |
+                ไม่ระบุวิธีชำระ: {{ $paymentSummary['unrecorded_count'] }}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
         <div class="card-header">
             รายการขายวันที่ {{ \Carbon\Carbon::parse($date)->format('d/m/Y') }}
         </div>

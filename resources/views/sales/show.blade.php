@@ -84,6 +84,17 @@
 
             </div>
 
+            <div class="alert alert-light border mt-3">
+                <strong>วิธีชำระเงิน:</strong>
+                {{ \App\Support\SalePaymentDisplay::label($sale->payment_method) }}
+
+                @include('sales.partials.payment-details', [
+                    'paymentRows' => \App\Support\SalePaymentDisplay::screenRows($sale),
+                    'paymentClass' => 'mt-2',
+                    'showPaymentLabel' => false,
+                ])
+            </div>
+
             <hr>
 
             <div class="row">

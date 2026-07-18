@@ -88,6 +88,12 @@
             align-items: flex-end;
         }
 
+        .document-payment-details {
+            margin-top: 12px;
+            text-align: right;
+            line-height: 1.5;
+        }
+
         .signature-box {
             width: 35%;
             text-align: center;
@@ -272,6 +278,11 @@
                 </tr>
             </tfoot>
         </table>
+
+        @include('sales.partials.payment-details', [
+            'paymentRows' => \App\Support\SalePaymentDisplay::documentRows($sale),
+            'paymentClass' => 'document-payment-details',
+        ])
 
         <div class="bottom-section">
 

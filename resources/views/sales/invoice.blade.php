@@ -200,6 +200,13 @@
     margin-bottom: 5px;
 }
 
+.document-payment-details {
+    margin: 0 0 12px;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 .signature-row {
     margin-top: 20px;
     display: flex;
@@ -559,6 +566,11 @@
         <table class="payment-summary-table">
     <tr>
         <td class="payment-cell">
+            @include('sales.partials.payment-details', [
+                'paymentRows' => \App\Support\SalePaymentDisplay::documentRows($sale),
+                'paymentClass' => 'document-payment-details',
+            ])
+
             @if (!empty($setting?->qr_image))
                 <div class="payment-title">
                     QR Payment

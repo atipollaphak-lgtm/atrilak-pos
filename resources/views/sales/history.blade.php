@@ -24,6 +24,7 @@
                         <th>วันที่</th>
                         <th>ลูกค้า</th>
                         <th>ยอดรวม</th>
+                        <th>วิธีชำระเงิน</th>
                         <th>จัดการ</th>
                     </tr>
                 </thead>
@@ -36,6 +37,7 @@
                             <td>{{ $sale->sale_date }}</td>
                             <td>{{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}</td>
                             <td>{{ number_format($sale->total_amount, 2) }}</td>
+                            <td>{{ \App\Support\SalePaymentDisplay::label($sale->payment_method) }}</td>
                             <td>
                                 <a href="{{ route('sales.show', $sale->id) }}" class="btn btn-info btn-sm">
                                     ดูบิล
