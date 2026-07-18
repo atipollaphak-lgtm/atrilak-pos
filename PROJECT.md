@@ -105,7 +105,6 @@ Existing pricing behavior includes:
 - Category overrides
 - Product overrides
 - Price Lock
-- Scheduled Pricing
 - Product Price Tiers
 - ATRILAK rounding
 
