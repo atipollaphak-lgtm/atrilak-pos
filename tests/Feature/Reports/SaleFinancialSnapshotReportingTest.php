@@ -86,6 +86,23 @@ class SaleFinancialSnapshotReportingTest extends TestCase
         $this->assertSame('175.00', $data['monthProfit']);
     }
 
+    public function test_dashboard_excludes_voided_sales_from_operational_metrics_and_best_sellers(): void
+    {
+        $this->voidedSaleWithItem('SAL-VOID-DASHBOARD');
+
+        $data = app(DashboardController::class)
+            ->index(app(SaleFinancialSnapshotService::class))
+            ->getData();
+
+        $this->assertSame(1, $data['todaySaleCount']);
+        $this->assertEquals('360.00', $data['todaySales']);
+        $this->assertSame('175.00', $data['todayProfit']);
+        $this->assertEquals('360.00', $data['monthSales']);
+        $this->assertSame('175.00', $data['monthProfit']);
+        $this->assertSame([360.0], array_values($data['chartSales']));
+        $this->assertSame(2.0, (float) $data['bestProducts'][0]['qty']);
+    }
+
     public function test_sale_detail_uses_stored_total_profit_and_derived_cost(): void
     {
         $view = app(SaleController::class)->show(
@@ -124,6 +141,25 @@ class SaleFinancialSnapshotReportingTest extends TestCase
         }
     }
 
+    public function test_operational_profit_reports_exclude_voided_sales_from_lists_and_totals(): void
+    {
+        $voided = $this->voidedSaleWithItem('SAL-VOID-PROFIT');
+        $controller = app(ReportController::class);
+        $reports = [
+            $controller->dailyProfit(Request::create('/', 'GET', ['date' => '2026-07-16']))->getData(),
+            $controller->monthlyProfit(Request::create('/', 'GET', ['month' => 7, 'year' => 2026]))->getData(),
+            $controller->yearlyProfit(Request::create('/', 'GET', ['year' => 2026]))->getData(),
+        ];
+
+        foreach ($reports as $data) {
+            $this->assertSame([$this->sale->id], $data['sales']->pluck('id')->all());
+            $this->assertSame('360.00', $data['totalSales']);
+            $this->assertSame('185.00', $data['totalCost']);
+            $this->assertSame('175.00', $data['totalProfit']);
+            $this->assertArrayNotHasKey($voided->id, $data['financialsBySaleId']);
+        }
+    }
+
     public function test_product_report_uses_stored_total_profit_and_derived_cost(): void
     {
         $this->app->instance('request', Request::create('/', 'GET', [
@@ -137,6 +173,22 @@ class SaleFinancialSnapshotReportingTest extends TestCase
         $this->assertSame('360.00', $product['sales']);
         $this->assertSame('185.00', $product['cost']);
         $this->assertSame('175.00', $product['profit']);
+    }
+
+    public function test_product_and_best_seller_reports_exclude_voided_sale_items(): void
+    {
+        $this->voidedSaleWithItem('SAL-VOID-PRODUCT');
+        $this->app->instance('request', Request::create('/', 'GET', ['month' => 7, 'year' => 2026]));
+
+        $controller = app(ReportController::class);
+        $product = $controller->productSales()->getData()['products'][$this->product->id];
+        $bestSeller = $controller->bestSeller()->getData()['products'][0];
+
+        $this->assertSame(2.0, (float) $product['qty']);
+        $this->assertSame('360.00', $product['sales']);
+        $this->assertSame('185.00', $product['cost']);
+        $this->assertSame('175.00', $product['profit']);
+        $this->assertSame(2.0, (float) $bestSeller['qty']);
     }
 
     public function test_csv_uses_stored_total_and_profit_and_labels_derived_total_cost(): void
@@ -170,6 +222,29 @@ class SaleFinancialSnapshotReportingTest extends TestCase
         $this->assertSame(['สินค้า', 'หน่วย', 'จำนวนขาย', 'ยอดขายรวม'], $header);
         $this->assertCount(4, $data);
         $this->assertSame('360.00', $data[3]);
+    }
+
+    public function test_operational_csv_exports_exclude_voided_sales_and_items(): void
+    {
+        $voided = $this->voidedSaleWithItem('SAL-VOID-EXPORT');
+        $controller = app(ReportController::class);
+        $responses = [
+            $controller->exportDailyProfit(Request::create('/', 'GET', ['date' => '2026-07-16'])),
+            $controller->exportMonthlyProfit(Request::create('/', 'GET', ['month' => 7, 'year' => 2026])),
+            $controller->exportYearlyProfit(Request::create('/', 'GET', ['year' => 2026])),
+            $controller->exportProductSales(Request::create('/', 'GET', ['month' => 7, 'year' => 2026])),
+            $controller->exportBestSeller(Request::create('/', 'GET', ['month' => 7, 'year' => 2026])),
+        ];
+
+        foreach ($responses as $response) {
+            ob_start();
+            $response->sendContent();
+            $csv = (string) ob_get_clean();
+
+            $this->assertStringNotContainsString($voided->sale_no, $csv);
+            $this->assertStringNotContainsString('720.00', $csv);
+            $this->assertStringNotContainsString(',4,', $csv);
+        }
     }
 
     public function test_changing_current_product_cost_does_not_change_historical_results(): void
@@ -211,5 +286,34 @@ class SaleFinancialSnapshotReportingTest extends TestCase
         $this->assertSame('400.00', $summary['revenue']);
         $this->assertSame('240.00', $summary['cost']);
         $this->assertSame('160.00', $summary['profit']);
+    }
+
+    private function voidedSaleWithItem(string $saleNo): Sale
+    {
+        $sale = Sale::query()->create([
+            'sale_no' => $saleNo,
+            'sale_date' => '2026-07-16',
+            'total_amount' => '360.00',
+            'delivery_fee' => '0.00',
+            'delivery_type' => 'pickup',
+            'discount' => '0.00',
+            'status' => Sale::STATUS_VOIDED,
+            'voided_at' => now(),
+            'void_reason' => 'Reporting exclusion test',
+        ]);
+
+        SaleItem::query()->create([
+            'sale_id' => $sale->id,
+            'product_id' => $this->product->id,
+            'qty' => '2.00',
+            'conversion_rate_used' => '24.0000',
+            'base_qty' => '48.0000',
+            'selling_price' => '180.00',
+            'cost_price' => '5.00',
+            'total' => '360.00',
+            'profit' => '175.00',
+        ]);
+
+        return $sale;
     }
 }

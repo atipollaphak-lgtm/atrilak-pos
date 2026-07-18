@@ -34,7 +34,7 @@ class ReportController extends Controller
     {
         $date = $request->input('date', date('Y-m-d'));
 
-        $sales = Sale::with(['customer', 'items'])
+        $sales = Sale::with(['customer', 'items'])->active()
             ->whereDate('sale_date', $date)
             ->orderBy('sale_date')
             ->get();
@@ -44,6 +44,7 @@ class ReportController extends Controller
         $totalCost = $this->financialSnapshots->sumCost($sales);
         $totalProfit = $this->financialSnapshots->sumProfit($sales);
         $paymentTotals = Sale::query()
+            ->active()
             ->whereDate('sale_date', $date)
             ->selectRaw("COALESCE(SUM(CASE WHEN payment_method IN ('cash', 'promptpay', 'mixed') THEN cash_amount ELSE 0 END), 0) as cash_total")
             ->selectRaw("COALESCE(SUM(CASE WHEN payment_method IN ('cash', 'promptpay', 'mixed') THEN promptpay_amount ELSE 0 END), 0) as promptpay_total")
@@ -79,7 +80,7 @@ class ReportController extends Controller
         $month = $request->input('month', date('m'));
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items'])
+        $sales = Sale::with(['customer', 'items'])->active()
             ->whereMonth('sale_date', $month)
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
@@ -105,7 +106,7 @@ class ReportController extends Controller
     {
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items'])
+        $sales = Sale::with(['customer', 'items'])->active()
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
             ->get();
@@ -132,7 +133,7 @@ class ReportController extends Controller
 
         $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -182,7 +183,7 @@ class ReportController extends Controller
 
         $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -224,7 +225,7 @@ class ReportController extends Controller
     {
         $date = $request->input('date', date('Y-m-d'));
 
-        $sales = Sale::with(['customer', 'items.product'])
+        $sales = Sale::with(['customer', 'items.product'])->active()
             ->whereDate('sale_date', $date)
             ->orderBy('sale_date')
             ->get();
@@ -291,7 +292,7 @@ class ReportController extends Controller
         $month = $request->input('month', date('m'));
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items.product'])
+        $sales = Sale::with(['customer', 'items.product'])->active()
             ->whereMonth('sale_date', $month)
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
@@ -357,7 +358,7 @@ class ReportController extends Controller
     {
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items.product'])
+        $sales = Sale::with(['customer', 'items.product'])->active()
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
             ->get();
@@ -428,7 +429,7 @@ class ReportController extends Controller
 
         $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -509,7 +510,7 @@ class ReportController extends Controller
 
         $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();

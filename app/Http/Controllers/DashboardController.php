@@ -22,7 +22,7 @@ class DashboardController extends Controller
 
         $totalSuppliers = Supplier::count();
 
-        $todaySaleCount = Sale::whereDate(
+        $todaySaleCount = Sale::query()->active()->whereDate(
             'sale_date',
             $today
         )->count();
@@ -46,10 +46,10 @@ class DashboardController extends Controller
 
         $lowStockCount = $lowStockProducts->count();
 
-        $todaySales = Sale::whereDate('sale_date', $today)
+        $todaySales = Sale::query()->active()->whereDate('sale_date', $today)
             ->sum('total_amount');
 
-        $todayProfit = $financialSnapshots->sumProfit(Sale::with('items')
+        $todayProfit = $financialSnapshots->sumProfit(Sale::with('items')->active()
             ->whereDate('sale_date', $today)
             ->get());
 
@@ -58,7 +58,7 @@ class DashboardController extends Controller
 
         $items = SaleItem::with('product.unitRelation', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -87,7 +87,7 @@ class DashboardController extends Controller
 
         $bestProducts = array_slice($bestProducts, 0, 10);
 
-        $salesChart = Sale::select(
+        $salesChart = Sale::query()->active()->select(
             DB::raw('DATE(sale_date) as sale_day'),
             DB::raw('SUM(total_amount) as total_sales')
         )
@@ -115,7 +115,7 @@ class DashboardController extends Controller
                 (float) $row->total_sales;
         }
 
-        $monthSales = Sale::whereMonth(
+        $monthSales = Sale::query()->active()->whereMonth(
             'sale_date',
             date('m')
         )->whereYear(
@@ -123,7 +123,7 @@ class DashboardController extends Controller
             date('Y')
         )->sum('total_amount');
 
-        $monthProfit = $financialSnapshots->sumProfit(Sale::with('items')
+        $monthProfit = $financialSnapshots->sumProfit(Sale::with('items')->active()
             ->whereMonth('sale_date', date('m'))
             ->whereYear('sale_date', date('Y'))
             ->get());

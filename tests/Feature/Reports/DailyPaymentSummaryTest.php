@@ -35,13 +35,38 @@ class DailyPaymentSummaryTest extends TestCase
         $this->assertStringContainsString('เงินสดสุทธิที่รับจากการขาย', $view->render());
     }
 
+    public function test_daily_payment_summary_excludes_all_voided_payment_states(): void
+    {
+        $this->sale('2026-07-18', 'cash', '100.25', '0.00', '150.00', '49.75');
+        $this->sale('2026-07-18', 'promptpay', '0.00', '50.50', '0.00', '0.00');
+        $this->sale('2026-07-18', 'mixed', '40.25', '60.50', '50.00', '9.75');
+        $this->sale('2026-07-18', null, null, null, null, null);
+        $this->sale('2026-07-18', 'cash', '999.00', '0.00', '999.00', '0.00', Sale::STATUS_VOIDED);
+        $this->sale('2026-07-18', 'promptpay', '0.00', '999.00', '0.00', '0.00', Sale::STATUS_VOIDED);
+        $this->sale('2026-07-18', 'mixed', '999.00', '999.00', '999.00', '0.00', Sale::STATUS_VOIDED);
+        $this->sale('2026-07-18', null, null, null, null, null, Sale::STATUS_VOIDED);
+
+        $summary = app(ReportController::class)->dailyProfit(Request::create('/', 'GET', [
+            'date' => '2026-07-18',
+        ]))->getData()['paymentSummary'];
+
+        $this->assertSame('140.50', $summary['cash_total']);
+        $this->assertSame('111.00', $summary['promptpay_total']);
+        $this->assertSame('251.50', $summary['recorded_total']);
+        $this->assertSame(1, $summary['cash_count']);
+        $this->assertSame(1, $summary['promptpay_count']);
+        $this->assertSame(1, $summary['mixed_count']);
+        $this->assertSame(1, $summary['unrecorded_count']);
+    }
+
     private function sale(
         string $date,
         ?string $method,
         ?string $cash,
         ?string $promptpay,
         ?string $received,
-        ?string $change
+        ?string $change,
+        string $status = Sale::STATUS_ACTIVE
     ): void {
         Sale::query()->create([
             'sale_no' => 'PAY-SUM-'.str()->uuid(),
@@ -55,6 +80,7 @@ class DailyPaymentSummaryTest extends TestCase
             'promptpay_amount' => $promptpay,
             'received_amount' => $received,
             'change_amount' => $change,
+            'status' => $status,
         ]);
     }
 }
