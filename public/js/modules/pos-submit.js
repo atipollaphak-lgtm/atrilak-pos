@@ -9,13 +9,28 @@ function bindSubmitSale() {
         storageKey: "atrilak.pos.v2.pending-sale.v1"
     });
     const submissionGuard = SaleIntentStorage.createSubmissionGuard();
+    const paymentController = PosPayment.createController({
+        getTotal: function () {
+            return document.getElementById("cart-total")?.textContent || "0.00";
+        },
+        onConfirm: submitSale
+    });
 
-    button.addEventListener("click", async function () {
+    button.addEventListener("click", function () {
+        if (!Array.isArray(cart) || cart.length === 0) {
+            alert("กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ");
+            return;
+        }
+
+        paymentController.open();
+    });
+
+    async function submitSale(payment) {
         if (!submissionGuard.start()) {
             return;
         }
 
-        const payload = buildSalePayload();
+        const payload = buildSalePayload(PosPayment.payload(payment));
         button.disabled = true;
         let intent = null;
 
@@ -63,15 +78,15 @@ function bindSubmitSale() {
                 pendingIntent.clear(intent?.key);
             }
 
-            alert(error.message || "เกิดข้อผิดพลาดระหว่างบันทึกการขาย");
+            throw error;
         } finally {
             submissionGuard.release();
             button.disabled = false;
         }
-    });
+    }
 }
 
-function buildSalePayload() {
+function buildSalePayload(payment = {}) {
     const items = cart.map(item => ({
         product_id: item.productId,
         product_unit_id: item.productUnitId,
@@ -94,7 +109,8 @@ function buildSalePayload() {
             ? "pickup"
             : "delivery",
         discount: discount,
-        items: items
+        items: items,
+        ...payment
     };
 }
 

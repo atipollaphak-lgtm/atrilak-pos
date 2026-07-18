@@ -31,6 +31,10 @@
 
                 @csrf
                 <input type="hidden" name="idempotency_key" id="sale-idempotency-key">
+                <input type="hidden" name="payment_method" id="sale-payment-method">
+                <input type="hidden" name="cash_amount" id="sale-cash-amount">
+                <input type="hidden" name="promptpay_amount" id="sale-promptpay-amount">
+                <input type="hidden" name="received_amount" id="sale-received-amount">
 
                 <div class="row">
 
@@ -355,7 +359,7 @@
 
             </form>
 
-
+            @include('sales.partials.payment-modal')
 
         </div>
 
@@ -1255,5 +1259,6 @@
     @endif
 
     <script src="{{ asset('js/modules/sale-intent-storage.js') }}"></script>
+    <script src="{{ asset('js/modules/pos-payment.js') }}"></script>
     <script src="{{ asset('js/modules/pos-v1-submit.js') }}"></script>
 @stop

@@ -81,10 +81,52 @@ function baseContext(storage) {
     });
 }
 
+const cashPayment = {
+    payment_method: "cash",
+    cash_amount: "20.00",
+    promptpay_amount: "0.00",
+    received_amount: "20.00"
+};
+
+function paymentUiStub(calls) {
+    return {
+        createController(options) {
+            calls.paymentOptions = options;
+
+            return {
+                open() {
+                    calls.paymentOpens++;
+                }
+            };
+        },
+        payload(payment) {
+            return { ...payment };
+        }
+    };
+}
+
+async function submitV1(harness) {
+    harness.listeners.submit(event());
+
+    return harness.calls.paymentOptions.onConfirm(cashPayment);
+}
+
+async function submitV2(harness) {
+    harness.listeners.click();
+
+    return harness.calls.paymentOptions.onConfirm(cashPayment);
+}
+
 function v1Harness(fetchImplementation, storage = new MemoryStorage()) {
     const listeners = {};
     const keyInput = { value: "" };
     const button = { disabled: false };
+    const hidden = {
+        "sale-payment-method": { value: "" },
+        "sale-cash-amount": { value: "" },
+        "sale-promptpay-amount": { value: "" },
+        "sale-received-amount": { value: "" }
+    };
     const form = {
         action: "/sales/store",
         dataset: { successUrl: "/sales" },
@@ -105,7 +147,13 @@ function v1Harness(fetchImplementation, storage = new MemoryStorage()) {
     };
     class FakeFormData {
         constructor() {
-            this.values = form.fields.concat([["idempotency_key", keyInput.value]]);
+            this.values = form.fields.concat([
+                ["idempotency_key", keyInput.value],
+                ["payment_method", hidden["sale-payment-method"].value],
+                ["cash_amount", hidden["sale-cash-amount"].value],
+                ["promptpay_amount", hidden["sale-promptpay-amount"].value],
+                ["received_amount", hidden["sale-received-amount"].value]
+            ]);
         }
 
         entries() {
@@ -123,6 +171,8 @@ function v1Harness(fetchImplementation, storage = new MemoryStorage()) {
         opened: 0,
         popupClosed: 0,
         popupReplaced: 0,
+        paymentOpens: 0,
+        paymentOptions: null,
         requestKeys: []
     };
     const popup = {
@@ -139,12 +189,15 @@ function v1Harness(fetchImplementation, storage = new MemoryStorage()) {
     };
     const context = baseContext(storage);
     context.FormData = FakeFormData;
+    context.PosPayment = paymentUiStub(calls);
     context.document = {
         getElementById(id) {
             return {
                 saleForm: form,
                 "btn-submit-sale-v1": button,
-                "sale-idempotency-key": keyInput
+                "sale-idempotency-key": keyInput,
+                net_total: { value: "20.00" },
+                ...hidden
             }[id] ?? null;
         }
     };
@@ -181,6 +234,7 @@ function v2Harness(fetchImplementation, storage = new MemoryStorage()) {
     };
     const elements = {
         "btn-submit-sale": button,
+        "cart-total": { textContent: "20.00" },
         "customer-id": { value: "7" },
         "delivery-address-id": { value: "11" },
         "technician-id": { value: "" },
@@ -198,10 +252,13 @@ function v2Harness(fetchImplementation, storage = new MemoryStorage()) {
         alerts: 0,
         fetches: 0,
         opened: 0,
+        paymentOpens: 0,
+        paymentOptions: null,
         renders: 0,
         requestKeys: []
     };
     const context = baseContext(storage);
+    context.PosPayment = paymentUiStub(calls);
     context.document = {
         getElementById(id) {
             return elements[id] ?? null;
@@ -248,8 +305,8 @@ test("V1 double submit sends one request and handles confirmed success once", as
     }));
 
     await Promise.all([
-        harness.listeners.submit(event()),
-        harness.listeners.submit(event())
+        submitV1(harness),
+        submitV1(harness)
     ]);
 
     assert.equal(harness.calls.fetches, 1);
@@ -268,10 +325,10 @@ test("V1 network failure preserves pending key and same-page retry reuses it", a
         return response(200, { success: true, invoice_url: "/sales/1/invoice" });
     });
 
-    await harness.listeners.submit(event());
+    await assert.rejects(submitV1(harness), /network timeout/);
     assert.equal(harness.storage.values.size, 1);
     assert.equal(harness.button.disabled, false);
-    await harness.listeners.submit(event());
+    await submitV1(harness);
 
     assert.equal(harness.calls.fetches, 2);
     assert.equal(harness.calls.requestKeys[0], harness.calls.requestKeys[1]);
@@ -283,13 +340,13 @@ test("V1 reload recovery reuses the pending key for unchanged form data", async 
     const firstPage = v1Harness(() => {
         throw new Error("network timeout");
     }, storage);
-    await firstPage.listeners.submit(event());
+    await assert.rejects(submitV1(firstPage), /network timeout/);
     const reloadedPage = v1Harness(() => response(200, {
         success: true,
         invoice_url: "/sales/1/invoice"
     }), storage);
 
-    await reloadedPage.listeners.submit(event());
+    await submitV1(reloadedPage);
 
     assert.equal(firstPage.calls.requestKeys[0], reloadedPage.calls.requestKeys[0]);
     assert.equal(storage.values.size, 0);
@@ -301,7 +358,7 @@ test("V1 definitive validation error clears pending state and releases guard", a
         message: "invalid"
     }));
 
-    await harness.listeners.submit(event());
+    await assert.rejects(submitV1(harness), /invalid/);
 
     assert.equal(harness.calls.fetches, 1);
     assert.equal(harness.calls.popupClosed, 1);
@@ -316,8 +373,8 @@ test("V2 double submit opens invoice and resets cart once", async () => {
     }));
 
     await Promise.all([
-        harness.listeners.click(),
-        harness.listeners.click()
+        submitV2(harness),
+        submitV2(harness)
     ]);
 
     assert.equal(harness.calls.fetches, 1);
@@ -334,7 +391,7 @@ test("V2 validation error preserves cart, clears key, and releases guard", async
         message: "invalid"
     }));
 
-    await harness.listeners.click();
+    await assert.rejects(submitV2(harness), /invalid/);
 
     assert.equal(vm.runInContext("cart.length", harness.context), 1);
     assert.equal(harness.calls.renders, 0);
@@ -348,7 +405,7 @@ test("V2 5xx unknown outcome preserves cart and pending key", async () => {
         message: "server error"
     }));
 
-    await harness.listeners.click();
+    await assert.rejects(submitV2(harness), /server error/);
 
     assert.equal(vm.runInContext("cart.length", harness.context), 1);
     assert.equal(harness.calls.renders, 0);
@@ -361,7 +418,7 @@ test("V2 network timeout preserves cart and pending key", async () => {
         throw new Error("network timeout");
     });
 
-    await harness.listeners.click();
+    await assert.rejects(submitV2(harness), /network timeout/);
 
     assert.equal(vm.runInContext("cart.length", harness.context), 1);
     assert.equal(harness.calls.renders, 0);
@@ -374,13 +431,13 @@ test("V2 reload recovery reuses the pending key for a reconstructed unchanged ca
     const firstPage = v2Harness(() => {
         throw new Error("network timeout");
     }, storage);
-    await firstPage.listeners.click();
+    await assert.rejects(submitV2(firstPage), /network timeout/);
     const reloadedPage = v2Harness(() => response(200, {
         success: true,
         invoice_url: "/sales/1/invoice"
     }), storage);
 
-    await reloadedPage.listeners.click();
+    await submitV2(reloadedPage);
 
     assert.equal(firstPage.calls.requestKeys[0], reloadedPage.calls.requestKeys[0]);
     assert.equal(storage.values.size, 0);

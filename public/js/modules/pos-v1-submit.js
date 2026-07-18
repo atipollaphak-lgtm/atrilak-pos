@@ -11,18 +11,34 @@
         storageKey: "atrilak.pos.v1.pending-sale.v1"
     });
     const submissionGuard = SaleIntentStorage.createSubmissionGuard();
+    const paymentController = PosPayment.createController({
+        getTotal: function () {
+            return document.getElementById("net_total")?.value || "0.00";
+        },
+        onConfirm: submitSale
+    });
 
-    form.addEventListener("submit", async function (event) {
+    form.addEventListener("submit", function (event) {
         if (event.defaultPrevented) {
             return;
         }
 
         event.preventDefault();
 
+        paymentController.open();
+    });
+
+    async function submitSale(payment) {
+        const paymentPayload = PosPayment.payload(payment);
+
         if (!submissionGuard.start()) {
             return;
         }
 
+        document.getElementById("sale-payment-method").value = paymentPayload.payment_method;
+        document.getElementById("sale-cash-amount").value = paymentPayload.cash_amount;
+        document.getElementById("sale-promptpay-amount").value = paymentPayload.promptpay_amount;
+        document.getElementById("sale-received-amount").value = paymentPayload.received_amount;
         button.disabled = true;
 
         const invoiceWindow = window.open("", "_blank");
@@ -81,11 +97,11 @@
                 keyInput.value = "";
             }
 
-            alert(error.message || "เกิดข้อผิดพลาดระหว่างบันทึกการขาย");
             submissionGuard.release();
             button.disabled = false;
+            throw error;
         }
-    });
+    }
 
     async function parseJsonResponse(response) {
         const text = await response.text();
