@@ -456,6 +456,13 @@ return [
         ['header' => 'รายงาน'],
 
         [
+            'text' => 'ปิดยอดประจำวัน',
+            'url'  => 'daily-payment-closings',
+            'icon' => 'fas fa-fw fa-cash-register',
+            'can'  => 'manager',
+        ],
+
+        [
             'text' => 'รายงานกำไรรายวัน',
             'url'  => 'reports/daily-profit',
             'icon' => 'fas fa-fw fa-chart-line',

@@ -33,6 +33,13 @@
                             Export Excel
                         </a>
                     </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <a href="{{ route('daily-payment-closings.create', ['business_date' => $date]) }}"
+                            class="btn btn-primary">
+                            <i class="fas fa-cash-register"></i>
+                            ปิดยอดประจำวัน
+                        </a>
+                    </div>
                 </div>
             </form>
         </div>

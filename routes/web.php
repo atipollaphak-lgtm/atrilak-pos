@@ -138,6 +138,16 @@ Route::middleware(['auth'])->group(function () {
 
     // Manager ขึ้นไป
     Route::middleware(['role:manager'])->group(function () {
+        Route::get('/daily-payment-closings', [DailyPaymentClosingController::class, 'index'])
+            ->name('daily-payment-closings.index');
+        Route::get('/daily-payment-closings/create', [DailyPaymentClosingController::class, 'create'])
+            ->name('daily-payment-closings.create');
+        Route::get('/daily-payment-closings/{dailyPaymentClosing}/edit', [DailyPaymentClosingController::class, 'edit'])
+            ->name('daily-payment-closings.edit');
+        Route::get('/daily-payment-closings/{dailyPaymentClosing}/print', [DailyPaymentClosingController::class, 'print'])
+            ->name('daily-payment-closings.print');
+        Route::get('/daily-payment-closings/{dailyPaymentClosing}', [DailyPaymentClosingController::class, 'show'])
+            ->name('daily-payment-closings.show');
         Route::post('/daily-payment-closings', [DailyPaymentClosingController::class, 'store'])
             ->name('daily-payment-closings.store');
         Route::put('/daily-payment-closings/{dailyPaymentClosing}', [DailyPaymentClosingController::class, 'update'])
