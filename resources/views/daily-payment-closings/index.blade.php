@@ -47,6 +47,15 @@
                                     <span class="badge badge-{{ $closing->status === 'finalized' ? 'success' : 'warning' }}">
                                         {{ $closing->status }}
                                     </span>
+                                    @php($drift = $drifts[$closing->id])
+                                    @if ($closing->status === 'open')
+                                        <span class="badge badge-secondary" data-drift-status="not-finalized">ยังไม่สรุป drift</span>
+                                    @elseif ($drift['has_drift'])
+                                        <span class="badge badge-danger" data-drift-status="drift">พบการเปลี่ยนแปลง</span>
+                                        <small>เพิ่ม {{ $drift['added_count'] }} / ลบ {{ $drift['removed_count'] }} / แก้ {{ $drift['changed_count'] }}</small>
+                                    @else
+                                        <span class="badge badge-success" data-drift-status="no-drift">ข้อมูลตรงกับตอนปิดยอด</span>
+                                    @endif
                                 </td>
                                 <td class="text-right">{{ number_format($closing->expected_cash_amount, 2) }}</td>
                                 <td class="text-right">{{ number_format($closing->actual_cash_amount, 2) }}</td>

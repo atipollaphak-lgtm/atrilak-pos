@@ -8,6 +8,7 @@ use App\Http\Requests\DailyPaymentClosings\StoreDailyPaymentClosingRequest;
 use App\Http\Requests\DailyPaymentClosings\UpdateDailyPaymentClosingRequest;
 use App\Models\DailyPaymentClosing;
 use App\Models\Setting;
+use App\Services\Sales\DailyPaymentClosingDriftService;
 use App\Services\Sales\DailyPaymentClosingService;
 use App\Services\Sales\DailyPaymentSummaryService;
 use App\Services\Sales\SaleDecimalService;
@@ -16,14 +17,16 @@ use Illuminate\Http\Request;
 
 class DailyPaymentClosingController extends Controller
 {
-    public function index()
+    public function index(DailyPaymentClosingDriftService $driftService)
     {
         $closings = DailyPaymentClosing::query()
-            ->with(['finalizedBy'])
+            ->with(['finalizedBy', 'sales'])
             ->orderByDesc('business_date')
             ->paginate(20);
 
-        return view('daily-payment-closings.index', compact('closings'));
+        $drifts = $driftService->compareMany($closings->getCollection());
+
+        return view('daily-payment-closings.index', compact('closings', 'drifts'));
     }
 
     public function create(Request $request, DailyPaymentClosingService $service)
@@ -76,21 +79,23 @@ class DailyPaymentClosingController extends Controller
         ));
     }
 
-    public function show(DailyPaymentClosing $dailyPaymentClosing)
+    public function show(DailyPaymentClosing $dailyPaymentClosing, DailyPaymentClosingDriftService $driftService)
     {
         $dailyPaymentClosing->load(['openedBy', 'finalizedBy', 'reopenedBy', 'sales.sale']);
+        $drift = $driftService->compare($dailyPaymentClosing);
 
-        return view('daily-payment-closings.show', compact('dailyPaymentClosing'));
+        return view('daily-payment-closings.show', compact('dailyPaymentClosing', 'drift'));
     }
 
-    public function print(DailyPaymentClosing $dailyPaymentClosing)
+    public function print(DailyPaymentClosing $dailyPaymentClosing, DailyPaymentClosingDriftService $driftService)
     {
         abort_unless($dailyPaymentClosing->status === DailyPaymentClosing::STATUS_FINALIZED, 404);
 
         $dailyPaymentClosing->load(['openedBy', 'finalizedBy', 'reopenedBy', 'sales.sale']);
         $setting = Setting::query()->first();
+        $drift = $driftService->compare($dailyPaymentClosing);
 
-        return view('daily-payment-closings.print', compact('dailyPaymentClosing', 'setting'));
+        return view('daily-payment-closings.print', compact('dailyPaymentClosing', 'setting', 'drift'));
     }
 
     public function store(StoreDailyPaymentClosingRequest $request, DailyPaymentClosingService $service)

@@ -5,6 +5,7 @@ namespace Tests\Feature\DailyPaymentClosings;
 use App\Models\DailyPaymentClosing;
 use App\Models\Sale;
 use App\Models\User;
+use App\Services\Sales\DailyPaymentClosingDriftService;
 use App\Services\Sales\DailyPaymentClosingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -118,6 +119,36 @@ class DailyPaymentClosingConcurrencyTest extends TestCase
         $this->assertSame($actor->id, $final->finalized_by);
     }
 
+    public function test_sale_create_update_and_void_racing_finalize_are_snapshotted_or_reportable_as_drift(): void
+    {
+        foreach (['sale_create', 'sale_update', 'sale_void'] as $operation) {
+            DB::table('daily_payment_closing_sales')->delete();
+            DB::table('daily_payment_closings')->delete();
+            DB::table('sales')->delete();
+            DB::table('users')->delete();
+            $actor = $this->actor();
+            $closing = $this->openClosing($actor);
+            $sale = $this->sale();
+            $results = $this->runConcurrently(
+                ['operation' => 'finalize', 'closing_id' => $closing->id, 'revision' => 1, 'actor_id' => $actor->id],
+                ['operation' => $operation, 'sale_id' => $sale->id, 'actor_id' => $actor->id]
+            );
+
+            $this->assertTrue(collect($results)->every(fn (array $result) => $result['ok']), json_encode($results));
+            $final = $closing->fresh();
+            $snapshotSaleIds = $final->sales()->pluck('sale_id');
+            $comparison = app(DailyPaymentClosingDriftService::class)->compare($final);
+
+            $this->assertSame(DailyPaymentClosing::STATUS_FINALIZED, $final->status);
+            $this->assertTrue(
+                $snapshotSaleIds->contains($sale->id)
+                    || $comparison['has_drift']
+                    || ($operation === 'sale_void' && $sale->fresh()->isVoided()),
+                json_encode($comparison)
+            );
+        }
+    }
+
     private function actor(): User
     {
         return User::factory()->create(['role' => 'owner']);
@@ -141,7 +172,7 @@ class DailyPaymentClosingConcurrencyTest extends TestCase
             $process->start();
         }
 
-return array_map(fn (Process $process) => $this->workerResult($process), $processes);
+        return array_map(fn (Process $process) => $this->workerResult($process), $processes);
     }
 
     private function runWorker(array $payload): array

@@ -47,6 +47,24 @@
         </div>
     </div>
 
+    @if ($dailyPaymentClosing->status === 'open')
+        <div class="alert alert-secondary" data-drift-status="not-finalized">ยังไม่สรุป drift — ใช้ยอด live ตาม workflow การเปิดรายการ</div>
+    @elseif ($drift['has_drift'])
+        <div class="card card-outline card-warning" data-drift-status="drift">
+            <div class="card-header"><strong>การเปลี่ยนแปลงหลังปิดยอด</strong> — เพิ่ม {{ $drift['added_count'] }} / ลบ {{ $drift['removed_count'] }} / แก้ {{ $drift['changed_count'] }}</div>
+            <div class="card-body">
+                @if ($drift['summary_differences'] !== [])<p>ยอด live ปัจจุบันต่างจาก snapshot ที่ปิดยอดแล้ว</p>@endif
+                @foreach (['added_sales' => 'บิลที่เพิ่ม', 'removed_sales' => 'บิลที่ถูกลบ/void/ย้ายวัน', 'changed_sales' => 'บิลที่แก้ไข'] as $key => $title)
+                    @if ($drift[$key] !== [])
+                        <h6>{{ $title }}</h6><ul class="mb-2">@foreach ($drift[$key] as $sale)<li>{{ $sale['sale_no'] }} @if(isset($sale['changed_fields'])) — {{ implode(', ', $sale['changed_fields']) }} @endif</li>@endforeach</ul>
+                    @endif
+                @endforeach
+            </div>
+        </div>
+    @else
+        <div class="alert alert-success" data-drift-status="no-drift">ข้อมูลตรงกับตอนปิดยอด</div>
+    @endif
+
     @if ($dailyPaymentClosing->sales->isNotEmpty())
         <div class="card">
             <div class="card-header">Snapshot references</div>

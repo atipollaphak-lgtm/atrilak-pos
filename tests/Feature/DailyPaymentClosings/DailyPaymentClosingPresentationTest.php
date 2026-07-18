@@ -112,7 +112,7 @@ class DailyPaymentClosingPresentationTest extends TestCase
             ->assertSee('ATRILAK Test Store')
             ->assertSee('75.00')
             ->assertSee('Counted after closing')
-            ->assertDontSee('SNAPSHOT-SALE')
+            ->assertSee('SNAPSHOT-SALE')
             ->assertDontSee('LIVE-CASH');
     }
 
@@ -130,6 +130,52 @@ class DailyPaymentClosingPresentationTest extends TestCase
             ->post(route('daily-payment-closings.reopen', $closing), ['reason' => 'recount', 'revision' => 1])
             ->assertForbidden();
         $this->actingAs($owner)->get(route('daily-payment-closings.show', $closing))->assertOk();
+    }
+
+    public function test_history_marks_finalized_drift_and_open_closings_without_naming_open_as_drift(): void
+    {
+        $manager = User::factory()->create(['role' => 'manager']);
+        $finalized = $this->closing('2026-07-18', [
+            'status' => DailyPaymentClosing::STATUS_FINALIZED,
+            'expected_cash_amount' => '10.00',
+            'actual_cash_amount' => '10.00',
+        ]);
+        $this->sale('HISTORY-LATE', ['sale_date' => '2026-07-18']);
+        $open = $this->closing('2026-07-17');
+
+        $this->actingAs($manager)
+            ->get(route('daily-payment-closings.index'))
+            ->assertOk()
+            ->assertSee('data-drift-status="drift"', false)
+            ->assertSee('data-drift-status="not-finalized"', false)
+            ->assertSee($finalized->business_date)
+            ->assertSee($open->business_date);
+    }
+
+    public function test_finalized_detail_and_print_show_compact_drift_warning_but_keep_snapshot_totals_primary(): void
+    {
+        $manager = User::factory()->create(['role' => 'manager']);
+        $closing = $this->closing('2026-07-18', [
+            'status' => DailyPaymentClosing::STATUS_FINALIZED,
+            'expected_cash_amount' => '10.00',
+            'actual_cash_amount' => '10.00',
+        ]);
+        $this->sale('DRIFT-REFERENCE');
+        $this->sale('DRIFT-ADDED', ['total_amount' => '5.00', 'cash_amount' => '5.00', 'received_amount' => '5.00']);
+
+        $this->actingAs($manager)
+            ->get(route('daily-payment-closings.show', $closing))
+            ->assertOk()
+            ->assertSee('data-drift-status="drift"', false)
+            ->assertSee('DRIFT-ADDED')
+            ->assertSee('10.00');
+
+        $this->actingAs($manager)
+            ->get(route('daily-payment-closings.print', $closing))
+            ->assertOk()
+            ->assertSee('data-drift-status="drift"', false)
+            ->assertSee('DRIFT-ADDED')
+            ->assertSee('10.00');
     }
 
     private function closing(string $date, array $attributes = []): DailyPaymentClosing

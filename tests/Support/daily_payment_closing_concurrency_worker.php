@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\DailyPaymentClosing;
+use App\Models\Sale;
 use App\Models\User;
 use App\Services\Sales\DailyPaymentClosingService;
 use Illuminate\Contracts\Console\Kernel;
@@ -37,6 +38,41 @@ try {
         'finalize' => ['ok' => true, 'id' => $service->finalize($closing, $payload['revision'], $actor)->id],
         'reopen' => ['ok' => true, 'id' => $service->reopen($closing, 'race', $payload['revision'], $actor)->id],
         'update' => ['ok' => true, 'id' => $service->update($closing, '0.00', '0.00', null, $payload['revision'])->id],
+        'sale_create' => ['ok' => true, 'id' => Sale::query()->create([
+            'sale_no' => 'RACE-CREATED-'.uniqid(),
+            'sale_date' => '2026-07-18',
+            'total_amount' => '2.00',
+            'delivery_fee' => '0.00',
+            'discount' => '0.00',
+            'delivery_type' => 'pickup',
+            'status' => Sale::STATUS_ACTIVE,
+            'revision' => 1,
+            'payment_method' => 'cash',
+            'cash_amount' => '2.00',
+            'promptpay_amount' => '0.00',
+            'received_amount' => '2.00',
+            'change_amount' => '0.00',
+        ])->id],
+        'sale_update' => (function () use ($payload): array {
+            $sale = Sale::query()->findOrFail($payload['sale_id']);
+            $sale->forceFill([
+                'revision' => (int) $sale->revision + 1,
+                'total_amount' => '12.00',
+                'cash_amount' => '12.00',
+                'received_amount' => '12.00',
+            ])->save();
+
+            return ['ok' => true, 'id' => $sale->id];
+        })(),
+        'sale_void' => (function () use ($payload): array {
+            $sale = Sale::query()->findOrFail($payload['sale_id']);
+            $sale->forceFill([
+                'status' => Sale::STATUS_VOIDED,
+                'revision' => (int) $sale->revision + 1,
+            ])->save();
+
+            return ['ok' => true, 'id' => $sale->id];
+        })(),
     };
 } catch (Throwable $exception) {
     $result = ['ok' => false, 'exception' => $exception::class, 'code' => $exception->getCode()];
