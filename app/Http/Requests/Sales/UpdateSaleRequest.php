@@ -29,6 +29,8 @@ class UpdateSaleRequest extends FormRequest
 
     public function rules(): array
     {
+        $paymentIsRequired = $this->saleRequiresPayment();
+
         return [
             'revision' => ['required', 'integer', 'min:1'],
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
@@ -39,6 +41,11 @@ class UpdateSaleRequest extends FormRequest
             'delivery_zone_id' => ['nullable', 'integer'],
             'discount' => ['nullable', $this->decimalRule(2, 10, false)],
             'delivery_fee' => ['nullable', $this->decimalRule(2, 10, false)],
+            'payment_method' => [$paymentIsRequired ? 'required' : 'nullable', 'string', 'in:cash,promptpay,mixed'],
+            'cash_amount' => [$paymentIsRequired ? 'required' : 'nullable', $this->decimalRule(2, 13, false)],
+            'promptpay_amount' => [$paymentIsRequired ? 'required' : 'nullable', $this->decimalRule(2, 13, false)],
+            'received_amount' => [$paymentIsRequired ? 'required' : 'nullable', $this->decimalRule(2, 13, false)],
+            'change_amount' => ['prohibited'],
             'base_qty' => ['prohibited'],
             'conversion_rate_used' => ['prohibited'],
             'product_id' => ['required', 'array'],
@@ -86,6 +93,13 @@ class UpdateSaleRequest extends FormRequest
     private function normalizeParallelItems(): array
     {
         return $this->normalizeParallelSaleItems(['sale_item_id', 'product_unit_id']);
+    }
+
+    private function saleRequiresPayment(): bool
+    {
+        $sale = $this->route('sale');
+
+        return $sale instanceof Sale && $sale->quotation_id === null;
     }
 
     private function validateDeliveryAddressOwnership(Validator $validator): void

@@ -148,7 +148,7 @@ class FakeElement {
     select() {}
 }
 
-function controllerHarness(onConfirm = async () => {}) {
+function controllerHarness(onConfirm = async () => {}, getInitialPayment = null) {
     let total = "100.00";
     const elements = {
         paymentModal: new FakeElement(),
@@ -194,6 +194,7 @@ function controllerHarness(onConfirm = async () => {}) {
     vm.runInContext(paymentSource, context);
     const controller = context.window.PosPayment.createController({
         getTotal: () => total,
+        getInitialPayment,
         onConfirm
     });
 
@@ -219,6 +220,40 @@ test("payment modal opens with fresh cash defaults and cancel never confirms", (
     assert.deepEqual(harness.modalActions, ["show"]);
     harness.elements["btn-cancel-payment"].dispatch("click");
     assert.equal(confirmations, 0);
+});
+
+test("payment modal restores stored mixed payment when its total is unchanged", () => {
+    const harness = controllerHarness(async () => {}, () => ({
+        payment_method: "mixed",
+        cash_amount: "40.00",
+        promptpay_amount: "60.00",
+        received_amount: "50.00"
+    }));
+
+    harness.controller.open();
+
+    assert.equal(harness.elements["payment-method"].value, "mixed");
+    assert.equal(harness.elements["payment-mixed-cash"].value, "40.00");
+    assert.equal(harness.elements["payment-promptpay-amount"].value, "60.00");
+    assert.equal(harness.elements["payment-received"].value, "50.00");
+    assert.equal(harness.elements["payment-change"].textContent, "10.00");
+});
+
+test("payment modal resets stored payment when the edited total changed", () => {
+    const harness = controllerHarness(async () => {}, () => ({
+        payment_method: "cash",
+        cash_amount: "100.00",
+        promptpay_amount: "0.00",
+        received_amount: "150.00"
+    }));
+
+    harness.setTotal("120.00");
+    harness.controller.open();
+
+    assert.equal(harness.elements["payment-method"].value, "cash");
+    assert.equal(harness.elements["payment-cash-amount"].value, "120.00");
+    assert.equal(harness.elements["payment-received"].value, "");
+    assert.equal(harness.elements["payment-change"].textContent, "0.00");
 });
 
 test("mixed modal preview and confirm use decimal-safe derived values", async () => {

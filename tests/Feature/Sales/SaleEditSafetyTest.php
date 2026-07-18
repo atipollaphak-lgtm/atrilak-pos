@@ -324,6 +324,10 @@ class SaleEditSafetyTest extends TestCase
             'selling_price' => $prices,
             'delivery_fee' => '0.00',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '10.00',
+            'received_amount' => '0.00',
         ];
     }
 
@@ -353,6 +357,8 @@ class SaleEditSafetyTest extends TestCase
         $this->assertStringContainsString("form.dataset.submitting = '1'", $script);
         $this->assertStringContainsString('button.disabled = true', $script);
         $this->assertStringContainsString('form.checkValidity()', $script);
+        $this->assertStringContainsString("form.dataset.paymentConfirmed !== '1'", $script);
+        $this->assertStringContainsString('paymentController.open()', $script);
     }
 
     private function customer(string $name, bool $active = true): Customer

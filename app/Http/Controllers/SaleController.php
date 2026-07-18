@@ -253,17 +253,24 @@ class SaleController extends Controller
     public function update(UpdateSaleRequest $request, Sale $sale)
     {
         $validated = $request->validated();
+        $updateData = [
+            'customer_id' => $validated['customer_id'] ?? null,
+            'sale_date' => $validated['sale_date'],
+            'items' => $request->normalizedItems(),
+            'delivery_fee' => $validated['delivery_fee'] ?? 0,
+            'discount' => $validated['discount'] ?? 0,
+        ];
+
+        foreach (['payment_method', 'cash_amount', 'promptpay_amount', 'received_amount'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $updateData[$field] = $validated[$field];
+            }
+        }
 
         try {
             app(SaleService::class)->updateSale(
                 $sale,
-                [
-                    'customer_id' => $validated['customer_id'] ?? null,
-                    'sale_date' => $validated['sale_date'],
-                    'items' => $request->normalizedItems(),
-                    'delivery_fee' => $validated['delivery_fee'] ?? 0,
-                    'discount' => $validated['discount'] ?? 0,
-                ],
+                $updateData,
                 (int) $validated['revision']
             );
         } catch (StaleSaleRevisionException $exception) {

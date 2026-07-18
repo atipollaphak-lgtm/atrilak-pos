@@ -276,6 +276,10 @@ class SaleRevisionTest extends TestCase
             'selling_price' => [$item->selling_price],
             'delivery_fee' => $sale->delivery_fee,
             'discount' => $sale->discount,
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => $sale->total_amount,
+            'received_amount' => '0.00',
         ];
     }
 

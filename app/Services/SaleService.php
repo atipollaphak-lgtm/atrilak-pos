@@ -458,7 +458,12 @@ class SaleService
                     );
                 }
 
-                $this->updateSaleHeader($lockedSale, $data);
+                $payment = $this->resolveUpdatedPayment(
+                    $lockedSale,
+                    $data,
+                    $finalNetTotal
+                );
+                $this->updateSaleHeader($lockedSale, $data, null, $payment);
 
                 if ($commissionAffected) {
                     $this->commissionService->refreshPendingForSale(
@@ -509,6 +514,11 @@ class SaleService
                 $commissionAffected
             );
             $this->assertUpdateProfitGuard($lockedSale, $data, $productProfit);
+            $payment = $this->resolveUpdatedPayment(
+                $lockedSale,
+                $data,
+                $finalNetTotal
+            );
 
             $this->stockService->restoreFromSale(
                 $lockedSale,
@@ -531,7 +541,7 @@ class SaleService
             );
 
             $this->persistUpdatePlan($lockedSale, $updatePlan);
-            $this->updateSaleHeader($lockedSale, $data, $grandTotal);
+            $this->updateSaleHeader($lockedSale, $data, $grandTotal, $payment);
 
             if ($commissionAffected) {
                 $lockedSale->unsetRelation('items');
@@ -574,7 +584,8 @@ class SaleService
     private function updateSaleHeader(
         Sale $sale,
         array $data,
-        ?string $itemsTotal = null
+        ?string $itemsTotal = null,
+        ?array $payment = null
     ): void {
         $deliveryFee = $this->saleValidationService
             ->money($data['delivery_fee'] ?? $sale->delivery_fee);
@@ -604,6 +615,10 @@ class SaleService
             'delivery_fee' => $deliveryFee,
             'discount' => $discount,
         ];
+
+        if ($payment !== null) {
+            $updates = array_merge($updates, $payment);
+        }
 
         if ($this->nullableId($data['customer_id'] ?? null)
             !== $this->nullableId($sale->customer_id)) {
@@ -640,6 +655,28 @@ class SaleService
         }
 
         $sale->update($updates);
+    }
+
+    private function resolveUpdatedPayment(
+        Sale $sale,
+        array $data,
+        string $netTotal
+    ): ?array {
+        $paymentFields = ['payment_method', 'cash_amount', 'promptpay_amount', 'received_amount'];
+        $hasPaymentInput = collect($paymentFields)
+            ->contains(fn (string $field): bool => array_key_exists($field, $data));
+
+        if (! $hasPaymentInput) {
+            return null;
+        }
+
+        return $this->salePaymentResolver->resolve(
+            $netTotal,
+            $data['payment_method'] ?? null,
+            $data['cash_amount'] ?? null,
+            $data['promptpay_amount'] ?? null,
+            $data['received_amount'] ?? null
+        );
     }
 
     private function buildUpdatePlan(

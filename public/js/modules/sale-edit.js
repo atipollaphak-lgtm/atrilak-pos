@@ -2,6 +2,14 @@
     const itemRows = document.getElementById('sale-items');
     const addRowButton = document.getElementById('addRow');
     const form = document.getElementById('sale-edit-form');
+    const paymentFields = {
+        payment_method: document.getElementById('sale-payment-method'),
+        cash_amount: document.getElementById('sale-cash-amount'),
+        promptpay_amount: document.getElementById('sale-promptpay-amount'),
+        received_amount: document.getElementById('sale-received-amount')
+    };
+    const hasPaymentFields = Object.values(paymentFields).every(Boolean);
+    let paymentController = null;
 
     if (!itemRows || !addRowButton) {
         return;
@@ -84,6 +92,27 @@
         calculateTotals();
     });
 
+    if (hasPaymentFields && window.PosPayment) {
+        paymentController = window.PosPayment.createController({
+            getTotal: () => document.getElementById('net_total')?.value || '0.00',
+            getInitialPayment: () => ({
+                payment_method: paymentFields.payment_method.value,
+                cash_amount: paymentFields.cash_amount.value,
+                promptpay_amount: paymentFields.promptpay_amount.value,
+                received_amount: paymentFields.received_amount.value
+            }),
+            onConfirm: async (payment) => {
+                const payload = window.PosPayment.payload(payment);
+
+                Object.entries(payload).forEach(([field, value]) => {
+                    paymentFields[field].value = value;
+                });
+                form.dataset.paymentConfirmed = '1';
+                form.requestSubmit();
+            }
+        });
+    }
+
     form?.addEventListener('submit', (event) => {
         if (!form.checkValidity()) {
             return;
@@ -91,6 +120,13 @@
 
         if (form.dataset.submitting === '1') {
             event.preventDefault();
+
+            return;
+        }
+
+        if (paymentController && form.dataset.paymentConfirmed !== '1') {
+            event.preventDefault();
+            paymentController.open();
 
             return;
         }
@@ -107,6 +143,7 @@
         }
 
         delete form.dataset.submitting;
+        delete form.dataset.paymentConfirmed;
         form.querySelectorAll('button[type="submit"]').forEach((button) => {
             button.disabled = false;
         });

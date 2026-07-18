@@ -167,6 +167,7 @@ class SaleRequestShapeTest extends TestCase
         $payload['product_id'] = [$product->id, '', ''];
         $payload['qty'] = ['2.00', '', ''];
         $payload['selling_price'] = ['10.00', '', ''];
+        $payload['promptpay_amount'] = '20.00';
 
         $this->put(route('sales.update', $sale), $payload)
             ->assertRedirect(route('sales.show', $sale));
@@ -370,6 +371,10 @@ class SaleRequestShapeTest extends TestCase
             'selling_price' => ['10.00'],
             'delivery_fee' => '0.00',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '10.00',
+            'received_amount' => '0.00',
         ];
     }
 

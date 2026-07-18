@@ -129,7 +129,7 @@
             show(elements.error, message !== "");
         }
 
-        function reset(total) {
+        function reset(total, initialPayment = null) {
             openedTotal = total;
             elements.total.textContent = total;
             elements.method.value = "cash";
@@ -140,6 +140,51 @@
             elements.change.textContent = "0.00";
             setError();
             updateVisibility();
+
+            if (initialPayment) {
+                restoreInitialPayment(initialPayment);
+            }
+        }
+
+        function restoreInitialPayment(initialPayment) {
+            try {
+                const restored = resolve(
+                    initialPayment.payment_method,
+                    openedTotal,
+                    initialPayment.cash_amount,
+                    initialPayment.received_amount
+                );
+                const suppliedPromptpay = centsToMoney(moneyToCents(
+                    initialPayment.promptpay_amount,
+                    "à¸¢à¸­à¸”à¸žà¸£à¹‰à¸­à¸¡à¹€à¸žà¸¢à¹Œ",
+                    false
+                ));
+                const suppliedCash = centsToMoney(moneyToCents(
+                    initialPayment.cash_amount,
+                    "à¹€à¸‡à¸´à¸™à¸ªà¸”à¸—à¸µà¹ˆà¹ƒà¸Šà¹‰à¸Šà¸³à¸£à¸°",
+                    false
+                ));
+
+                if (restored.cash_amount !== suppliedCash
+                    || restored.promptpay_amount !== suppliedPromptpay) {
+                    throw new Error("payment allocation changed");
+                }
+
+                elements.method.value = restored.payment_method;
+                updateVisibility();
+
+                if (restored.payment_method === "mixed") {
+                    elements.mixedCash.value = restored.cash_amount;
+                }
+
+                if (restored.payment_method !== "promptpay") {
+                    elements.received.value = restored.received_amount;
+                }
+
+                updatePreview();
+            } catch (ignored) {
+                // A changed total or malformed historical payment must be re-entered.
+            }
         }
 
         function updateVisibility() {
@@ -252,7 +297,12 @@
                 return;
             }
 
-            reset(canonicalTotal());
+            reset(
+                canonicalTotal(),
+                typeof options.getInitialPayment === "function"
+                    ? options.getInitialPayment()
+                    : null
+            );
             $(elements.modal).modal("show");
         }
 

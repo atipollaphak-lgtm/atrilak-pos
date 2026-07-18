@@ -48,6 +48,16 @@
         @csrf
         @method('PUT')
         <input type="hidden" name="revision" value="{{ old('revision', $sale->revision) }}">
+        @if ($sale->quotation_id === null)
+            <input type="hidden" name="payment_method" id="sale-payment-method"
+                value="{{ old('payment_method', $sale->payment_method) }}">
+            <input type="hidden" name="cash_amount" id="sale-cash-amount"
+                value="{{ old('cash_amount', $sale->cash_amount) }}">
+            <input type="hidden" name="promptpay_amount" id="sale-promptpay-amount"
+                value="{{ old('promptpay_amount', $sale->promptpay_amount) }}">
+            <input type="hidden" name="received_amount" id="sale-received-amount"
+                value="{{ old('received_amount', $sale->received_amount) }}">
+        @endif
 
         <div class="card">
             <div class="card-header">ข้อมูลบิล</div>
@@ -172,13 +182,30 @@
                     <h4>ยอดรวม : <span id="grand-total">0.00</span> บาท</h4>
                 </div>
 
+                @if ($sale->quotation_id === null)
+                    <div class="alert alert-light border" id="current-payment-method">
+                        วิธีชำระปัจจุบัน: {{ match($sale->payment_method) {
+                            'cash' => 'เงินสด',
+                            'promptpay' => 'พร้อมเพย์',
+                            'mixed' => 'เงินสด + พร้อมเพย์',
+                            default => 'ไม่ระบุวิธีชำระ',
+                        } }}
+                    </div>
+                @endif
+
                 <button class="btn btn-success">บันทึกการแก้ไข</button>
                 <a href="{{ route('sales.show', $sale->id) }}" class="btn btn-secondary">ยกเลิก</a>
             </div>
         </div>
     </form>
+    @if ($sale->quotation_id === null)
+        @include('sales.partials.payment-modal')
+    @endif
 @stop
 
 @section('js')
+    @if ($sale->quotation_id === null)
+        <script src="{{ asset('js/modules/pos-payment.js') }}"></script>
+    @endif
     <script src="{{ asset('js/modules/sale-edit.js') }}"></script>
 @stop
