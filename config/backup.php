@@ -10,4 +10,6 @@ return [
     'restore_enabled' => env('BACKUP_RESTORE_ENABLED', false),
     'restore_max_kb' => (int) env('BACKUP_RESTORE_MAX_KB', 512000),
     'restore_timeout_seconds' => (int) env('BACKUP_RESTORE_TIMEOUT_SECONDS', 1800),
+    'restore_staging_directory' => storage_path('app/restore-staging'),
+    'restore_lock_path' => storage_path('framework/restore.lock'),
 ];
