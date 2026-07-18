@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class DailyPaymentClosing extends Model
 {
+    public const STATUS_OPEN = 'open';
+
+    public const STATUS_FINALIZED = 'finalized';
+
     protected $fillable = [
         'business_date',
         'status',
@@ -26,6 +30,9 @@ class DailyPaymentClosing extends Model
         'opened_by',
         'finalized_by',
         'finalized_at',
+        'reopened_by',
+        'reopened_at',
+        'reopen_reason',
         'revision',
     ];
 
@@ -33,6 +40,7 @@ class DailyPaymentClosing extends Model
     {
         return [
             'finalized_at' => 'datetime',
+            'reopened_at' => 'datetime',
             'revision' => 'integer',
             'cash_sales_count' => 'integer',
             'promptpay_sales_count' => 'integer',
@@ -63,5 +71,10 @@ class DailyPaymentClosing extends Model
     public function finalizedBy()
     {
         return $this->belongsTo(User::class, 'finalized_by');
+    }
+
+    public function reopenedBy()
+    {
+        return $this->belongsTo(User::class, 'reopened_by');
     }
 }

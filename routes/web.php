@@ -31,6 +31,7 @@ use App\Http\Controllers\TechnicianPaymentBatchController;
 use App\Http\Controllers\DeliveryZoneController;
 use App\Http\Controllers\CustomerDeliveryAddressController;
 use App\Http\Controllers\PricingManagementController;
+use App\Http\Controllers\DailyPaymentClosingController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -137,6 +138,12 @@ Route::middleware(['auth'])->group(function () {
 
     // Manager ขึ้นไป
     Route::middleware(['role:manager'])->group(function () {
+        Route::post('/daily-payment-closings', [DailyPaymentClosingController::class, 'store'])
+            ->name('daily-payment-closings.store');
+        Route::put('/daily-payment-closings/{dailyPaymentClosing}', [DailyPaymentClosingController::class, 'update'])
+            ->name('daily-payment-closings.update');
+        Route::post('/daily-payment-closings/{dailyPaymentClosing}/finalize', [DailyPaymentClosingController::class, 'finalize'])
+            ->name('daily-payment-closings.finalize');
         Route::post('/sales/{sale}/void', [SaleController::class, 'void'])
             ->name('sales.void');
 
@@ -314,6 +321,8 @@ Route::middleware(['auth'])->group(function () {
 
     // Owner เท่านั้น
     Route::middleware(['role:owner'])->group(function () {
+        Route::post('/daily-payment-closings/{dailyPaymentClosing}/reopen', [DailyPaymentClosingController::class, 'reopen'])
+            ->name('daily-payment-closings.reopen');
         Route::resource('users', UserController::class);
 
         Route::post('/users/{user}/update-role', [UserController::class, 'updateRole'])
