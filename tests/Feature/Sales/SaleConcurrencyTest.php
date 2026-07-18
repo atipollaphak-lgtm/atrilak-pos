@@ -146,6 +146,47 @@ class SaleConcurrencyTest extends TestCase
         $this->assertMovementChain($product, 10, 6);
     }
 
+    public function test_two_concurrent_voids_restore_stock_and_append_a_void_movement_once(): void
+    {
+        $product = $this->createProduct('Concurrent void product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+
+        $results = $this->runConcurrently(
+            $this->voidOperation($sale),
+            $this->voidOperation($sale)
+        );
+
+        $this->assertSame(1, collect($results)->where('ok', true)->count());
+        $this->assertSame(1, collect($results)->where('ok', false)->count());
+        $this->assertSame(Sale::STATUS_VOIDED, $sale->fresh()->status);
+        $this->assertSame('10.0000', $product->fresh()->stock_qty);
+        $this->assertSame(1, StockMovement::query()
+            ->where('reference_type', 'sale_void')
+            ->where('reference_id', $sale->id)
+            ->count());
+        $this->assertMovementChain($product, 10, 10);
+    }
+
+    public function test_concurrent_update_and_void_leave_the_sale_voided_without_duplicate_stock_effects(): void
+    {
+        $product = $this->createProduct('Concurrent update void product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+
+        $results = $this->runConcurrently(
+            $this->updateOperation($sale, [$this->line($product, 3, 10)]),
+            $this->voidOperation($sale)
+        );
+
+        $this->assertTrue($results[1]['ok'], json_encode($results));
+        $this->assertSame(Sale::STATUS_VOIDED, $sale->fresh()->status);
+        $this->assertSame('10.0000', $product->fresh()->stock_qty);
+        $this->assertSame(1, StockMovement::query()
+            ->where('reference_type', 'sale_void')
+            ->where('reference_id', $sale->id)
+            ->count());
+        $this->assertMovementChain($product, 10, 10);
+    }
+
     public function test_two_concurrent_updates_of_the_same_sale_do_not_restore_stock_twice(): void
     {
         $product = $this->createProduct('Concurrent update product', 8);
@@ -454,6 +495,66 @@ class SaleConcurrencyTest extends TestCase
         $this->assertMovementChain($product, 10, 8);
     }
 
+    public function test_concurrent_commission_batching_blocks_sale_void(): void
+    {
+        $product = $this->createProduct('Commission batch void product', 8);
+        $sale = $this->createExistingSale($product, 2, 10);
+        $technicianId = DB::table('technicians')->insertGetId([
+            'name' => 'Concurrent void technician',
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $commissionId = DB::table('technician_commissions')->insertGetId([
+            'sale_id' => $sale->id,
+            'technician_id' => $technicianId,
+            'commission_amount' => 5,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $blocker = $this->blockerConnection();
+        $blocker->beginTransaction();
+        $process = null;
+
+        try {
+            $blocker->table('technician_commissions')
+                ->where('id', $commissionId)
+                ->lockForUpdate()
+                ->first();
+            $process = $this->workerProcess($this->voidOperation($sale));
+            $process->start();
+            usleep(250000);
+            $blocker->table('technician_commissions')
+                ->where('id', $commissionId)
+                ->update([
+                    'payment_batch_id' => 99,
+                    'updated_at' => now(),
+                ]);
+            $blocker->commit();
+            $process->wait();
+        } finally {
+            if ($blocker->transactionLevel() > 0) {
+                $blocker->rollBack();
+            }
+            if ($process?->isRunning()) {
+                $process->stop();
+            }
+        }
+
+        $this->assertSame(0, $process?->getExitCode(), $process?->getErrorOutput());
+        $result = json_decode($process?->getOutput() ?? '', true, flags: JSON_THROW_ON_ERROR);
+        $this->assertFalse($result['ok']);
+        $this->assertDatabaseHas('technician_commissions', [
+            'id' => $commissionId,
+            'payment_batch_id' => 99,
+        ]);
+        $this->assertSame(Sale::STATUS_ACTIVE, $sale->fresh()->status);
+        $this->assertEquals(8.0000, $product->fresh()->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 1);
+        $this->assertMovementChain($product, 10, 8);
+    }
+
     public function test_reversed_multi_product_requests_do_not_deadlock(): void
     {
         $first = $this->createProduct('First ordered product', 20);
@@ -693,6 +794,15 @@ SQL);
                 'delivery_fee' => 0,
                 'discount' => 0,
             ],
+        ];
+    }
+
+    private function voidOperation(Sale $sale): array
+    {
+        return [
+            'operation' => 'void',
+            'sale_id' => $sale->id,
+            'reason' => 'Concurrent void',
         ];
     }
 

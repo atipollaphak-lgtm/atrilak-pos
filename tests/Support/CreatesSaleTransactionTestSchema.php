@@ -103,6 +103,10 @@ trait CreatesSaleTransactionTestSchema
             $table->string('delivery_type')->default('delivery');
             $table->decimal('discount', 12, 2)->default(0);
             $table->bigInteger('revision')->default(1);
+            $table->string('status', 20)->default('active');
+            $table->timestamp('voided_at')->nullable();
+            $table->unsignedBigInteger('voided_by')->nullable();
+            $table->text('void_reason')->nullable();
             $table->string('payment_method', 20)->nullable();
             $table->decimal('cash_amount', 15, 2)->nullable();
             $table->decimal('promptpay_amount', 15, 2)->nullable();

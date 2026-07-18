@@ -41,6 +41,16 @@ class CommissionService
         }
     }
 
+    public function voidPendingForSale(Collection $commissions): void
+    {
+        $this->assertCanChange($commissions, true);
+
+        $commissions->each(function (TechnicianCommission $commission): void {
+            $commission->status = 'voided';
+            $commission->save();
+        });
+    }
+
     public function refreshPendingForSale(Sale $sale, Collection $commissions): void
     {
         if ($commissions->count() > 1) {

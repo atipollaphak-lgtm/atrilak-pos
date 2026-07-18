@@ -7,6 +7,7 @@ use App\Models\CustomerDeliveryAddress;
 use App\Models\Quotation;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\User;
 use App\Services\Sales\CommissionService;
 use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\ProfitGuardService;
@@ -954,6 +955,64 @@ class SaleService
 
             $lockedSale->items()->delete();
             $lockedSale->delete();
+        });
+    }
+
+    public function voidSale(Sale $sale, User $actor, string $reason): Sale
+    {
+        $voidReason = trim($reason);
+
+        if ($voidReason === '') {
+            throw new DomainException('กรุณาระบุเหตุผลการยกเลิกใบขาย');
+        }
+
+        return DB::transaction(function () use ($sale, $actor, $voidReason): Sale {
+            $lockedSale = Sale::query()
+                ->whereKey($sale->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($lockedSale->isVoided()) {
+                throw new DomainException('ใบขายนี้ถูกยกเลิกแล้ว');
+            }
+
+            if (! $lockedSale->isActive()) {
+                throw new DomainException('ใบขายนี้ไม่สามารถยกเลิกได้');
+            }
+
+            $lockedItems = SaleItem::query()
+                ->where('sale_id', $lockedSale->getKey())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $lockedSale->setRelation('items', $lockedItems);
+
+            $lockedCommissions = $this->commissionService->lockForSale($lockedSale);
+            $this->commissionService->assertCanChange($lockedCommissions, true);
+            $this->saleItemQuantityService
+                ->assertAuthoritativeQuantities($lockedItems);
+
+            $lockedProducts = $this->stockLockService->lockProducts(
+                $lockedItems->pluck('product_id')->all()
+            );
+
+            $this->stockService->restoreFromSale(
+                $lockedSale,
+                $lockedProducts,
+                'sale_void',
+                'คืนสต็อกจากการยกเลิกใบขาย '.$lockedSale->sale_no
+            );
+
+            $this->commissionService->voidPendingForSale($lockedCommissions);
+
+            $lockedSale->forceFill([
+                'status' => Sale::STATUS_VOIDED,
+                'voided_at' => now(),
+                'voided_by' => $actor->getKey(),
+                'void_reason' => $voidReason,
+            ])->save();
+
+            return $lockedSale;
         });
     }
 }

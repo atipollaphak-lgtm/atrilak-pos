@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Sale;
+use App\Models\User;
 use App\Services\SaleService;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
@@ -52,6 +53,12 @@ try {
     } elseif ($operation === 'delete') {
         $sale = Sale::findOrFail($payload['sale_id']);
         $service->deleteSale($sale);
+        $result = ['ok' => true, 'sale_id' => (int) $payload['sale_id']];
+    } elseif ($operation === 'void') {
+        $sale = Sale::findOrFail($payload['sale_id']);
+        $actor = new User;
+        $actor->setRawAttributes(['id' => 1], true);
+        $service->voidSale($sale, $actor, (string) ($payload['reason'] ?? 'Concurrency void'));
         $result = ['ok' => true, 'sale_id' => (int) $payload['sale_id']];
     } else {
         throw new InvalidArgumentException('Unknown worker operation.');

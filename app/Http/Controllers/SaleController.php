@@ -320,10 +320,26 @@ class SaleController extends Controller
 
     public function void(VoidSaleRequest $request, Sale $sale)
     {
-        return back()->with(
-            'error',
-            'การยกเลิกใบขายจะพร้อมใช้งานหลังจากระบบคืนสต็อกใน Sprint 17B'
-        );
+        try {
+            app(SaleService::class)->voidSale(
+                $sale,
+                $request->user(),
+                $request->validated('void_reason')
+            );
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'ไม่สามารถยกเลิกใบขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
+        }
+
+        return redirect()
+            ->route('sales.show', $sale)
+            ->with('success', 'ยกเลิกใบขายและคืนสต็อกเรียบร้อยแล้ว');
     }
 
     private function saleCreatedResponse(Sale $sale)
