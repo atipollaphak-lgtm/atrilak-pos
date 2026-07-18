@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\File;
+use App\Services\Backup\DatabaseBackupService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 
 class BackupController extends Controller
 {
+    public function __construct(private DatabaseBackupService $databaseBackupService) {}
+
     public function index()
     {
         $backupDir = storage_path('app/backups');
@@ -28,49 +31,16 @@ class BackupController extends Controller
 
     public function createBackup()
     {
-        $pgDumpPath = 'C:\\Program Files\\PostgreSQL\\17\\bin\\pg_dump.exe';
-
-        $database = env('DB_DATABASE');
-        $username = env('DB_USERNAME');
-        $host = env('DB_HOST');
-        $port = env('DB_PORT');
-        $password = env('DB_PASSWORD');
-
-        $backupDir = storage_path('app/backups');
-
-        if (!File::exists($backupDir)) {
-            File::makeDirectory($backupDir, 0755, true);
+        $result = $this->databaseBackupService->create();
+        if ($result->reasonCode() === 'backup_in_progress') {
+            return back()->with('error', 'กำลังสำรองข้อมูลอยู่ กรุณาลองใหม่อีกครั้ง');
+        }
+        if (! $result->successful()) {
+            return back()->with('error', 'Backup ไม่สำเร็จ กรุณาตรวจสอบการตั้งค่า PostgreSQL');
         }
 
-        $fileName = 'atrilak_backup_' . date('Ymd_His') . '.sql';
+        return back()->with('success', 'สร้าง Backup สำเร็จ: '.$result->fileName());
 
-        $filePath = $backupDir . DIRECTORY_SEPARATOR . $fileName;
-
-        $command = '"' . $pgDumpPath . '"'
-            . ' -h ' . $host
-            . ' -p ' . $port
-            . ' -U ' . $username
-            . ' -d ' . $database
-            . ' -F p'
-            . ' --clean'
-            . ' --if-exists'
-            . ' -f "' . $filePath . '"';
-
-        putenv('PGPASSWORD=' . $password);
-
-        exec($command, $output, $resultCode);
-
-        if ($resultCode !== 0 || !file_exists($filePath)) {
-            return back()->with(
-                'error',
-                'Backup ไม่สำเร็จ กรุณาตรวจสอบ PostgreSQL หรือรหัสผ่านฐานข้อมูล'
-            );
-        }
-
-        return back()->with(
-            'success',
-            'สร้าง Backup สำเร็จ: ' . $fileName
-        );
     }
 
     public function downloadFile($fileName)
@@ -78,10 +48,10 @@ class BackupController extends Controller
         $fileName = basename($fileName);
 
         $filePath = storage_path(
-            'app/backups/' . $fileName
+            'app/backups/'.$fileName
         );
 
-        if (!file_exists($filePath)) {
+        if (! file_exists($filePath)) {
             return back()->with(
                 'error',
                 'ไม่พบไฟล์ Backup'
@@ -107,25 +77,25 @@ class BackupController extends Controller
 
         $filePath = $request->file('backup_file')->getRealPath();
 
-        putenv('PGPASSWORD=' . $password);
+        putenv('PGPASSWORD='.$password);
 
-        $command = '"' . $pgRestorePath . '"'
-            . ' -h ' . $host
-            . ' -p ' . $port
-            . ' -U ' . $username
-            . ' -d ' . $database
-            . ' -v ON_ERROR_STOP=1'
-            . ' -f "' . $filePath . '"';
+        $command = '"'.$pgRestorePath.'"'
+            .' -h '.$host
+            .' -p '.$port
+            .' -U '.$username
+            .' -d '.$database
+            .' -v ON_ERROR_STOP=1'
+            .' -f "'.$filePath.'"';
 
         $output = [];
         $resultCode = null;
 
-        exec($command . ' 2>&1', $output, $resultCode);
+        exec($command.' 2>&1', $output, $resultCode);
 
         if ($resultCode !== 0) {
             return redirect()
                 ->route('backups.index')
-                ->with('error', 'Restore ไม่สำเร็จ: ' . implode("\n", $output));
+                ->with('error', 'Restore ไม่สำเร็จ: '.implode("\n", $output));
         }
 
         return redirect()
