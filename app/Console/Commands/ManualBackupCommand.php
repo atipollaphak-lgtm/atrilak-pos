@@ -5,12 +5,11 @@ namespace App\Console\Commands;
 use App\Services\Backup\DatabaseBackupService;
 use Illuminate\Console\Command;
 
-class AutoBackupCommand extends Command
+class ManualBackupCommand extends Command
 {
     protected $signature = 'atrilak:backup';
 
-    protected $description =
-        'Create automatic database backup';
+    protected $description = 'Create a manual database backup';
 
     public function handle(DatabaseBackupService $databaseBackupService): int
     {

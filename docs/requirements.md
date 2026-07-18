@@ -34,7 +34,6 @@
 
 ## Backup
 
-* กำหนดเวลา Backup อัตโนมัติ
 * Backup ฐานข้อมูล
 * Backup รูปสินค้า
 * Backup เอกสาร
