@@ -400,6 +400,10 @@ class SaleService
                 throw new StaleSaleRevisionException;
             }
 
+            if ($lockedSale->isVoided()) {
+                throw new DomainException('ใบขายนี้ถูกยกเลิกแล้ว ไม่สามารถแก้ไขได้');
+            }
+
             $lockedItems = SaleItem::query()
                 ->where('sale_id', $lockedSale->getKey())
                 ->orderBy('id')

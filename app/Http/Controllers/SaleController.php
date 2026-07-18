@@ -6,6 +6,7 @@ use App\Exceptions\StaleSaleRevisionException;
 use App\Http\Requests\Sales\StoreSaleV1Request;
 use App\Http\Requests\Sales\StoreSaleV2Request;
 use App\Http\Requests\Sales\UpdateSaleRequest;
+use App\Http\Requests\Sales\VoidSaleRequest;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
@@ -217,6 +218,10 @@ class SaleController extends Controller
 
     public function edit(Sale $sale)
     {
+        if ($sale->isVoided()) {
+            abort(409, 'ใบขายนี้ถูกยกเลิกแล้ว ไม่สามารถแก้ไขได้');
+        }
+
         $sale->load('items.product', 'items.productUnit', 'customer');
 
         $customers = Customer::query()
@@ -311,6 +316,14 @@ class SaleController extends Controller
         return redirect()
             ->route('sales.index')
             ->with('success', 'ลบบิลและคืนสต๊อกเรียบร้อยแล้ว');
+    }
+
+    public function void(VoidSaleRequest $request, Sale $sale)
+    {
+        return back()->with(
+            'error',
+            'การยกเลิกใบขายจะพร้อมใช้งานหลังจากระบบคืนสต็อกใน Sprint 17B'
+        );
     }
 
     private function saleCreatedResponse(Sale $sale)

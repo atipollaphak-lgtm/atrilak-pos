@@ -82,7 +82,7 @@ Route::middleware(['auth'])->group(function () {
             [SaleController::class, 'storeV2']
         )->name('sales.v2.store');
 
-        Route::resource('sales', SaleController::class);
+        Route::resource('sales', SaleController::class)->except('destroy');
 
         Route::get('/sales/{sale}/invoice', [SaleController::class, 'invoice'])
             ->name('sales.invoice');
@@ -137,6 +137,9 @@ Route::middleware(['auth'])->group(function () {
 
     // Manager ขึ้นไป
     Route::middleware(['role:manager'])->group(function () {
+        Route::post('/sales/{sale}/void', [SaleController::class, 'void'])
+            ->name('sales.void');
+
         Route::resource('products', ProductController::class);
         Route::post(
             '/products/{product}/restore',

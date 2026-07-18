@@ -247,14 +247,12 @@ class QuotationConversionReliabilityTest extends TestCase
         $linkedSale = app(SaleService::class)->createSaleFromQuotation($quotation);
         $stockAfterConversion = $product->fresh()->stock_qty;
 
-        $this->from(route('sales.show', $linkedSale))
-            ->delete(route('sales.destroy', $linkedSale))
-            ->assertRedirect(route('sales.show', $linkedSale))
-            ->assertSessionHas('error');
-        $saleDeleteMessage = session('error');
-        $this->get(route('sales.show', $linkedSale))
-            ->assertOk()
-            ->assertSeeText($saleDeleteMessage);
+        try {
+            app(SaleService::class)->deleteSale($linkedSale);
+            $this->fail('A quotation-origin Sale must retain the established service delete guard.');
+        } catch (DomainException) {
+            // The old service remains guarded while web deletion is removed in Sprint 17A.
+        }
 
         $this->from(route('quotations.index'))
             ->delete(route('quotations.destroy', $quotation))

@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class Sale extends Model
 {
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_VOIDED = 'voided';
+
     public bool $idempotentReplay = false;
 
     protected $fillable = [
@@ -20,6 +24,10 @@ class Sale extends Model
         'delivery_fee',
         'delivery_type',
         'discount',
+        'status',
+        'voided_at',
+        'voided_by',
+        'void_reason',
         'payment_method',
         'cash_amount',
         'promptpay_amount',
@@ -49,6 +57,7 @@ class Sale extends Model
     {
         return [
             'revision' => 'integer',
+            'voided_at' => 'datetime',
             'cash_amount' => 'decimal:2',
             'promptpay_amount' => 'decimal:2',
             'received_amount' => 'decimal:2',
@@ -79,5 +88,30 @@ class Sale extends Model
     public function quotation()
     {
         return $this->belongsTo(Quotation::class);
+    }
+
+    public function voidedBy()
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->where('status', self::STATUS_ACTIVE);
+    }
+
+    public function scopeVoided($query)
+    {
+        return $query->where('status', self::STATUS_VOIDED);
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === self::STATUS_ACTIVE;
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->status === self::STATUS_VOIDED;
     }
 }
