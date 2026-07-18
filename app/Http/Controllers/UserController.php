@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateUserRoleRequest;
 use App\Models\User;
-use Illuminate\Http\Request;
+use App\Services\UserRoleSynchronizationService;
 
 class UserController extends Controller
 {
@@ -18,16 +19,15 @@ class UserController extends Controller
     }
 
     public function updateRole(
-        Request $request,
-        User $user
+        UpdateUserRoleRequest $request,
+        User $user,
+        UserRoleSynchronizationService $roleSynchronizationService
     )
     {
-        $request->validate([
-            'role' => 'required'
-        ]);
-
-        $user->role = $request->role;
-        $user->save();
+        $roleSynchronizationService->synchronize(
+            $user,
+            $request->validated('role')
+        );
 
         return back()->with(
             'success',
