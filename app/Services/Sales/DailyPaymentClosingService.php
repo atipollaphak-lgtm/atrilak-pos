@@ -33,7 +33,7 @@ class DailyPaymentClosingService
                 'opened_by' => $actor->id,
             ]);
 
-            return [$closing, true];
+            return [$closing->refresh(), true];
         } catch (QueryException $exception) {
             $closing = DailyPaymentClosing::query()
                 ->where('business_date', $businessDate)

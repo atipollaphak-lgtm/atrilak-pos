@@ -31,6 +31,8 @@ class DailyPaymentClosingWorkflowTest extends TestCase
 
         $this->assertSame($first['id'], $second['id']);
         $this->assertSame(DailyPaymentClosing::STATUS_OPEN, $second['status']);
+        $this->assertSame(1, $first['revision']);
+        $this->assertSame(1, $second['revision']);
         $this->assertDatabaseCount('daily_payment_closings', 1);
         $this->assertDatabaseHas('daily_payment_closings', [
             'id' => $first['id'],
