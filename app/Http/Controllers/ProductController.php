@@ -56,10 +56,15 @@ class ProductController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->input('minimum_stock') === null) {
+            $request->merge(['minimum_stock' => 0]);
+        }
+
         $request->validate([
             'category_id' => 'required',
             'name' => 'required',
             'unit_id' => 'nullable|exists:units,id',
+            'minimum_stock' => 'numeric|min:0',
         ]);
 
         $product = Product::create($request->all());
@@ -134,10 +139,15 @@ class ProductController extends Controller
         Request $request,
         Product $product
     ) {
+        if ($request->input('minimum_stock') === null) {
+            $request->merge(['minimum_stock' => 0]);
+        }
+
         $request->validate([
             'category_id' => 'required',
             'name' => 'required',
             'unit_id' => 'nullable|exists:units,id',
+            'minimum_stock' => 'numeric|min:0',
         ]);
         $product = $this->productUpdateService->update($product, $request->all());
 
