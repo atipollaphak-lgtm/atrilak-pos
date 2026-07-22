@@ -128,6 +128,45 @@ test("same-page retry reuses the same key", async () => {
     assert.equal(retried.reused, true);
 });
 
+test("uses secure random bytes when randomUUID is unavailable", async () => {
+    let calls = 0;
+    const cryptoWithoutRandomUuid = {
+        getRandomValues(values) {
+            calls++;
+
+            for (let index = 0; index < values.length; index++) {
+                values[index] = index;
+            }
+
+            return values;
+        }
+    };
+    const manager = intentStorage.createManager({
+        crypto: cryptoWithoutRandomUuid,
+        storage: new MemoryStorage(),
+        storageKey: "get-random-values"
+    });
+
+    const intent = await manager.keyFor(payload());
+
+    assert.equal(calls, 1);
+    assert.match(intent.key, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.equal(intent.key, "00010203-0405-4607-8809-0a0b0c0d0e0f");
+});
+
+test("fails closed when secure idempotency-key generation is unavailable", async () => {
+    const manager = intentStorage.createManager({
+        crypto: {},
+        storage: new MemoryStorage(),
+        storageKey: "no-secure-randomness"
+    });
+
+    await assert.rejects(
+        manager.keyFor(payload()),
+        /Secure idempotency-key generation is unavailable\./
+    );
+});
+
 test("reload recovery reuses key for unchanged payload", async () => {
     const storage = new MemoryStorage();
     const firstPage = intentStorage.createManager({
