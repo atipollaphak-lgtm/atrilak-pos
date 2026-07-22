@@ -9,6 +9,7 @@ use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Services\PurchaseService;
+use Brick\Math\BigDecimal;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
@@ -620,13 +621,27 @@ SQL);
             'selling_price' => $line[2],
         ], $lines);
 
+        $grandTotal = (string) collect($items)
+            ->reduce(
+                fn (BigDecimal $total, array $item): BigDecimal => $total->plus(
+                    BigDecimal::of((string) $item['qty'])
+                        ->multipliedBy((string) $item['selling_price'])
+                ),
+                BigDecimal::zero()
+            )
+            ->toScale(2);
+
         return [
             'operation' => 'sale_create',
             'data' => [
                 'sale_date' => '2026-07-14',
-                'grand_total' => collect($items)->sum(fn (array $item) => $item['qty'] * $item['selling_price']),
+                'grand_total' => $grandTotal,
                 'delivery_type' => 'pickup',
                 'discount' => 0,
+                'payment_method' => 'cash',
+                'cash_amount' => $grandTotal,
+                'promptpay_amount' => '0.00',
+                'received_amount' => $grandTotal,
                 'items' => $items,
             ],
         ];
