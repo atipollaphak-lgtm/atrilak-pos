@@ -17,6 +17,14 @@ const v2Source = readFileSync(
     new URL("../../public/js/modules/pos-submit.js", import.meta.url),
     "utf8"
 );
+const paymentSource = readFileSync(
+    new URL("../../public/js/modules/pos-payment.js", import.meta.url),
+    "utf8"
+);
+const salesViewSource = readFileSync(
+    new URL("../../resources/views/sales/index.blade.php", import.meta.url),
+    "utf8"
+);
 
 const payments = {
     cash: {
@@ -260,6 +268,141 @@ function v2Harness(fetchImplementation) {
 
     return { calls, context, listeners };
 }
+
+function extractFunction(source, name) {
+    const start = source.indexOf(`function ${name}()`);
+
+    assert.notEqual(start, -1, `${name} must exist in the POS view`);
+
+    const bodyStart = source.indexOf("{", start);
+    let depth = 0;
+
+    for (let index = bodyStart; index < source.length; index++) {
+        if (source[index] === "{") {
+            depth++;
+        } else if (source[index] === "}") {
+            depth--;
+
+            if (depth === 0) {
+                return source.slice(start, index + 1);
+            }
+        }
+    }
+
+    throw new Error(`Unable to extract ${name}`);
+}
+
+class PaymentElement {
+    constructor({ value = "" } = {}) {
+        this.value = value;
+        this.textContent = "";
+        this.innerText = "";
+        this.disabled = false;
+        this.listeners = {};
+        this.classList = {
+            add() {},
+            remove() {}
+        };
+    }
+
+    addEventListener(type, listener) {
+        this.listeners[type] = listener;
+    }
+
+    focus() {}
+
+    select() {}
+}
+
+function v1TotalHarnessWithoutProfitElements() {
+    const elements = {
+        "grand-total": new PaymentElement(),
+        "total-cost": new PaymentElement(),
+        "profit-percent": new PaymentElement(),
+        delivery_fee: new PaymentElement({ value: "0" }),
+        discount: new PaymentElement({ value: "0" }),
+        net_total: new PaymentElement({ value: "0.00" }),
+        paymentModal: new PaymentElement(),
+        "payment-total": new PaymentElement(),
+        "payment-method": new PaymentElement({ value: "cash" }),
+        "payment-cash-summary": new PaymentElement(),
+        "payment-cash-amount": new PaymentElement(),
+        "payment-mixed-cash-group": new PaymentElement(),
+        "payment-mixed-cash": new PaymentElement(),
+        "payment-promptpay-group": new PaymentElement(),
+        "payment-promptpay-amount": new PaymentElement(),
+        "payment-received-group": new PaymentElement(),
+        "payment-received": new PaymentElement(),
+        "payment-change": new PaymentElement(),
+        "payment-error": new PaymentElement(),
+        "btn-confirm-payment": new PaymentElement(),
+        "btn-cancel-payment": new PaymentElement()
+    };
+    const qty = new PaymentElement({ value: "1" });
+    const price = new PaymentElement({ value: "15.00" });
+    price.dataset = {};
+    const select = {
+        selectedIndex: 0,
+        options: [{ dataset: { cost: "10.00", tiers: "[]" } }]
+    };
+    const lineTotal = new PaymentElement();
+    const row = {
+        querySelector(selector) {
+            return {
+                ".qty": qty,
+                ".price": price,
+                ".product-select": select,
+                ".line-total": lineTotal
+            }[selector] ?? null;
+        }
+    };
+    const document = {
+        getElementById(id) {
+            return elements[id] ?? null;
+        },
+        querySelectorAll(selector) {
+            return selector === "#sale-items tr" ? [row] : [];
+        }
+    };
+    const context = baseContext();
+    context.document = document;
+    context.window = {};
+    context.$ = () => ({
+        modal() {},
+        off() { return this; },
+        on() { return this; }
+    });
+
+    vm.runInContext(extractFunction(salesViewSource, "calculateTotals"), context);
+    vm.runInContext(paymentSource, context);
+
+    return {
+        calculate() {
+            vm.runInContext("calculateTotals()", context);
+        },
+        openPayment() {
+            const controller = context.window.PosPayment.createController({
+                getTotal: () => elements.net_total.value,
+                onConfirm: async () => {}
+            });
+
+            controller.open();
+        },
+        elements
+    };
+}
+
+test("V1 POS calculates net and payment totals without profit markup", () => {
+    const harness = v1TotalHarnessWithoutProfitElements();
+
+    assert.doesNotThrow(() => harness.calculate());
+    assert.equal(harness.elements["grand-total"].innerText, "15.00");
+    assert.equal(harness.elements.net_total.value, "15.00");
+
+    harness.openPayment();
+
+    assert.equal(harness.elements["payment-total"].textContent, "15.00");
+});
 
 for (const [version, harnessFactory, trigger] of [
     ["V1", v1Harness, harness => harness.listeners.submit(event())],

@@ -585,10 +585,15 @@
                 ).innerText =
                 totalCost.toFixed(2);
 
-            document.getElementById(
+            let grossProfitElement =
+                document.getElementById(
                     'gross-profit'
-                ).innerText =
-                grossProfit.toFixed(2);
+                );
+
+            if (grossProfitElement) {
+                grossProfitElement.innerText =
+                    grossProfit.toFixed(2);
+            }
 
             document.getElementById(
                     'profit-percent'
@@ -600,7 +605,7 @@
                     'profit-box'
                 );
 
-            if (grossProfit < 0) {
+            if (profitBox && grossProfit < 0) {
 
                 profitBox.classList.remove(
                     'text-success'
@@ -610,7 +615,7 @@
                     'text-danger'
                 );
 
-            } else {
+            } else if (profitBox) {
 
                 profitBox.classList.remove(
                     'text-danger'
