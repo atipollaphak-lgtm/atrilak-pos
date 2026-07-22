@@ -9,6 +9,7 @@ use App\Models\Technician;
 use App\Models\TechnicianCommission;
 use App\Models\TechnicianPaymentBatch;
 use App\Services\TechnicianPaymentService;
+use Brick\Math\BigDecimal;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Tests\TestCase;
@@ -32,8 +33,8 @@ class TechnicianOperationalExclusionTest extends TestCase
             [$activeCommission->id, $legacyPendingOnVoidedSale->id, $voidedCommission->id, $paidCommission->id],
             $audit['commissions']->pluck('id')->all()
         );
-        $this->assertSame('10', (string) $audit['summaryByTechnician']->sole()->total_commission);
-        $this->assertSame('10', (string) $payment['summaries']->sole()->total_commission);
+        $this->assertTrue(BigDecimal::of('10')->isEqualTo((string) $audit['summaryByTechnician']->sole()->total_commission));
+        $this->assertTrue(BigDecimal::of('10')->isEqualTo((string) $payment['summaries']->sole()->total_commission));
         $this->assertSame($technician->id, $payment['summaries']->sole()->technician_id);
     }
 

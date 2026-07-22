@@ -14,6 +14,7 @@ use App\Models\Technician;
 use App\Models\TechnicianCommission;
 use App\Models\TechnicianCommissionRule;
 use App\Services\SaleService;
+use Brick\Math\BigDecimal;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -100,7 +101,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertSame($commission->id, $replacement->id);
         $this->assertEquals(3.75, $replacement->commission_amount);
         $this->assertEquals(30.00, $replacement->sale_total);
-        $this->assertSame('30', (string) $sale->fresh()->total_amount);
+        $this->assertTrue(BigDecimal::of('30')->isEqualTo((string) $sale->fresh()->total_amount));
         $this->assertSame('3.00', (string) $sale->fresh()->items()->sole()->qty);
     }
 
