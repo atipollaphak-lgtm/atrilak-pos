@@ -215,7 +215,7 @@ function v1Harness(fetchImplementation) {
     return { calls, listeners };
 }
 
-function v2Harness(fetchImplementation) {
+function v2Harness(fetchImplementation, openImplementation = () => ({})) {
     const listeners = {};
     const button = {
         disabled: false,
@@ -227,7 +227,9 @@ function v2Harness(fetchImplementation) {
         fetches: 0,
         modalOpens: 0,
         paymentOptions: null,
-        request: null
+        request: null,
+        openedUrls: [],
+        navigations: []
     };
     const context = baseContext();
     context.PosPayment = paymentUiStub(calls);
@@ -248,7 +250,18 @@ function v2Harness(fetchImplementation) {
             return { getAttribute: () => "csrf" };
         }
     };
-    context.window = { open() {} };
+    context.window = {
+        open(url, target) {
+            calls.openedUrls.push({ url, target });
+
+            return openImplementation(url, target);
+        },
+        location: {
+            assign(url) {
+                calls.navigations.push(url);
+            }
+        }
+    };
     context.renderCart = () => {};
     context.fetch = async (url, options) => {
         calls.fetches++;
@@ -454,6 +467,27 @@ test("V2 repeated payment confirmation starts only one active request", async ()
     assert.equal(harness.calls.fetches, 1);
     finish(response(200, { success: true, invoice_url: "/sales/1/invoice" }));
     await Promise.all([first, second]);
+    assert.equal(harness.calls.fetches, 1);
+});
+
+test("V2 navigates to the invoice when the browser blocks the popup", async () => {
+    const harness = v2Harness(
+        () => response(200, {
+            success: true,
+            invoice_url: "/sales/1/invoice-v2"
+        }),
+        () => null
+    );
+
+    await harness.listeners.click();
+    await harness.calls.paymentOptions.onConfirm(payments.promptpay);
+
+    assert.deepEqual(harness.calls.openedUrls, [{
+        url: "/sales/1/invoice-v2",
+        target: "_blank"
+    }]);
+    assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice-v2"]);
+    assert.equal(vm.runInContext("cart.length", harness.context), 0);
     assert.equal(harness.calls.fetches, 1);
 });
 

@@ -66,6 +66,23 @@ class SaleNumberIdempotencyTest extends TestCase
         $this->assertSame('8.0000', $product->fresh()->stock_qty);
     }
 
+    public function test_v2_store_returns_the_v2_invoice_url_for_the_created_sale(): void
+    {
+        $product = $this->product('V2 invoice URL product', '10.0000');
+
+        $response = $this->postJson(
+            route('sales.v2.store'),
+            $this->payload($product, '30000000-0000-4000-8000-000000000009')
+        )->assertOk();
+
+        $saleId = $response->json('sale_id');
+
+        $response->assertJsonPath(
+            'invoice_url',
+            route('sales.invoice-v2', $saleId)
+        );
+    }
+
     public function test_same_key_with_different_payload_returns_conflict_without_writes(): void
     {
         $product = $this->product('Conflict product', '10.0000');

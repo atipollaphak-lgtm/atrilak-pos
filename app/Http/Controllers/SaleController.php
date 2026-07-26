@@ -163,7 +163,7 @@ class SaleController extends Controller
                 'items' => $validated['items'],
             ]);
 
-            return $this->saleCreatedResponse($sale);
+            return $this->saleCreatedResponse($sale, 'sales.invoice-v2');
         } catch (DomainException $exception) {
             return response()->json([
                 'success' => false,
@@ -343,13 +343,15 @@ class SaleController extends Controller
             ->with('success', 'ยกเลิกใบขายและคืนสต็อกเรียบร้อยแล้ว');
     }
 
-    private function saleCreatedResponse(Sale $sale)
-    {
+    private function saleCreatedResponse(
+        Sale $sale,
+        string $invoiceRoute = 'sales.invoice'
+    ) {
         return response()->json([
             'success' => true,
             'sale_id' => $sale->id,
             'sale_no' => $sale->sale_no,
-            'invoice_url' => route('sales.invoice', $sale->id),
+            'invoice_url' => route($invoiceRoute, $sale->id),
             'idempotent_replay' => $sale->idempotentReplay,
         ]);
     }

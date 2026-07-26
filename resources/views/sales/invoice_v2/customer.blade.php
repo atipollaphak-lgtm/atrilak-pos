@@ -29,7 +29,7 @@
             </td>
         </tr>
 
-                <tr>
+        <tr>
             <td class="info-label">
                 ที่อยู่
             </td>
@@ -41,6 +41,28 @@
                 ) }}
             </td>
         </tr>
+
+        @if (($sale->delivery_type ?? null) === 'pickup')
+            <tr>
+                <td class="info-label">
+                    วิธีรับสินค้า
+                </td>
+
+                <td colspan="3">
+                    🏪 ลูกค้ารับเอง
+                </td>
+            </tr>
+        @elseif (($sale->delivery_type ?? null) === 'delivery')
+            <tr>
+                <td class="info-label">
+                    วิธีรับสินค้า
+                </td>
+
+                <td colspan="3">
+                    🚚 จัดส่ง
+                </td>
+            </tr>
+        @endif
 
         @if ($document['show_tax_information'] ?? false)
             <tr>
