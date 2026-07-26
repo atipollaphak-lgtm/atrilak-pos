@@ -107,6 +107,36 @@ class SalePaymentDisplayTest extends TestCase
         $this->assertStringNotContainsString('วิธีชำระเงิน', $legacyInvoice);
     }
 
+    public function test_legacy_invoice_renders_the_fulfillment_label_from_delivery_type(): void
+    {
+        $pickup = Sale::query()->create([
+            'sale_no' => 'PICKUP-'.str()->uuid(),
+            'sale_date' => '2026-07-23',
+            'total_amount' => '15.00',
+            'delivery_fee' => '0.00',
+            'discount' => '0.00',
+            'delivery_type' => 'pickup',
+            'customer_delivery_address_id' => null,
+        ]);
+        $delivery = Sale::query()->create([
+            'sale_no' => 'DELIVERY-'.str()->uuid(),
+            'sale_date' => '2026-07-23',
+            'total_amount' => '15.00',
+            'delivery_fee' => '0.00',
+            'discount' => '0.00',
+            'delivery_type' => 'delivery',
+            'customer_delivery_address_id' => null,
+        ]);
+
+        $pickupInvoice = view('sales.invoice', ['sale' => $pickup, 'setting' => null])->render();
+        $deliveryInvoice = view('sales.invoice', ['sale' => $delivery, 'setting' => null])->render();
+
+        $this->assertStringContainsString('ลูกค้ารับเอง', $pickupInvoice);
+        $this->assertStringNotContainsString('🚚 จัดส่ง', $pickupInvoice);
+        $this->assertStringContainsString('🚚 จัดส่ง', $deliveryInvoice);
+        $this->assertStringNotContainsString('ลูกค้ารับเอง', $deliveryInvoice);
+    }
+
     private function sale(
         ?string $method,
         ?string $cash,

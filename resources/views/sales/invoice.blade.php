@@ -460,7 +460,7 @@
                     </td>
 
                     <td>
-                        @if (($sale->delivery_method ?? '') === 'pickup')
+                        @if (($sale->delivery_type ?? '') === 'pickup')
                             🏪 ลูกค้ารับเอง
                         @else
                             🚚 จัดส่ง
