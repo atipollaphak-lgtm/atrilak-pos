@@ -45,8 +45,19 @@ class SaleIdempotencyFrontendTest extends TestCase
         $this->assertStringContainsString('pendingIntent.clear(intent.key)', $script);
         $this->assertStringContainsString('isDefinitiveClientError(error.status)', $script);
         $this->assertStringContainsString('submissionGuard.release()', $script);
-        $this->assertStringContainsString('window.open(data.invoice_url, "_blank")', $script);
+        $this->assertStringNotContainsString('window.open(', $script);
+        $this->assertStringContainsString('if (!data.success || !data.invoice_url)', $script);
         $this->assertStringContainsString('resetPOS()', $script);
+        $this->assertStringContainsString('window.location.assign(data.invoice_url)', $script);
+        $successReset = "            resetPOS();";
+        $this->assertLessThan(
+            strpos($script, $successReset),
+            strpos($script, 'pendingIntent.clear(intent.key)')
+        );
+        $this->assertLessThan(
+            strpos($script, 'window.location.assign(data.invoice_url)'),
+            strpos($script, $successReset)
+        );
     }
 
     public function test_pending_intent_helper_uses_session_storage_without_storing_payload(): void

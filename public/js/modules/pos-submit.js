@@ -69,12 +69,8 @@ function bindSubmitSale() {
             }
 
             pendingIntent.clear(intent.key);
-            const invoiceWindow = window.open(data.invoice_url, "_blank");
             resetPOS();
-
-            if (invoiceWindow === null) {
-                window.location.assign(data.invoice_url);
-            }
+            window.location.assign(data.invoice_url);
         } catch (error) {
             console.error(error);
 

@@ -251,7 +251,7 @@ function v2Harness(fetchImplementation, storage = new MemoryStorage()) {
     const calls = {
         alerts: 0,
         fetches: 0,
-        opened: 0,
+        navigations: [],
         paymentOpens: 0,
         paymentOptions: null,
         renders: 0,
@@ -268,8 +268,10 @@ function v2Harness(fetchImplementation, storage = new MemoryStorage()) {
         }
     };
     context.window = {
-        open() {
-            calls.opened++;
+        location: {
+            assign(url) {
+                calls.navigations.push(url);
+            }
         }
     };
     context.alert = () => { calls.alerts++; };
@@ -366,7 +368,7 @@ test("V1 definitive validation error clears pending state and releases guard", a
     assert.equal(harness.button.disabled, false);
 });
 
-test("V2 double submit opens invoice and resets cart once", async () => {
+test("V2 double submit navigates to the invoice and resets cart once", async () => {
     const harness = v2Harness(() => response(200, {
         success: true,
         invoice_url: "/sales/1/invoice"
@@ -378,7 +380,7 @@ test("V2 double submit opens invoice and resets cart once", async () => {
     ]);
 
     assert.equal(harness.calls.fetches, 1);
-    assert.equal(harness.calls.opened, 1);
+    assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice"]);
     assert.equal(harness.calls.renders, 1);
     assert.equal(vm.runInContext("cart.length", harness.context), 0);
     assert.equal(harness.storage.values.size, 0);

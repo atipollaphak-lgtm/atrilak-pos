@@ -215,7 +215,7 @@ function v1Harness(fetchImplementation) {
     return { calls, listeners };
 }
 
-function v2Harness(fetchImplementation, openImplementation = () => ({})) {
+function v2Harness(fetchImplementation) {
     const listeners = {};
     const button = {
         disabled: false,
@@ -253,8 +253,6 @@ function v2Harness(fetchImplementation, openImplementation = () => ({})) {
     context.window = {
         open(url, target) {
             calls.openedUrls.push({ url, target });
-
-            return openImplementation(url, target);
         },
         location: {
             assign(url) {
@@ -470,24 +468,35 @@ test("V2 repeated payment confirmation starts only one active request", async ()
     assert.equal(harness.calls.fetches, 1);
 });
 
-test("V2 navigates to the invoice when the browser blocks the popup", async () => {
-    const harness = v2Harness(
-        () => response(200, {
-            success: true,
-            invoice_url: "/sales/1/invoice-v2"
-        }),
-        () => null
-    );
+test("V2 always navigates the current tab to the V2 invoice after one successful sale", async () => {
+    const harness = v2Harness(() => response(200, {
+        success: true,
+        invoice_url: "/sales/1/invoice-v2"
+    }));
 
     await harness.listeners.click();
     await harness.calls.paymentOptions.onConfirm(payments.promptpay);
 
-    assert.deepEqual(harness.calls.openedUrls, [{
-        url: "/sales/1/invoice-v2",
-        target: "_blank"
-    }]);
+    assert.deepEqual(harness.calls.openedUrls, []);
     assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice-v2"]);
     assert.equal(vm.runInContext("cart.length", harness.context), 0);
+    assert.equal(harness.calls.fetches, 1);
+});
+
+test("V2 missing invoice URL preserves the cart and does not navigate", async () => {
+    const harness = v2Harness(() => response(200, {
+        success: true
+    }));
+
+    await harness.listeners.click();
+    await assert.rejects(
+        harness.calls.paymentOptions.onConfirm(payments.promptpay),
+        /ไม่สามารถบันทึกการขายได้/
+    );
+
+    assert.deepEqual(harness.calls.openedUrls, []);
+    assert.deepEqual(harness.calls.navigations, []);
+    assert.equal(vm.runInContext("cart.length", harness.context), 1);
     assert.equal(harness.calls.fetches, 1);
 });
 
