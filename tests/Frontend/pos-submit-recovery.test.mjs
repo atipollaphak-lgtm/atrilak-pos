@@ -118,10 +118,6 @@ async function submitV2(harness) {
     return harness.calls.paymentOptions.onConfirm(cashPayment);
 }
 
-function navigationTrace(storage) {
-    return JSON.parse(storage.getItem("pos_navigation_trace") || "[]");
-}
-
 function v1Harness(fetchImplementation, storage = new MemoryStorage()) {
     const listeners = {};
     const keyInput = { value: "" };
@@ -398,20 +394,10 @@ test("V2 double submit navigates to the invoice and resets cart once", async () 
         harness.storage.getItem("atrilak.pos.v2.pending-sale.v1"),
         null
     );
-    assert.deepEqual(
-        navigationTrace(harness.storage).map(entry => entry.stage),
-        [
-            "success-response",
-            "pending-intent-cleared",
-            "reset-completed",
-            "before-location-assign",
-            "location-assign-returned"
-        ]
-    );
     assert.equal(harness.button.disabled, false);
 });
 
-test("V2 records a navigation exception without swallowing it", async () => {
+test("V2 propagates a navigation exception after a successful sale", async () => {
     const harness = v2Harness(
         () => response(200, {
             success: true,
@@ -431,43 +417,6 @@ test("V2 records a navigation exception without swallowing it", async () => {
         harness.calls.paymentOptions.onConfirm(cashPayment),
         /navigation denied/
     );
-
-    assert.equal(harness.calls.fetches, 1);
-    assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice-v2"]);
-    assert.deepEqual(
-        navigationTrace(harness.storage).map(entry => entry.stage),
-        [
-            "success-response",
-            "pending-intent-cleared",
-            "reset-completed",
-            "before-location-assign",
-            "location-assign-threw"
-        ]
-    );
-});
-
-test("V2 continues its successful sale flow when trace storage fails", async () => {
-    const storage = {
-        getItem() {
-            return null;
-        },
-        setItem() {
-            throw new Error("storage blocked");
-        },
-        removeItem() {
-            throw new Error("storage blocked");
-        }
-    };
-    const harness = v2Harness(
-        () => response(200, {
-            success: true,
-            invoice_url: "/sales/1/invoice-v2"
-        }),
-        storage
-    );
-
-    harness.listeners.click();
-    await harness.calls.paymentOptions.onConfirm(cashPayment);
 
     assert.equal(harness.calls.fetches, 1);
     assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice-v2"]);
@@ -529,5 +478,4 @@ test("V2 reload recovery reuses the pending key for a reconstructed unchanged ca
 
     assert.equal(firstPage.calls.requestKeys[0], reloadedPage.calls.requestKeys[0]);
     assert.equal(storage.getItem("atrilak.pos.v2.pending-sale.v1"), null);
-    assert.equal(navigationTrace(storage).at(-1).stage, "location-assign-returned");
 });

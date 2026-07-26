@@ -48,10 +48,6 @@ class SaleIdempotencyFrontendTest extends TestCase
         $this->assertStringNotContainsString('window.open(', $script);
         $this->assertStringContainsString('if (!data.success || !data.invoice_url)', $script);
         $this->assertStringContainsString('resetPOS()', $script);
-        $this->assertStringContainsString('pos_navigation_trace', $script);
-        $this->assertStringContainsString('before-location-assign', $script);
-        $this->assertStringContainsString('location-assign-returned', $script);
-        $this->assertStringContainsString('location-assign-threw', $script);
         $this->assertStringContainsString('window.location.assign(invoiceUrl)', $script);
         $successReset = "            resetPOS();";
         $this->assertLessThan(
