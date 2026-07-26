@@ -68,9 +68,25 @@ function bindSubmitSale() {
                 throw new Error(data.message || "ไม่สามารถบันทึกการขายได้");
             }
 
+            const invoiceUrl = data.invoice_url;
+
+            recordPosNavigationTrace("success-response", { invoiceUrl });
             pendingIntent.clear(intent.key);
+            recordPosNavigationTrace("pending-intent-cleared", { invoiceUrl });
             resetPOS();
-            window.location.assign(data.invoice_url);
+            recordPosNavigationTrace("reset-completed", { invoiceUrl });
+
+            try {
+                recordPosNavigationTrace("before-location-assign", { invoiceUrl });
+                window.location.assign(invoiceUrl);
+                recordPosNavigationTrace("location-assign-returned", { invoiceUrl });
+            } catch (error) {
+                recordPosNavigationTrace("location-assign-threw", {
+                    invoiceUrl,
+                    error
+                });
+                throw error;
+            }
         } catch (error) {
             console.error(error);
 
@@ -83,6 +99,37 @@ function bindSubmitSale() {
             submissionGuard.release();
             button.disabled = false;
         }
+    }
+}
+
+function recordPosNavigationTrace(stage, { invoiceUrl, error } = {}) {
+    try {
+        const previousTrace = sessionStorage.getItem("pos_navigation_trace");
+        const trace = stage === "success-response"
+            ? []
+            : JSON.parse(previousTrace || "[]");
+        const entry = {
+            stage,
+            timestamp: new Date().toISOString(),
+            pathname: window.location?.pathname || ""
+        };
+
+        if (invoiceUrl) {
+            entry.invoice_path = new URL(
+                invoiceUrl,
+                window.location?.origin || "http://localhost"
+            ).pathname;
+        }
+
+        if (error) {
+            entry.error_name = error.name || "Error";
+            entry.error_message = error.message || "";
+        }
+
+        trace.push(entry);
+        sessionStorage.setItem("pos_navigation_trace", JSON.stringify(trace));
+    } catch {
+        // Diagnostic tracing must never interrupt a completed sale flow.
     }
 }
 

@@ -74,6 +74,7 @@ function baseContext(storage) {
         String,
         TextEncoder,
         Uint8Array,
+        URL,
         alert() {},
         console,
         crypto: webcrypto,
@@ -115,6 +116,10 @@ async function submitV2(harness) {
     harness.listeners.click();
 
     return harness.calls.paymentOptions.onConfirm(cashPayment);
+}
+
+function navigationTrace(storage) {
+    return JSON.parse(storage.getItem("pos_navigation_trace") || "[]");
 }
 
 function v1Harness(fetchImplementation, storage = new MemoryStorage()) {
@@ -224,7 +229,11 @@ function v1Harness(fetchImplementation, storage = new MemoryStorage()) {
     return { button, calls, form, listeners, storage };
 }
 
-function v2Harness(fetchImplementation, storage = new MemoryStorage()) {
+function v2Harness(
+    fetchImplementation,
+    storage = new MemoryStorage(),
+    assignImplementation = null
+) {
     const listeners = {};
     const button = {
         disabled: false,
@@ -271,6 +280,8 @@ function v2Harness(fetchImplementation, storage = new MemoryStorage()) {
         location: {
             assign(url) {
                 calls.navigations.push(url);
+
+                return assignImplementation?.(url);
             }
         }
     };
@@ -383,8 +394,83 @@ test("V2 double submit navigates to the invoice and resets cart once", async () 
     assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice"]);
     assert.equal(harness.calls.renders, 1);
     assert.equal(vm.runInContext("cart.length", harness.context), 0);
-    assert.equal(harness.storage.values.size, 0);
+    assert.equal(
+        harness.storage.getItem("atrilak.pos.v2.pending-sale.v1"),
+        null
+    );
+    assert.deepEqual(
+        navigationTrace(harness.storage).map(entry => entry.stage),
+        [
+            "success-response",
+            "pending-intent-cleared",
+            "reset-completed",
+            "before-location-assign",
+            "location-assign-returned"
+        ]
+    );
     assert.equal(harness.button.disabled, false);
+});
+
+test("V2 records a navigation exception without swallowing it", async () => {
+    const harness = v2Harness(
+        () => response(200, {
+            success: true,
+            invoice_url: "/sales/1/invoice-v2"
+        }),
+        new MemoryStorage(),
+        () => {
+            const error = new Error("navigation denied");
+            error.name = "SecurityError";
+            throw error;
+        }
+    );
+
+    harness.listeners.click();
+
+    await assert.rejects(
+        harness.calls.paymentOptions.onConfirm(cashPayment),
+        /navigation denied/
+    );
+
+    assert.equal(harness.calls.fetches, 1);
+    assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice-v2"]);
+    assert.deepEqual(
+        navigationTrace(harness.storage).map(entry => entry.stage),
+        [
+            "success-response",
+            "pending-intent-cleared",
+            "reset-completed",
+            "before-location-assign",
+            "location-assign-threw"
+        ]
+    );
+});
+
+test("V2 continues its successful sale flow when trace storage fails", async () => {
+    const storage = {
+        getItem() {
+            return null;
+        },
+        setItem() {
+            throw new Error("storage blocked");
+        },
+        removeItem() {
+            throw new Error("storage blocked");
+        }
+    };
+    const harness = v2Harness(
+        () => response(200, {
+            success: true,
+            invoice_url: "/sales/1/invoice-v2"
+        }),
+        storage
+    );
+
+    harness.listeners.click();
+    await harness.calls.paymentOptions.onConfirm(cashPayment);
+
+    assert.equal(harness.calls.fetches, 1);
+    assert.deepEqual(harness.calls.navigations, ["/sales/1/invoice-v2"]);
 });
 
 test("V2 validation error preserves cart, clears key, and releases guard", async () => {
@@ -442,5 +528,6 @@ test("V2 reload recovery reuses the pending key for a reconstructed unchanged ca
     await submitV2(reloadedPage);
 
     assert.equal(firstPage.calls.requestKeys[0], reloadedPage.calls.requestKeys[0]);
-    assert.equal(storage.values.size, 0);
+    assert.equal(storage.getItem("atrilak.pos.v2.pending-sale.v1"), null);
+    assert.equal(navigationTrace(storage).at(-1).stage, "location-assign-returned");
 });
