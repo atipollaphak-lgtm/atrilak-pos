@@ -1,8 +1,18 @@
 <div class="row">
 
+    <input type="hidden" id="customer-phone" value="{{ $customer->phone }}">
+
     <div class="col-md-4">
         <label>ชื่อสถานที่</label>
         <input type="text" name="name" class="form-control" value="{{ old('name', $address->name ?? '') }}">
+    </div>
+
+    <div class="col-md-12 mt-3">
+        <div class="form-check">
+            <input type="checkbox" name="use_customer_phone" value="1" class="form-check-input" id="use-customer-phone"
+                @checked(old('use_customer_phone', ($address->receiver_phone ?? null) === $customer->phone))>
+            <label class="form-check-label" for="use-customer-phone">ใช้เบอร์ลูกค้าเป็นเบอร์ผู้รับของ</label>
+        </div>
     </div>
 
     <div class="col-md-4">
@@ -13,7 +23,7 @@
 
     <div class="col-md-4">
         <label>เบอร์ผู้รับ</label>
-        <input type="text" name="receiver_phone" class="form-control"
+        <input type="text" id="receiver-phone" name="receiver_phone" class="form-control"
             value="{{ old('receiver_phone', $address->receiver_phone ?? '') }}">
     </div>
 
@@ -59,6 +69,4 @@
 </div>
 
 <hr>
-
-
 

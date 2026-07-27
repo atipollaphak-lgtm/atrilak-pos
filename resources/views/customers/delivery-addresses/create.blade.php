@@ -12,7 +12,7 @@
 
         <div class="card-body">
 
-            <form action="{{ route('customers.delivery-addresses.store', $customer) }}" method="POST">
+            <form action="{{ route('customers.delivery-addresses.store', $customer) }}" method="POST" data-customer-form>
 
     @csrf
 
@@ -27,6 +27,8 @@
     </a>
 
 </form>
+
+<script src="{{ asset('js/modules/customer-form.js') }}"></script>
 
         </div>
 

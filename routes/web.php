@@ -326,6 +326,11 @@ Route::middleware(['auth'])->group(function () {
             'customers.delivery-addresses',
             CustomerDeliveryAddressController::class
         );
+
+        Route::post(
+            '/customers/{customer}/delivery-addresses/{deliveryAddress}/set-primary',
+            [CustomerDeliveryAddressController::class, 'setPrimary']
+        )->name('customers.delivery-addresses.set-primary');
     });
 
     // Owner เท่านั้น
