@@ -10,6 +10,7 @@ use App\Models\Supplier;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -26,6 +27,21 @@ class PurchaseValidationTest extends TestCase
             RoleMiddleware::class,
             ValidateCsrfToken::class,
         ]);
+    }
+
+    public function test_purchase_resource_routes_are_registered_once(): void
+    {
+        foreach ([
+            'purchases.edit' => ['GET', 'HEAD'],
+            'purchases.update' => ['PUT', 'PATCH'],
+            'purchases.show' => ['GET', 'HEAD'],
+        ] as $name => $methods) {
+            $routes = collect(Route::getRoutes()->getRoutes())
+                ->filter(fn ($route) => $route->getName() === $name);
+
+            $this->assertCount(1, $routes, "Route [{$name}] must be registered once.");
+            $this->assertSame($methods, $routes->sole()->methods());
+        }
     }
 
     public function test_create_accepts_four_decimal_quantity_and_ignores_a_fully_blank_trailing_row(): void

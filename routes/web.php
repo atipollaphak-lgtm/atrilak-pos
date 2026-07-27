@@ -237,19 +237,10 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('categories', CategoryController::class);
         Route::resource('suppliers', SupplierController::class);
         Route::resource('purchases', PurchaseController::class);
-        Route::get('/purchases/{purchase}/edit', [PurchaseController::class, 'edit'])
-            ->name('purchases.edit');
         Route::get(
             '/purchases/{purchase}/print',
             [PurchaseController::class, 'print']
         )->name('purchases.print');
-
-        Route::put('/purchases/{purchase}', [PurchaseController::class, 'update'])
-            ->name('purchases.update');
-        Route::get(
-            '/purchases/{purchase}',
-            [PurchaseController::class, 'show']
-        )->name('purchases.show');
 
         Route::get('/stock-movements', [StockMovementController::class, 'index'])
             ->name('stock-movements.index');
