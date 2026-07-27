@@ -2,21 +2,24 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Product;
 use App\Models\Category;
-use Illuminate\Http\Request;
-use App\Models\Unit;
-use App\Models\ProductPriceHistory;
-use App\Models\ProductPriceTier;
+use App\Models\Product;
+use App\Models\ProductBarcode;
 use App\Models\ProductUnit;
-use App\Services\ProductUnitService;
+use App\Models\Unit;
+use App\Services\Pricing\PricingService;
 use App\Services\ProductBarcodeService;
+use App\Services\ProductUnitService;
 use App\Services\ProductUpdateService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
     protected ProductUnitService $productUnitService;
+
     protected ProductBarcodeService $productBarcodeService;
+
     protected ProductUpdateService $productUpdateService;
 
     public function __construct(
@@ -28,18 +31,57 @@ class ProductController extends Controller
         $this->productBarcodeService = $productBarcodeService;
         $this->productUpdateService = $productUpdateService;
     }
-    public function index()
+
+    public function index(Request $request)
     {
-        $products = Product::with([
-    'category',
-    'unitRelation',
-    'priceTiers'
-])
-    ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
-    ->select('products.*')
-    ->orderBy('categories.name')
-    ->orderBy('products.name')
-    ->get();
+        $sort = $request->input('sort', 'category_name');
+        $perPage = $request->input('per_page', 50);
+        $query = Product::query()
+            ->with(['category', 'unitRelation'])
+            ->withCount(['stockMovements', 'purchaseItems', 'saleItems']);
+
+        if ($search = trim((string) $request->input('search'))) {
+            $query->where(function ($searchQuery) use ($search): void {
+                foreach (['name', 'product_code', 'sku', 'barcode'] as $column) {
+                    $searchQuery->orWhereRaw('LOWER(products.'.$column.') LIKE ?', ['%'.strtolower($search).'%']);
+                }
+            });
+        }
+
+        if ($request->filled('category_id')) {
+            $query->where('products.category_id', $request->integer('category_id'));
+        }
+
+        if ($request->input('status') === 'active') {
+            $query->where('products.active', true);
+        } elseif ($request->input('status') === 'inactive') {
+            $query->where('products.active', false);
+        }
+
+        $sorts = [
+            'category_name' => ['categories.name', 'asc'],
+            'name' => ['products.name', 'asc'],
+            'cost_price' => ['products.cost_price', 'asc'],
+            'selling_price' => ['products.selling_price', 'asc'],
+            'profit' => ['products.selling_price', 'desc'],
+            'stock_qty' => ['products.stock_qty', 'asc'],
+            'created_at' => ['products.created_at', 'desc'],
+            'updated_at' => ['products.updated_at', 'desc'],
+        ];
+        [$sortColumn, $sortDirection] = $sorts[$sort] ?? $sorts['category_name'];
+
+        $query->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+            ->select('products.*')
+            ->orderBy($sortColumn, $sortDirection);
+
+        if ($sort === 'category_name') {
+            $query->orderBy('products.name');
+        }
+
+        $products = $perPage === 'all'
+            ? $query->get()
+            : $query->paginate(in_array((int) $perPage, [10, 20, 50, 100], true) ? (int) $perPage : 50)
+                ->withQueryString();
 
         $categories = Category::orderBy('name')->get();
 
@@ -47,11 +89,7 @@ class ProductController extends Controller
             ->orderBy('name')
             ->get();
 
-        return view('products.index', compact(
-            'products',
-            'categories',
-            'units'
-        ));
+        return view('products.index', compact('products', 'categories', 'units', 'sort', 'perPage'));
     }
 
     public function store(Request $request)
@@ -60,14 +98,28 @@ class ProductController extends Controller
             $request->merge(['minimum_stock' => 0]);
         }
 
-        $request->validate([
-            'category_id' => 'required',
-            'name' => 'required',
+        $validated = $request->validate([
+            'category_id' => 'required|exists:categories,id',
             'unit_id' => 'nullable|exists:units,id',
+            'name' => 'required|string|max:255',
+            'product_code' => 'nullable|string|max:255',
+            'sku' => 'nullable|string|max:255',
+            'barcode' => 'nullable|string|max:255',
+            'cost_price' => 'nullable|numeric|min:0',
+            'selling_price' => 'nullable|numeric|min:0',
+            'stock_qty' => 'nullable|numeric|min:0',
+            'vat_enabled' => 'nullable|boolean',
+            'active' => 'nullable|boolean',
+            'remark' => 'nullable|string',
             'minimum_stock' => 'numeric|min:0',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        $product = Product::create($request->all());
+        if ($request->hasFile('image')) {
+            $validated['image_path'] = $request->file('image')->store('products', 'public');
+        }
+
+        $product = Product::create($validated);
 
         if ($request->unit_id) {
             $this->productUnitService->createOrUpdateBaseUnit(
@@ -80,11 +132,12 @@ class ProductController extends Controller
             );
         }
 
-        return back()->with(
+        return redirect()->route('products.index', $this->indexQuery($request))->with(
             'success',
             'เพิ่มสินค้าเรียบร้อย'
         );
     }
+
     public function create()
     {
         $categories = Category::where('active', true)->get();
@@ -96,6 +149,7 @@ class ProductController extends Controller
             compact('categories', 'units')
         );
     }
+
     public function edit(Product $product)
     {
         $categories = Category::where('active', true)->get();
@@ -118,7 +172,7 @@ class ProductController extends Controller
         $productBarcodes = $this->productBarcodeService
             ->getBarcodesForProduct($product);
 
-        $pricingPreview = app(\App\Services\Pricing\PricingService::class)
+        $pricingPreview = app(PricingService::class)
             ->calculate($product);
 
         return view(
@@ -140,23 +194,58 @@ class ProductController extends Controller
         Product $product
     ) {
         if ($request->input('minimum_stock') === null) {
-            $request->merge(['minimum_stock' => 0]);
+            $request->merge(['minimum_stock' => $product->minimum_stock]);
+        }
+        if ($request->input('vat_enabled') === null) {
+            $request->merge(['vat_enabled' => $product->vat_enabled]);
         }
 
-        $request->validate([
-            'category_id' => 'required',
-            'name' => 'required',
+        $validated = $request->validate([
+            'category_id' => 'required|exists:categories,id',
             'unit_id' => 'nullable|exists:units,id',
+            'name' => 'required|string|max:255',
+            'product_code' => 'nullable|string|max:255',
+            'sku' => 'nullable|string|max:255',
+            'barcode' => 'nullable|string|max:255',
+            'remark' => 'nullable|string',
+            'vat_enabled' => 'nullable|boolean',
+            'active' => 'nullable|boolean',
             'minimum_stock' => 'numeric|min:0',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
-        $product = $this->productUpdateService->update($product, $request->all());
+
+        $oldImagePath = $product->image_path;
+        if ($request->hasFile('image')) {
+            $validated['image_path'] = $request->file('image')->store('products', 'public');
+        }
+
+        $validated['cost_price'] = $product->cost_price;
+        $validated['selling_price'] = $product->selling_price;
+        $validated['stock_qty'] = $product->stock_qty;
+        $product = $this->productUpdateService->update($product, $validated);
+
+        if ($oldImagePath && isset($validated['image_path']) && $oldImagePath !== $validated['image_path']) {
+            Storage::disk('public')->delete($oldImagePath);
+        }
 
         return redirect()
-            ->route('products.edit', $product)
+            ->route('products.index', $this->indexQuery($request))
             ->with(
                 'success',
                 'แก้ไขสินค้าเรียบร้อย'
             );
+    }
+
+    private function indexQuery(Request $request): array
+    {
+        return array_filter([
+            'search' => $request->input('search'),
+            'category_id' => $request->input('filter_category_id'),
+            'status' => $request->input('filter_status'),
+            'sort' => $request->input('filter_sort'),
+            'per_page' => $request->input('filter_per_page'),
+            'page' => $request->input('filter_page'),
+        ], static fn ($value) => $value !== null && $value !== '');
     }
 
     public function destroy(Product $product)
@@ -180,6 +269,7 @@ class ProductController extends Controller
             'เปิดใช้งานสินค้าเรียบร้อย'
         );
     }
+
     public function storeUnit(
         Request $request,
         Product $product
@@ -208,6 +298,7 @@ class ProductController extends Controller
             ->route('products.edit', $product)
             ->with('success', 'เพิ่มหน่วยสินค้าสำเร็จ');
     }
+
     public function updateUnit(
         Request $request,
         Product $product,
@@ -238,7 +329,7 @@ class ProductController extends Controller
 
     public function destroyUnit(
         Product $product,
-        \App\Models\ProductUnit $productUnit
+        ProductUnit $productUnit
     ) {
         $this->productUnitService->deleteUnit($productUnit);
 
@@ -246,6 +337,7 @@ class ProductController extends Controller
             ->route('products.edit', $product)
             ->with('success', 'ลบหน่วยสินค้าสำเร็จ');
     }
+
     public function storeBarcode(
         Request $request,
         Product $product
@@ -277,10 +369,10 @@ class ProductController extends Controller
     public function updateBarcode(
         Request $request,
         Product $product,
-        \App\Models\ProductBarcode $productBarcode
+        ProductBarcode $productBarcode
     ) {
         $request->validate([
-            'barcode' => 'required|string|max:255|unique:product_barcodes,barcode,' . $productBarcode->id,
+            'barcode' => 'required|string|max:255|unique:product_barcodes,barcode,'.$productBarcode->id,
         ]);
 
         $this->productBarcodeService->updateBarcode(
@@ -299,7 +391,7 @@ class ProductController extends Controller
 
     public function destroyBarcode(
         Product $product,
-        \App\Models\ProductBarcode $productBarcode
+        ProductBarcode $productBarcode
     ) {
         $this->productBarcodeService->deleteBarcode(
             $productBarcode

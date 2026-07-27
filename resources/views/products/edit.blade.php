@@ -194,19 +194,6 @@
 
             </form>
 
-            <form action="{{ route('products.destroy', $product->id) }}" method="POST"
-                onsubmit="return confirm('ยืนยันปิดใช้งานสินค้า?');">
-
-                @csrf
-                @method('DELETE')
-
-                <button type="submit" class="btn btn-danger">
-                    <i class="fas fa-times-circle"></i>
-                    ปิดใช้งานสินค้า
-                </button>
-
-            </form>
-
         </div>
 
         @include('products.partials._pricing_management')

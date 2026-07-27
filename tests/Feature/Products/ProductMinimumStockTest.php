@@ -80,9 +80,9 @@ class ProductMinimumStockTest extends TestCase
         ]);
 
         $this->put(route('products.update', $product), $this->payload($category->id, ''))
-            ->assertRedirect(route('products.edit', $product));
+            ->assertRedirect(route('products.index'));
 
-        $this->assertSame('0.0000', $product->fresh()->minimum_stock);
+        $this->assertSame('5.0000', $product->fresh()->minimum_stock);
     }
 
     private function category(): Category

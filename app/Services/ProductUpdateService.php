@@ -37,6 +37,9 @@ class ProductUpdateService
                 'vat_enabled' => $data['vat_enabled'] ?? 0,
                 'active' => $data['active'] ?? 1,
                 'remark' => $data['remark'] ?? null,
+                'product_code' => $data['product_code'] ?? null,
+                'sku' => $data['sku'] ?? null,
+                'image_path' => $data['image_path'] ?? $lockedProduct->image_path,
             ]);
 
             if (! empty($data['unit_id'])) {

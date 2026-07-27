@@ -10,7 +10,10 @@ class Product extends Model
         'category_id',
         'unit_id',
         'barcode',
+        'sku',
+        'product_code',
         'name',
+        'image_path',
         'unit',
         'cost_price',
         'selling_price',
@@ -68,5 +71,15 @@ class Product extends Model
     public function barcodes()
     {
         return $this->hasMany(ProductBarcode::class);
+    }
+
+    public function purchaseItems()
+    {
+        return $this->hasMany(PurchaseItem::class);
+    }
+
+    public function saleItems()
+    {
+        return $this->hasMany(SaleItem::class);
     }
 }
