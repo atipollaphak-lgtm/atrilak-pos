@@ -1,0 +1,19 @@
+@extends('adminlte::page')
+@section('title', 'รายละเอียดลูกค้า')
+@section('content_header')<h1>รายละเอียดลูกค้า</h1>@stop
+@section('content')
+    @if (session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
+    @if (session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
+    <div class="mb-3"><a href="{{ route('customers.index') }}" class="btn btn-secondary">กลับหน้ารายชื่อลูกค้า</a> <a href="{{ route('customers.edit', $customer) }}" class="btn btn-warning">แก้ไขข้อมูลลูกค้า</a><form class="d-inline" action="{{ route('customers.destroy', $customer) }}" method="POST" data-confirm="ต้องการปิดใช้งานลูกค้ารายนี้หรือไม่?">@csrf @method('DELETE')<button class="btn btn-danger" type="submit">ลบลูกค้า</button></form></div>
+
+    <div class="card"><div class="card-header"><h3 class="card-title">ข้อมูลลูกค้า</h3></div><div class="card-body"><div class="row"><div class="col-md-4"><strong>รหัสลูกค้า</strong><div>{{ $customer->code ?: '—' }}</div></div><div class="col-md-4"><strong>ชื่อ</strong><div>{{ $customer->name }}</div></div><div class="col-md-4"><strong>เบอร์ลูกค้า</strong><div>{{ $customer->phone ?: '—' }}</div></div></div><hr><div><strong>ข้อมูลใบกำกับภาษี</strong><div>{{ $customer->tax_number ?: '—' }} / {{ $customer->branch_type ?: '—' }} {{ $customer->branch_number }}</div></div></div></div>
+
+    <div class="card"><div class="card-header d-flex justify-content-between"><h3 class="card-title">ที่อยู่จัดส่งทั้งหมด</h3><a href="{{ route('customers.delivery-addresses.create', $customer) }}" class="btn btn-primary btn-sm">เพิ่มที่อยู่จัดส่ง</a></div><div class="card-body"><div class="row">
+        @forelse ($customer->deliveryAddresses as $address)
+            <div class="col-md-6"><div class="card card-outline card-info h-100"><div class="card-header"><strong>{{ $address->name ?: 'ที่อยู่จัดส่ง' }}</strong> @if ($address->is_default)<span class="badge badge-success float-right">ที่อยู่หลัก</span>@endif</div><div class="card-body"><div>{{ $address->deliveryZone?->name ?? 'ไม่ระบุพื้นที่' }}</div><p class="mt-2">{{ $address->address ?: '—' }}</p><div>ชื่อผู้รับของ: {{ $address->receiver_name ?: '—' }}</div><div>ผู้รับของ: {{ $address->receiver_phone ?: '—' }}</div></div><div class="card-footer"><a href="{{ route('customers.delivery-addresses.edit', [$customer, $address]) }}" class="btn btn-warning btn-sm">แก้ไข</a>@if (!$address->is_default)<form class="d-inline" action="{{ route('customers.delivery-addresses.set-primary', [$customer, $address]) }}" method="POST">@csrf<button class="btn btn-success btn-sm">ตั้งเป็นที่อยู่หลัก</button></form>@endif<form class="d-inline" action="{{ route('customers.delivery-addresses.destroy', [$customer, $address]) }}" method="POST" data-confirm="ต้องการลบที่อยู่นี้หรือไม่?">@csrf @method('DELETE')<button class="btn btn-danger btn-sm">ลบ</button></form></div></div></div>
+        @empty <div class="col-12 text-muted">ยังไม่มีที่อยู่จัดส่ง</div>@endforelse
+    </div></div></div>
+
+    <div class="card"><div class="card-header"><h3 class="card-title">ประวัติการซื้อ</h3></div><div class="card-body"><div class="table-responsive"><table class="table"><thead><tr><th>วันที่</th><th>เลขที่บิล</th><th>ยอดสุทธิ</th><th>สถานะ</th><th>เปิดบิล</th></tr></thead><tbody>@forelse ($sales as $sale)<tr><td>{{ $sale->sale_date }}</td><td>{{ $sale->sale_no }}</td><td>{{ number_format((float) $sale->total_amount, 2) }}</td><td>{{ $sale->status === 'voided' ? 'ยกเลิก' : 'ใช้งาน' }}</td><td><a href="{{ route('sales.show', $sale) }}" class="btn btn-info btn-sm">เปิดบิล</a></td></tr>@empty<tr><td colspan="5" class="text-center">ยังไม่มีประวัติการซื้อ</td></tr>@endforelse</tbody></table></div>{{ $sales->links() }}</div></div>
+    <script src="{{ asset('js/modules/customer-form.js') }}"></script>
+@stop

@@ -6,42 +6,46 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-public function up(): void
-{
-    Schema::table('pricing_settings', function (Blueprint $table) {
+    public function up(): void
+    {
+        if (Schema::hasColumn('pricing_settings', 'default_rounding_mode')) {
+            Schema::table('pricing_settings', function (Blueprint $table) {
+                $table->dropColumn('default_rounding_mode');
+            });
+        }
 
-        // ลบคอลัมน์เดิม
-        $table->dropColumn('default_rounding_mode');
+        if (! Schema::hasColumn('pricing_settings', 'default_satang_rounding_mode')) {
+            Schema::table('pricing_settings', function (Blueprint $table) {
+                $table->string('default_satang_rounding_mode')
+                    ->default('ceil_satang_50');
+            });
+        }
 
-        // วิธีปัดสตางค์
-        $table->string('default_satang_rounding_mode')
-            ->default('ceil_satang_50');
+        if (! Schema::hasColumn('pricing_settings', 'default_baht_rounding_mode')) {
+            Schema::table('pricing_settings', function (Blueprint $table) {
+                $table->string('default_baht_rounding_mode')
+                    ->default('ceil_5');
+            });
+        }
+    }
 
-        // วิธีปัดบาท
-        $table->string('default_baht_rounding_mode')
-            ->default('ceil_5');
-
-    });
-}
-
-    /**
-     * Reverse the migrations.
-     */
-public function down(): void
-{
-    Schema::table('pricing_settings', function (Blueprint $table) {
-
-        $table->dropColumn([
+    public function down(): void
+    {
+        $columns = array_values(array_filter([
             'default_satang_rounding_mode',
             'default_baht_rounding_mode',
-        ]);
+        ], fn (string $column): bool => Schema::hasColumn('pricing_settings', $column)));
 
-        $table->string('default_rounding_mode')
-            ->default('5');
+        if ($columns !== []) {
+            Schema::table('pricing_settings', function (Blueprint $table) use ($columns) {
+                $table->dropColumn($columns);
+            });
+        }
 
-    });
-}
+        if (! Schema::hasColumn('pricing_settings', 'default_rounding_mode')) {
+            Schema::table('pricing_settings', function (Blueprint $table) {
+                $table->string('default_rounding_mode')->default('5');
+            });
+        }
+    }
 };

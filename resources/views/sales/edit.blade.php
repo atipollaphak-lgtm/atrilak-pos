@@ -7,25 +7,76 @@
 @stop
 
 @section('content')
+    @include('partials.flash-messages')
 
-    <form action="{{ route('sales.update', $sale->id) }}" method="POST">
+    @if ($errors->any())
+        <div class="alert alert-danger" role="alert">
+            <ul class="mb-0">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    @php
+        $defaultSaleItemIds = $sale->items->pluck('id')->all();
+        $defaultProductUnitIds = $sale->items->pluck('product_unit_id')->all();
+        $defaultProductIds = $sale->items->pluck('product_id')->all();
+        $defaultQuantities = $sale->items->pluck('qty')->all();
+        $defaultSellingPrices = $sale->items->pluck('selling_price')->all();
+        $oldSaleItemIds = is_array(old('sale_item_id')) ? old('sale_item_id') : $defaultSaleItemIds;
+        $oldProductUnitIds = is_array(old('product_unit_id')) ? old('product_unit_id') : $defaultProductUnitIds;
+        $oldProductIds = is_array(old('product_id')) ? old('product_id') : $defaultProductIds;
+        $oldQuantities = is_array(old('qty')) ? old('qty') : $defaultQuantities;
+        $oldSellingPrices = is_array(old('selling_price')) ? old('selling_price') : $defaultSellingPrices;
+        $rowCount = max(
+            count($oldSaleItemIds),
+            count($oldProductUnitIds),
+            count($oldProductIds),
+            count($oldQuantities),
+            count($oldSellingPrices),
+            1,
+        );
+        $selectedCustomerId = old('customer_id', $sale->customer_id);
+        $customerIsAvailable = $selectedCustomerId === null
+            || $selectedCustomerId === ''
+            || $customers->contains('id', (int) $selectedCustomerId);
+    @endphp
+
+    <form id="sale-edit-form" action="{{ route('sales.update', $sale->id) }}" method="POST">
         @csrf
         @method('PUT')
+        <input type="hidden" name="revision" value="{{ old('revision', $sale->revision) }}">
+        @if ($sale->quotation_id === null)
+            <input type="hidden" name="payment_method" id="sale-payment-method"
+                value="{{ old('payment_method', $sale->payment_method) }}">
+            <input type="hidden" name="cash_amount" id="sale-cash-amount"
+                value="{{ old('cash_amount', $sale->cash_amount) }}">
+            <input type="hidden" name="promptpay_amount" id="sale-promptpay-amount"
+                value="{{ old('promptpay_amount', $sale->promptpay_amount) }}">
+            <input type="hidden" name="received_amount" id="sale-received-amount"
+                value="{{ old('received_amount', $sale->received_amount) }}">
+        @endif
 
         <div class="card">
             <div class="card-header">ข้อมูลบิล</div>
 
             <div class="card-body">
-
                 <div class="row">
                     <div class="col-md-4">
                         <label>ลูกค้า</label>
                         <select name="customer_id" class="form-control">
                             <option value="">ลูกค้าทั่วไป</option>
+                            @unless ($customerIsAvailable)
+                                <option value="{{ $selectedCustomerId }}" selected>
+                                    ลูกค้าไม่พร้อมใช้งาน #{{ $selectedCustomerId }}
+                                </option>
+                            @endunless
                             @foreach ($customers as $customer)
                                 <option value="{{ $customer->id }}"
-                                    {{ $sale->customer_id == $customer->id ? 'selected' : '' }}>
-                                    {{ $customer->name }}
+                                    @selected((string) $selectedCustomerId === (string) $customer->id)>
+                                    {{ $customer->name }}{{ $customer->active ? '' : ' (ปิดใช้งาน)' }}
                                 </option>
                             @endforeach
                         </select>
@@ -33,7 +84,8 @@
 
                     <div class="col-md-4">
                         <label>วันที่</label>
-                        <input type="date" name="sale_date" class="form-control" value="{{ $sale->sale_date }}">
+                        <input type="date" name="sale_date" class="form-control"
+                            value="{{ old('sale_date', $sale->sale_date) }}">
                     </div>
                 </div>
 
@@ -55,175 +107,105 @@
                     </thead>
 
                     <tbody id="sale-items">
-                        @foreach ($sale->items as $item)
+                        @for ($index = 0; $index < $rowCount; $index++)
+                            @php
+                                $selectedProductId = $oldProductIds[$index] ?? '';
+                                $productIsAvailable = $selectedProductId === ''
+                                    || $selectedProductId === null
+                                    || $products->contains('id', (int) $selectedProductId);
+                            @endphp
                             <tr>
                                 <td>
+                                    <input type="hidden" name="sale_item_id[]" class="sale-item-id"
+                                        value="{{ $oldSaleItemIds[$index] ?? '' }}">
+                                    <input type="hidden" name="product_unit_id[]" class="product-unit-id"
+                                        value="{{ $oldProductUnitIds[$index] ?? '' }}">
                                     <select name="product_id[]" class="form-control product-select">
+                                        <option value="">-- เลือกสินค้า --</option>
+                                        @unless ($productIsAvailable)
+                                            <option class="invalid-historical-option" value="{{ $selectedProductId }}"
+                                                selected>
+                                                สินค้าไม่พร้อมใช้งาน #{{ $selectedProductId }}
+                                            </option>
+                                        @endunless
                                         @foreach ($products as $product)
                                             <option value="{{ $product->id }}" data-price="{{ $product->selling_price }}"
-                                                {{ $item->product_id == $product->id ? 'selected' : '' }}>
-                                                {{ $product->name }}
+                                                data-inactive="{{ $product->active ? '0' : '1' }}"
+                                                @disabled(! $product->active && (string) $selectedProductId !== (string) $product->id)
+                                                @selected((string) $selectedProductId === (string) $product->id)>
+                                                {{ $product->name }}{{ $product->active ? '' : ' (ปิดใช้งาน)' }}
                                             </option>
                                         @endforeach
                                     </select>
                                 </td>
 
                                 <td>
-                                    <input type="number" name="qty[]" class="form-control qty"
-                                        value="{{ $item->qty }}">
+                                    <input type="number" step="0.01" name="qty[]" class="form-control qty"
+                                        value="{{ $oldQuantities[$index] ?? '' }}">
                                 </td>
 
                                 <td>
                                     <input type="number" step="0.01" name="selling_price[]" class="form-control price"
-                                        value="{{ $item->selling_price }}">
+                                        value="{{ $oldSellingPrices[$index] ?? '' }}">
                                 </td>
 
-                                <td class="line-total">
-                                    {{ number_format($item->total, 2) }}
-                                </td>
+                                <td class="line-total">0.00</td>
 
                                 <td>
-                                    <button type="button" class="btn btn-danger btn-sm remove-row">
-                                        ลบ
-                                    </button>
+                                    <button type="button" class="btn btn-danger btn-sm remove-row">ลบ</button>
                                 </td>
                             </tr>
-                        @endforeach
+                        @endfor
                     </tbody>
                 </table>
-                <div class="row mt-3">
 
+                <div class="row mt-3">
                     <div class="col-md-4">
                         <label>ค่าขนส่ง</label>
-
                         <input type="number" name="delivery_fee" id="delivery_fee" class="form-control"
-                            value="{{ $sale->delivery_fee ?? 0 }}" step="0.01">
+                            value="{{ old('delivery_fee', $sale->delivery_fee ?? 0) }}" step="0.01">
                     </div>
 
                     <div class="col-md-4">
                         <label>ส่วนลด</label>
-
                         <input type="number" name="discount" id="discount" class="form-control"
-                            value="{{ $sale->discount ?? 0 }}" step="0.01">
+                            value="{{ old('discount', $sale->discount ?? 0) }}" step="0.01">
                     </div>
 
                     <div class="col-md-4">
                         <label>ยอดสุทธิ</label>
-
                         <input type="text" id="net_total" class="form-control" readonly>
                     </div>
-
                 </div>
+
                 <div class="text-end">
-                    <h4>
-                        ยอดรวม :
-                        <span id="grand-total">0.00</span>
-                        บาท
-                    </h4>
+                    <h4>ยอดรวม : <span id="grand-total">0.00</span> บาท</h4>
                 </div>
 
-                <button class="btn btn-success">
-                    บันทึกการแก้ไข
-                </button>
+                @if ($sale->quotation_id === null)
+                    <div class="alert alert-light border" id="current-payment-method">
+                        วิธีชำระปัจจุบัน: {{ match($sale->payment_method) {
+                            'cash' => 'เงินสด',
+                            'promptpay' => 'พร้อมเพย์',
+                            'mixed' => 'เงินสด + พร้อมเพย์',
+                            default => 'ไม่ระบุวิธีชำระ',
+                        } }}
+                    </div>
+                @endif
 
-
-                <a href="{{ route('sales.show', $sale->id) }}" class="btn btn-secondary">
-                    ยกเลิก
-                </a>
-
+                <button class="btn btn-success">บันทึกการแก้ไข</button>
+                <a href="{{ route('sales.show', $sale->id) }}" class="btn btn-secondary">ยกเลิก</a>
             </div>
         </div>
     </form>
+    @if ($sale->quotation_id === null)
+        @include('sales.partials.payment-modal')
+    @endif
+@stop
 
-
-
-    <script>
-        function calculateTotals() {
-            let grandTotal = 0;
-
-            document.querySelectorAll('#sale-items tr').forEach(function(row) {
-                let qty = parseFloat(row.querySelector('.qty')?.value || 0);
-                let price = parseFloat(row.querySelector('.price')?.value || 0);
-                let total = qty * price;
-
-                row.querySelector('.line-total').innerText = total.toFixed(2);
-                grandTotal += total;
-            });
-
-            document.getElementById('grand-total').innerText = grandTotal.toFixed(2);
-            let deliveryFee =
-                parseFloat(
-                    document.getElementById('delivery_fee')?.value || 0
-                );
-
-            let discount =
-                parseFloat(
-                    document.getElementById('discount')?.value || 0
-                );
-
-            let netTotal =
-                grandTotal +
-                deliveryFee -
-                discount;
-
-            document.getElementById(
-                    'net_total'
-                ).value =
-                netTotal.toFixed(2);
-        }
-
-        document.getElementById('addRow').addEventListener('click', function() {
-            let row = document.querySelector('#sale-items tr');
-            let clone = row.cloneNode(true);
-
-            clone.querySelectorAll('input').forEach(input => {
-                input.value = '';
-            });
-
-            clone.querySelector('.line-total').innerText = '0.00';
-
-            document.getElementById('sale-items').appendChild(clone);
-        });
-
-        document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('remove-row')) {
-                let rows = document.querySelectorAll('#sale-items tr');
-
-                if (rows.length > 1) {
-                    e.target.closest('tr').remove();
-                    calculateTotals();
-                }
-            }
-        });
-
-        document.addEventListener('input', function(e) {
-
-            if (
-                e.target.classList.contains('qty') ||
-                e.target.classList.contains('price') ||
-                e.target.id === 'delivery_fee' ||
-                e.target.id === 'discount'
-            ) {
-                calculateTotals();
-            }
-
-        });
-
-        document.addEventListener('change', function(e) {
-            if (e.target.classList.contains('product-select')) {
-                let price = e.target.options[e.target.selectedIndex].dataset.price || 0;
-
-                let row = e.target.closest('tr');
-
-                row.querySelector('.price').value = price;
-
-                calculateTotals();
-            }
-        });
-
-        window.addEventListener('load', function() {
-            calculateTotals();
-        });
-    </script>
-
+@section('js')
+    @if ($sale->quotation_id === null)
+        <script src="{{ asset('js/modules/pos-payment.js') }}"></script>
+    @endif
+    <script src="{{ asset('js/modules/sale-edit.js') }}"></script>
 @stop

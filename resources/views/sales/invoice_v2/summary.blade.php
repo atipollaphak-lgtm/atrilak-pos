@@ -1,6 +1,13 @@
   <table class="payment-summary-table">
       <tr>
           <td class="payment-cell">
+              @if (($document['type'] ?? null) === 'tax-invoice')
+                  @include('sales.partials.payment-details', [
+                      'paymentRows' => \App\Support\SalePaymentDisplay::documentRows($sale),
+                      'paymentClass' => 'document-payment-details',
+                  ])
+              @endif
+
               @if (!empty($setting?->qr_image))
                   <div class="payment-title">
                       QR Payment

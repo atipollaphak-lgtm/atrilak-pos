@@ -13,6 +13,7 @@ class TechnicianPaymentService
         $commissions = TechnicianCommission::with(['technician', 'sale'])
             ->whereIn('technician_id', $technicianIds)
             ->where('status', 'pending')
+            ->whereHas('sale', fn ($query) => $query->active())
             ->orderBy('technician_id')
             ->orderBy('id')
             ->get();
@@ -43,6 +44,7 @@ class TechnicianPaymentService
 
             $commissions = TechnicianCommission::whereIn('technician_id', $technicianIds)
                 ->where('status', 'pending')
+                ->whereHas('sale', fn ($query) => $query->active())
                 ->lockForUpdate()
                 ->get();
 
@@ -70,16 +72,26 @@ class TechnicianPaymentService
             $batch->save();
 
             foreach ($commissions as $commission) {
-                $commission->payment_batch_id = $batch->id;
+                $paymentAttributes = [
+                    'payment_batch_id' => $batch->id,
+                    'status' => 'paid',
+                    'paid_at' => now(),
+                    'paid_by' => $userId,
+                ];
 
                 if (array_key_exists('payment_batch_no', $commission->getAttributes())) {
-                    $commission->payment_batch_no = $batchNo;
+                    $paymentAttributes['payment_batch_no'] = $batchNo;
                 }
 
-                $commission->status = 'paid';
-                $commission->paid_at = now();
-                $commission->paid_by = $userId;
-                $commission->save();
+                $updated = TechnicianCommission::query()
+                    ->whereKey($commission->getKey())
+                    ->where('status', 'pending')
+                    ->whereHas('sale', fn ($query) => $query->active())
+                    ->update($paymentAttributes);
+
+                if ($updated !== 1) {
+                    throw new \RuntimeException('Commission is no longer payable.');
+                }
             }
 
             return $batch;

@@ -20,6 +20,8 @@
 
     <script src="{{ asset('js/modules/pos-search.js') }}"></script>
 
+    <script src="{{ asset('js/modules/sale-intent-storage.js') }}"></script>
+    <script src="{{ asset('js/modules/pos-payment.js') }}"></script>
     <script src="{{ asset('js/modules/pos-submit.js') }}"></script>
 
     <script src="{{ asset('js/pos-v2.js') }}"></script>
@@ -130,6 +132,7 @@
 
 </div>
 
+{{-- Replaced by the shared POS payment modal below.
 <!-- =========================
      Payment Modal
 ========================= -->
@@ -257,5 +260,8 @@
     </div>
 
 </div>
+--}}
+
+@include('sales.partials.payment-modal')
 
 @stop

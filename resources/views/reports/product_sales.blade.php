@@ -68,6 +68,8 @@
                         <th>หน่วย</th>
                         <th class="text-right">จำนวนขาย</th>
                         <th class="text-right">ยอดขาย</th>
+                        <th class="text-right">ต้นทุนรวม</th>
+                        <th class="text-right">กำไรรวม</th>
                     </tr>
                 </thead>
 
@@ -78,10 +80,12 @@
                             <td>{{ $product['unit'] }}</td>
                             <td class="text-right">{{ number_format($product['qty'], 2) }}</td>
                             <td class="text-right">{{ number_format($product['sales'], 2) }}</td>
+                            <td class="text-right">{{ number_format($product['cost'], 2) }}</td>
+                            <td class="text-right">{{ number_format($product['profit'], 2) }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="text-center">
+                            <td colspan="6" class="text-center">
                                 ไม่พบข้อมูล
                             </td>
                         </tr>

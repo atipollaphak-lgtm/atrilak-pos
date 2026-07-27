@@ -26,9 +26,15 @@
         </div>
 
         <div class="card-body">
-            <form action="{{ route('sales.store') }}" method="POST" id="saleForm" target="_blank">
+            <form action="{{ route('sales.store') }}" method="POST" id="saleForm"
+                data-success-url="{{ route('sales.index') }}">
 
                 @csrf
+                <input type="hidden" name="idempotency_key" id="sale-idempotency-key">
+                <input type="hidden" name="payment_method" id="sale-payment-method">
+                <input type="hidden" name="cash_amount" id="sale-cash-amount">
+                <input type="hidden" name="promptpay_amount" id="sale-promptpay-amount">
+                <input type="hidden" name="received_amount" id="sale-received-amount">
 
                 <div class="row">
 
@@ -338,7 +344,8 @@
 
                                 </div>
 
-                                <button type="submit" class="btn btn-success btn-lg btn-block shadow mt-3">
+                                <button type="submit" id="btn-submit-sale-v1"
+                                    class="btn btn-success btn-lg btn-block shadow mt-3">
                                     💰 บันทึกการขาย (F4)
                                 </button>
 
@@ -352,7 +359,7 @@
 
             </form>
 
-
+            @include('sales.partials.payment-modal')
 
         </div>
 
@@ -578,10 +585,15 @@
                 ).innerText =
                 totalCost.toFixed(2);
 
-            document.getElementById(
+            let grossProfitElement =
+                document.getElementById(
                     'gross-profit'
-                ).innerText =
-                grossProfit.toFixed(2);
+                );
+
+            if (grossProfitElement) {
+                grossProfitElement.innerText =
+                    grossProfit.toFixed(2);
+            }
 
             document.getElementById(
                     'profit-percent'
@@ -593,7 +605,7 @@
                     'profit-box'
                 );
 
-            if (grossProfit < 0) {
+            if (profitBox && grossProfit < 0) {
 
                 profitBox.classList.remove(
                     'text-success'
@@ -603,7 +615,7 @@
                     'text-danger'
                 );
 
-            } else {
+            } else if (profitBox) {
 
                 profitBox.classList.remove(
                     'text-danger'
@@ -1251,11 +1263,7 @@
         </script>
     @endif
 
-    <script>
-        document.getElementById('saleForm').addEventListener('submit', function() {
-            setTimeout(function() {
-                window.location.href = "{{ route('sales.index') }}";
-            }, 800);
-        });
-    </script>
+    <script src="{{ asset('js/modules/sale-intent-storage.js') }}"></script>
+    <script src="{{ asset('js/modules/pos-payment.js') }}"></script>
+    <script src="{{ asset('js/modules/pos-v1-submit.js') }}"></script>
 @stop

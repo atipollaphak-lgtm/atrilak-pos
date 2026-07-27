@@ -44,10 +44,7 @@ return new class extends Migration
                 ->constrained('users')
                 ->nullOnDelete();
 
-            $table->foreignId('payment_batch_id')
-                ->nullable()
-                ->constrained('technician_payment_batches')
-                ->nullOnDelete();
+            $table->foreignId('payment_batch_id')->nullable();
 
             $table->text('remark')->nullable();
 

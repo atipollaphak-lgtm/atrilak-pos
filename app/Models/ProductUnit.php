@@ -10,6 +10,7 @@ class ProductUnit extends Model
         'product_id',
         'unit_id',
         'conversion_rate',
+        'conversion_confirmed_at',
         'is_base_unit',
         'is_purchase_unit',
         'is_sale_unit',
@@ -21,6 +22,7 @@ class ProductUnit extends Model
 
     protected $casts = [
         'conversion_rate' => 'decimal:4',
+        'conversion_confirmed_at' => 'datetime',
         'purchase_price' => 'decimal:2',
         'selling_price' => 'decimal:2',
         'is_base_unit' => 'boolean',

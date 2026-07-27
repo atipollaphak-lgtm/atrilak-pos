@@ -260,7 +260,7 @@ return [
     'dashboard_url' => 'home',
     'logout_url' => 'logout',
     'login_url' => 'login',
-    'register_url' => 'register',
+    'register_url' => false,
     'password_reset_url' => 'password/reset',
     'password_email_url' => 'password/email',
     'profile_url' => false,
@@ -443,17 +443,24 @@ return [
             'text' => 'จ่ายค่าช่าง',
             'url'  => 'technician-payments',
             'icon' => 'fas fa-fw fa-money-bill',
-            'can'  => 'owner',
+            'can'  => 'manager',
         ],
 
         [
             'text' => 'รอบจ่ายค่าช่าง',
             'url'  => 'technician-payment-batches',
             'icon' => 'fas fa-fw fa-money-check-alt',
-            'can'  => 'owner',
+            'can'  => 'manager',
         ],
 
         ['header' => 'รายงาน'],
+
+        [
+            'text' => 'ปิดยอดประจำวัน',
+            'url'  => 'daily-payment-closings',
+            'icon' => 'fas fa-fw fa-cash-register',
+            'can'  => 'manager',
+        ],
 
         [
             'text' => 'รายงานกำไรรายวัน',

@@ -24,6 +24,8 @@ class TechnicianCommissionController extends Controller
 
         $summaryByTechnician = TechnicianCommission::with('technician')
             ->selectRaw('technician_id, SUM(sale_total) as total_sales, SUM(commission_amount) as total_commission')
+            ->where('status', 'pending')
+            ->whereHas('sale', fn ($query) => $query->active())
             ->whereYear('commission_date', substr($month, 0, 4))
             ->whereMonth('commission_date', substr($month, 5, 2))
             ->groupBy('technician_id')

@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateSettingRequest;
 use App\Models\Setting;
-use Illuminate\Http\Request;
 
 class SettingController extends Controller
 {
@@ -21,22 +21,18 @@ class SettingController extends Controller
         );
     }
 
-    public function update(Request $request)
+    public function update(UpdateSettingRequest $request)
     {
-        $setting = Setting::first();
+        $setting = Setting::firstOrCreate([], ['branch_type' => 'head_office']);
 
-        if (!$setting) {
-            $setting = Setting::create([]);
-        }
-
-        $data = [
-    'store_name' => $request->store_name,
-    'store_address' => $request->store_address,
-    'store_phone' => $request->store_phone,
-    'tax_number' => $request->tax_number,
-    'branch_type' => $request->branch_type,
-    'branch_number' => $request->branch_number,
-];
+        $data = $request->safe()->only([
+            'store_name',
+            'store_address',
+            'store_phone',
+            'tax_number',
+            'branch_type',
+            'branch_number',
+        ]);
 
         if ($request->hasFile('logo_image')) {
             $data['logo_image'] = $request->file('logo_image')

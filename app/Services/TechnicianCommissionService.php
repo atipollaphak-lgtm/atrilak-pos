@@ -5,12 +5,29 @@ namespace App\Services;
 use App\Models\Sale;
 use App\Models\TechnicianCommission;
 use App\Models\TechnicianCommissionRule;
+use App\Services\Sales\SaleDecimalService;
 
 class TechnicianCommissionService
 {
+    private SaleDecimalService $decimalService;
+
+    public function __construct(?SaleDecimalService $decimalService = null)
+    {
+        $this->decimalService = $decimalService ?? new SaleDecimalService;
+    }
+
     public function createFromSale(Sale $sale): ?TechnicianCommission
     {
-        if (!$sale->technician_id) {
+        $attributes = $this->attributesFromSale($sale);
+
+        return $attributes === null
+            ? null
+            : TechnicianCommission::create($attributes);
+    }
+
+    public function attributesFromSale(Sale $sale): ?array
+    {
+        if (! $sale->technician_id) {
             return null;
         }
 
@@ -18,30 +35,31 @@ class TechnicianCommissionService
             'items.product.category',
         ]);
 
-        $totalCommission = 0;
+        $totalCommission = '0.00';
         $calculationDetails = [];
 
         foreach ($sale->items as $item) {
 
             $product = $item->product;
 
-            if (!$product) {
+            if (! $product) {
                 continue;
             }
 
             $rule = $this->findRule($product);
 
-            if (!$rule) {
+            if (! $rule) {
                 continue;
             }
 
             $lineCommission = $this->calculateLineCommission($item, $rule);
 
-            if ($lineCommission <= 0) {
+            if (! $this->decimalService->isPositive($lineCommission)) {
                 continue;
             }
 
-            $totalCommission += $lineCommission;
+            $totalCommission = $this->decimalService
+                ->addMoney($totalCommission, $lineCommission);
 
             $calculationDetails[] = [
                 'product_name' => $product->name,
@@ -50,15 +68,15 @@ class TechnicianCommissionService
                 'rule_name' => $rule->name,
                 'rule_type' => $rule->rule_type,
                 'rule_value' => $rule->rule_value,
-                'commission' => $lineCommission,
+                'commission' => (float) $lineCommission,
             ];
         }
 
-        if ($totalCommission <= 0) {
+        if (! $this->decimalService->isPositive($totalCommission)) {
             return null;
         }
 
-        return TechnicianCommission::create([
+        return [
             'technician_id' => $sale->technician_id,
             'sale_id' => $sale->id,
             'commission_date' => $sale->sale_date,
@@ -68,8 +86,8 @@ class TechnicianCommissionService
             'status' => 'pending',
             'rule_name' => 'คำนวณตามกฎสินค้า/หมวดสินค้า',
             'calculation_detail' => json_encode($calculationDetails, JSON_UNESCAPED_UNICODE),
-            'remark' => 'สร้างอัตโนมัติจากบิลขาย ' . $sale->sale_no,
-        ]);
+            'remark' => 'สร้างอัตโนมัติจากบิลขาย '.$sale->sale_no,
+        ];
     }
 
     private function findRule($product): ?TechnicianCommissionRule
@@ -83,7 +101,7 @@ class TechnicianCommissionService
             return $productRule;
         }
 
-        if (!$product->category_id) {
+        if (! $product->category_id) {
             return null;
         }
 
@@ -94,20 +112,18 @@ class TechnicianCommissionService
             ->first();
     }
 
-    private function calculateLineCommission($item, TechnicianCommissionRule $rule): float
+    private function calculateLineCommission($item, TechnicianCommissionRule $rule): string
     {
-        $qty = (float) $item->qty;
-        $lineTotal = (float) $item->total;
-        $ruleValue = (float) $rule->rule_value;
-
         if ($rule->rule_type === 'percent') {
-            return round($lineTotal * ($ruleValue / 100), 2);
+            return $this->decimalService
+                ->percentCommission($item->total, $rule->rule_value);
         }
 
         if ($rule->rule_type === 'amount') {
-            return round($qty * $ruleValue, 2);
+            return $this->decimalService
+                ->amountCommission($item->qty, $rule->rule_value);
         }
 
-        return 0;
+        return '0.00';
     }
 }

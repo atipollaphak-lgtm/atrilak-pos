@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Sale;
-use App\Models\Product;
+use App\Exceptions\StaleSaleRevisionException;
+use App\Http\Requests\Sales\StoreSaleV1Request;
+use App\Http\Requests\Sales\StoreSaleV2Request;
+use App\Http\Requests\Sales\UpdateSaleRequest;
+use App\Http\Requests\Sales\VoidSaleRequest;
 use App\Models\Customer;
-use Illuminate\Http\Request;
-use App\Models\SaleItem;
+use App\Models\Product;
+use App\Models\Sale;
 use App\Models\Setting;
-use App\Models\StockMovement;
-use App\Models\TechnicianCommission;
 use App\Models\Technician;
-use App\Services\TechnicianCommissionService;
-use App\Services\SaleService;
 use App\Services\CommercialDocumentService;
+use App\Services\Sales\SaleFinancialSnapshotService;
+use App\Services\SaleService;
+use DomainException;
+use Illuminate\Http\Request;
+use Throwable;
 
 class SaleController extends Controller
 {
@@ -82,81 +86,52 @@ class SaleController extends Controller
         );
     }
 
-    public function store(Request $request)
+    public function store(StoreSaleV1Request $request)
     {
-        $request->validate([
-            'product_id' => 'required|array',
-            'qty' => 'required|array',
-            'selling_price' => 'required|array',
-            'technician_id' => 'nullable|exists:technicians,id',
-        ]);
-
-        $items = [];
-        $grandTotal = 0;
-
-        foreach ($request->product_id as $index => $productId) {
-
-            $qty = $request->qty[$index] ?? 0;
-            $price = $request->selling_price[$index] ?? 0;
-
-            if (
-                empty($productId) ||
-                empty($qty) ||
-                empty($price)
-            ) {
-                continue;
-            }
-
-            $product = Product::find($productId);
-
-            if (!$product) {
-                return back()->with('error', 'ไม่พบสินค้า');
-            }
-
-            if ($product->stock_qty < $qty) {
-                return back()->with(
-                    'error',
-                    'สินค้า ' . $product->name . ' มีสต็อกไม่พอ'
-                );
-            }
-
-            $items[] = [
-                'product_id' => $productId,
-                'qty' => $qty,
-                'selling_price' => $price,
-            ];
-
-            $grandTotal += $qty * $price;
-        }
-
-        if (count($items) <= 0) {
-            return back()->with('error', 'กรุณาเลือกรายการสินค้า');
-        }
+        $validated = $request->validated();
 
         try {
-
             $sale = app(SaleService::class)->createSale([
-                'customer_id' => $request->customer_id,
-                'customer_delivery_address_id' => $request->customer_delivery_address_id,
-                'technician_id' => $request->technician_id,
-                'sale_date' => $request->sale_date ?? now()->toDateString(),
-                'grand_total' => $grandTotal,
-                'delivery_type' => $request->delivery_type ?? 'delivery',
-                'discount' => $request->discount ?? 0,
-                'items' => $items,
+                'customer_id' => $validated['customer_id'] ?? null,
+                'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
+                'technician_id' => $validated['technician_id'] ?? null,
+                'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
+                'delivery_type' => $validated['delivery_type'] ?? 'delivery',
+                'discount' => $validated['discount'] ?? 0,
+                'payment_method' => $validated['payment_method'],
+                'cash_amount' => $validated['cash_amount'],
+                'promptpay_amount' => $validated['promptpay_amount'],
+                'received_amount' => $validated['received_amount'],
+                'idempotency_key' => $validated['idempotency_key'],
+                'items' => $request->normalizedItems(),
             ]);
 
-            return response()->json([
-                'success' => true,
-                'sale_id' => $sale->id,
-                'invoice_url' => route('sales.invoice', $sale->id),
-            ]);
-        } catch (\Exception $e) {
+            return $this->saleCreatedResponse($sale);
+        } catch (DomainException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $exception->getMessage(),
+                    'errors' => [],
+                ], $exception->getCode() === 409 ? 409 : 422);
+            }
 
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
+            return back()->withInput()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ไม่สามารถบันทึกการขายได้ กรุณาลองใหม่อีกครั้ง',
+                    'errors' => [],
+                ], 500);
+            }
+
+            return back()->withInput()->with(
+                'error',
+                'ไม่สามารถบันทึกการขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
         }
     }
 
@@ -164,91 +139,60 @@ class SaleController extends Controller
     {
         return response()->json([
             'success' => true,
-            'message' => 'Check Profit API Ready'
+            'message' => 'Check Profit API Ready',
         ]);
     }
 
-    public function storeV2(Request $request)
+    public function storeV2(StoreSaleV2Request $request)
     {
-        $request->validate([
-            'items' => 'required|array',
-            'items.*.product_id' => 'required',
-            'items.*.qty' => 'required',
-            'items.*.selling_price' => 'required',
-            'technician_id' => 'nullable|exists:technicians,id',
-        ]);
-
-        $grandTotal = 0;
-        $items = [];
-
-        foreach ($request->items as $item) {
-
-            $product = Product::find($item['product_id']);
-
-            if (!$product) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'ไม่พบสินค้า'
-                ], 422);
-            }
-
-            if ($product->stock_qty < $item['qty']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'สินค้า ' . $product->name . ' มีสต๊อกไม่พอ'
-                ], 422);
-            }
-
-            $items[] = [
-                'product_id' => $item['product_id'],
-                'product_unit_id' => $item['product_unit_id'] ?? null,
-                'qty' => $item['qty'],
-                'selling_price' => $item['selling_price'],
-            ];
-
-            $grandTotal += $item['qty'] * $item['selling_price'];
-        }
+        $validated = $request->validated();
 
         try {
-
             $sale = app(SaleService::class)->createSale([
-                'customer_id' => $request->customer_id,
-                'customer_delivery_address_id' => $request->customer_delivery_address_id,
-                'technician_id' => $request->technician_id,
-                'sale_date' => $request->sale_date ?? now()->toDateString(),
-                'grand_total' => $grandTotal,
-                'delivery_type' => $request->delivery_type ?? 'delivery',
-                'discount' => $request->discount ?? 0,
-                'items' => $items,
+                'customer_id' => $validated['customer_id'] ?? null,
+                'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
+                'technician_id' => $validated['technician_id'] ?? null,
+                'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
+                'delivery_type' => $validated['delivery_type'] ?? 'delivery',
+                'discount' => $validated['discount'] ?? 0,
+                'payment_method' => $validated['payment_method'],
+                'cash_amount' => $validated['cash_amount'],
+                'promptpay_amount' => $validated['promptpay_amount'],
+                'received_amount' => $validated['received_amount'],
+                'idempotency_key' => $validated['idempotency_key'],
+                'items' => $validated['items'],
             ]);
 
+            return $this->saleCreatedResponse($sale, 'sales.invoice-v2');
+        } catch (DomainException $exception) {
             return response()->json([
-                'success' => true,
-                'sale_id' => $sale->id,
-                'invoice_url' => route('sales.invoice', $sale->id),
-            ]);
-        } catch (\Exception $e) {
+                'success' => false,
+                'message' => $exception->getMessage(),
+                'errors' => [],
+            ], $exception->getCode() === 409 ? 409 : 422);
+        } catch (Throwable $exception) {
+            report($exception);
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
+                'message' => 'ไม่สามารถบันทึกการขายได้ กรุณาลองใหม่อีกครั้ง',
+                'errors' => [],
+            ], 500);
         }
     }
 
-    public function show(Sale $sale)
+    public function show(Sale $sale, SaleFinancialSnapshotService $financialSnapshots)
     {
         $sale->load([
             'customer',
             'technician',
-            'items.product'
+            'voidedBy',
+            'items.product',
         ]);
 
-        $totalCost = $sale->items->sum(function ($item) {
-            return $item->cost_price * $item->qty;
-        });
-
-        $profit = $sale->items->sum('profit');
+        $financialSummary = $financialSnapshots->saleSummary($sale);
+        $totalCost = $financialSummary['cost'];
+        $profit = $financialSummary['profit'];
 
         return view(
             'sales.show',
@@ -259,225 +203,166 @@ class SaleController extends Controller
             )
         );
     }
+
     public function print(Sale $sale)
     {
         $sale->load([
             'customer',
-            'items.product'
+            'items.product.unitRelation',
+            'items.productUnit.unit',
         ]);
 
         $setting = Setting::first();
 
         return view('sales.print', compact('sale', 'setting'));
     }
+
     public function edit(Sale $sale)
     {
-        $sale->load('items.product', 'customer');
+        if ($sale->isVoided()) {
+            abort(409, 'ใบขายนี้ถูกยกเลิกแล้ว ไม่สามารถแก้ไขได้');
+        }
 
-        $customers = Customer::where('active', true)->get();
+        $sale->load('items.product', 'items.productUnit', 'customer');
 
-        $products = Product::where('active', true)->get();
+        $customers = Customer::query()
+            ->where(function ($query) use ($sale): void {
+                $query->where('active', true);
+
+                if ($sale->customer_id !== null) {
+                    $query->orWhere('id', $sale->customer_id);
+                }
+            })
+            ->orderBy('name')
+            ->get();
+
+        $historicalProductIds = $sale->items
+            ->pluck('product_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $products = Product::query()
+            ->where(function ($query) use ($historicalProductIds): void {
+                $query->where('active', true)
+                    ->orWhereIn('id', $historicalProductIds);
+            })
+            ->orderBy('name')
+            ->get();
 
         return view(
             'sales.edit',
             compact('sale', 'customers', 'products')
         );
     }
-    public function update(Request $request, Sale $sale)
+
+    public function update(UpdateSaleRequest $request, Sale $sale)
     {
-        $request->validate([
-            'sale_date' => 'required|date',
-            'product_id' => 'required|array',
-            'qty' => 'required|array',
-            'selling_price' => 'required|array',
-        ]);
+        $validated = $request->validated();
+        $updateData = [
+            'customer_id' => $validated['customer_id'] ?? null,
+            'sale_date' => $validated['sale_date'],
+            'items' => $request->normalizedItems(),
+            'delivery_fee' => $validated['delivery_fee'] ?? 0,
+            'discount' => $validated['discount'] ?? 0,
+        ];
 
-        /*
-    |--------------------------------------------------------------------------
-    | 1) คืนสต๊อกจากบิลเดิมก่อน
-    |--------------------------------------------------------------------------
-    */
-        foreach ($sale->items as $item) {
-
-            $product = $item->product;
-
-            if (!$product) {
-                continue;
-            }
-
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock + $item->qty;
-
-            $product->stock_qty = $newStock;
-            $product->save();
-
-            StockMovement::create([
-                'product_id'     => $product->id,
-                'type'           => 'IN',
-                'qty'            => $item->qty,
-                'stock_before'   => $oldStock,
-                'stock_after'    => $newStock,
-                'reference_type' => 'sale_edit',
-                'reference_id'   => $sale->id,
-                'remark'         => 'คืนสต๊อกจากการแก้ไขบิล ' . $sale->sale_no,
-            ]);
-        }
-
-        /*
-    |--------------------------------------------------------------------------
-    | 2) ลบรายการสินค้าเดิมในบิล
-    |--------------------------------------------------------------------------
-    */
-        $sale->items()->delete();
-
-        /*
-    |--------------------------------------------------------------------------
-    | 3) ตรวจสอบสต๊อกก่อนบันทึกใหม่
-    |--------------------------------------------------------------------------
-    */
-        foreach ($request->product_id as $index => $productId) {
-
-            $qty = $request->qty[$index] ?? 0;
-
-            if (empty($productId) || empty($qty)) {
-                continue;
-            }
-
-            $product = Product::find($productId);
-
-            if (!$product) {
-                return back()->with('error', 'ไม่พบสินค้า');
-            }
-
-            if ($product->stock_qty < $qty) {
-                return back()->with(
-                    'error',
-                    'สินค้า ' . $product->name . ' มีสต็อกไม่พอ'
-                );
+        foreach (['payment_method', 'cash_amount', 'promptpay_amount', 'received_amount'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $updateData[$field] = $validated[$field];
             }
         }
 
-        /*
-    |--------------------------------------------------------------------------
-    | 4) บันทึกรายการใหม่ + ตัดสต๊อก + บันทึกต้นทุน/กำไร
-    |--------------------------------------------------------------------------
-    */
-        $grandTotal = 0;
+        try {
+            app(SaleService::class)->updateSale(
+                $sale,
+                $updateData,
+                (int) $validated['revision']
+            );
+        } catch (StaleSaleRevisionException $exception) {
+            return redirect()
+                ->route('sales.edit', $sale->id)
+                ->with('error', $exception->getMessage());
+        } catch (DomainException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
 
-        foreach ($request->product_id as $index => $productId) {
-
-            $qty = $request->qty[$index] ?? 0;
-            $price = $request->selling_price[$index] ?? 0;
-
-            if (
-                empty($productId) ||
-                empty($qty) ||
-                empty($price)
-            ) {
-                continue;
-            }
-
-            $product = Product::find($productId);
-
-            $lineTotal = $qty * $price;
-            $costPrice = $product->cost_price ?? 0;
-            $lineProfit = ($price - $costPrice) * $qty;
-
-            SaleItem::create([
-                'sale_id' => $sale->id,
-                'product_id' => $productId,
-                'qty' => $qty,
-                'selling_price' => $price,
-                'cost_price' => $costPrice,
-                'total' => $lineTotal,
-                'profit' => $lineProfit,
-            ]);
-
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock - $qty;
-
-            $product->stock_qty = $newStock;
-            $product->save();
-
-            StockMovement::create([
-                'product_id'     => $product->id,
-                'type'           => 'OUT',
-                'qty'            => $qty,
-                'stock_before'   => $oldStock,
-                'stock_after'    => $newStock,
-                'reference_type' => 'sale_edit',
-                'reference_id'   => $sale->id,
-                'remark'         => 'ขายออกจากการแก้ไขบิล ' . $sale->sale_no,
-            ]);
-
-            $grandTotal += $lineTotal;
+            return back()->withInput()->with(
+                'error',
+                'ไม่สามารถแก้ไขการขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
         }
 
-        /*
-    |--------------------------------------------------------------------------
-    | 5) อัปเดตหัวบิล
-    |--------------------------------------------------------------------------
-    */
-        $deliveryFee = $request->delivery_fee ?? 0;
-        $discount = $request->discount ?? 0;
-
-        $netTotal = $grandTotal + $deliveryFee - $discount;
-
-        $sale->update([
-            'customer_id' => $request->customer_id,
-            'sale_date' => $request->sale_date,
-            'total_amount' => $netTotal,
-            'delivery_fee' => $deliveryFee,
-            'discount' => $discount,
-        ]);
         return redirect()
             ->route('sales.show', $sale->id)
             ->with('success', 'แก้ไขบิลเรียบร้อยแล้ว');
     }
+
     public function destroy(Sale $sale)
     {
-        $sale->load('items.product');
+        try {
+            app(SaleService::class)->deleteSale($sale);
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
 
-        foreach ($sale->items as $item) {
-
-            $product = $item->product;
-
-            if (!$product) {
-                continue;
-            }
-
-            $oldStock = $product->stock_qty;
-            $newStock = $oldStock + $item->qty;
-
-            $product->stock_qty = $newStock;
-            $product->save();
-
-            StockMovement::create([
-                'product_id'     => $product->id,
-                'type'           => 'IN',
-                'qty'            => $item->qty,
-                'stock_before'   => $oldStock,
-                'stock_after'    => $newStock,
-                'reference_type' => 'sale_delete',
-                'reference_id'   => $sale->id,
-                'remark'         => 'คืนสต๊อกจากการลบบิล ' . $sale->sale_no,
-            ]);
+            return back()->with(
+                'error',
+                'ไม่สามารถลบใบขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
         }
-
-        $sale->items()->delete();
-
-        $sale->delete();
 
         return redirect()
             ->route('sales.index')
             ->with('success', 'ลบบิลและคืนสต๊อกเรียบร้อยแล้ว');
     }
+
+    public function void(VoidSaleRequest $request, Sale $sale)
+    {
+        try {
+            app(SaleService::class)->voidSale(
+                $sale,
+                $request->user(),
+                $request->validated('void_reason')
+            );
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'ไม่สามารถยกเลิกใบขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
+        }
+
+        return redirect()
+            ->route('sales.show', $sale)
+            ->with('success', 'ยกเลิกใบขายและคืนสต็อกเรียบร้อยแล้ว');
+    }
+
+    private function saleCreatedResponse(
+        Sale $sale,
+        string $invoiceRoute = 'sales.invoice'
+    ) {
+        return response()->json([
+            'success' => true,
+            'sale_id' => $sale->id,
+            'sale_no' => $sale->sale_no,
+            'invoice_url' => route($invoiceRoute, $sale->id),
+            'idempotent_replay' => $sale->idempotentReplay,
+        ]);
+    }
+
     public function invoice(Sale $sale)
     {
         $sale->load([
             'customer',
             'technician',
-            'items.product',
+            'items.product.unitRelation',
+            'items.productUnit.unit',
         ]);
 
         $setting = Setting::first();
@@ -493,18 +378,19 @@ class SaleController extends Controller
         $sale->load([
             'customer',
             'technician',
-            'items.product',
+            'items.product.unitRelation',
+            'items.productUnit.unit',
         ]);
 
         $setting = Setting::first();
 
         $document = $commercialDocumentService->buildSaleDocument(
-    $sale,
-    $request->query(
-    'document_type',
-    'delivery-note'
-)
-);
+            $sale,
+            $request->query(
+                'document_type',
+                'delivery-note'
+            )
+        );
 
         return view(
             'sales.invoice_v2',

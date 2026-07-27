@@ -88,6 +88,12 @@
             align-items: flex-end;
         }
 
+        .document-payment-details {
+            margin-top: 12px;
+            text-align: right;
+            line-height: 1.5;
+        }
+
         .signature-box {
             width: 35%;
             text-align: center;
@@ -137,9 +143,30 @@
                 $qrBase64 = 'data:image/' . $qrType . ';base64,' . $qrData;
             }
         }
+
+        $storeName = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_name_snapshot,
+            $setting?->store_name,
+            'ATRILAK POS'
+        );
+        $storeAddress = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_address_snapshot,
+            $setting?->store_address,
+            ''
+        );
+        $storePhone = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_phone_snapshot,
+            $setting?->store_phone
+        );
+        $storeTaxNumber = \App\Support\DocumentSnapshotValue::resolve(
+            $sale->store_tax_number_snapshot,
+            $setting?->tax_number
+        );
     @endphp
 
     <div class="container">
+
+        @include('sales.partials.void-document-marker', ['sale' => $sale])
 
         <div class="no-print">
             <button onclick="window.print()">พิมพ์</button>
@@ -153,20 +180,20 @@
 
             <div class="store-info">
                 <div class="store-name">
-                    {{ $setting->store_name ?? 'ATRILAK POS' }}
+                    {{ $storeName }}
                 </div>
 
                 <div>
-                    {{ $setting->store_address ?? '' }}
+                    {{ $storeAddress }}
                 </div>
 
                 <div>
-                    โทร: {{ $setting->store_phone ?? '-' }}
+                    โทร: {{ $storePhone }}
                 </div>
 
                 <div>
                     เลขประจำตัวผู้เสียภาษี:
-                    {{ $setting->tax_number ?? '-' }}
+                    {{ $storeTaxNumber }}
                 </div>
             </div>
 
@@ -192,7 +219,11 @@
             <tr>
                 <td colspan="2">
                     <strong>ลูกค้า:</strong>
-                    {{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}
+                    {{ \App\Support\DocumentSnapshotValue::resolve(
+                        $sale->customer_name_snapshot,
+                        $sale->customer?->name,
+                        'ลูกค้าทั่วไป'
+                    ) }}
                 </td>
             </tr>
         </table>
@@ -216,7 +247,10 @@
                         </td>
 
                         <td>
-                            {{ $item->product->name ?? '-' }}
+                            {{ \App\Support\DocumentSnapshotValue::resolve(
+                                $item->product_name_snapshot,
+                                $item->product?->name
+                            ) }}
                         </td>
 
                         <td class="text-right">
@@ -246,6 +280,11 @@
                 </tr>
             </tfoot>
         </table>
+
+        @include('sales.partials.payment-details', [
+            'paymentRows' => \App\Support\SalePaymentDisplay::documentRows($sale),
+            'paymentClass' => 'document-payment-details',
+        ])
 
         <div class="bottom-section">
 

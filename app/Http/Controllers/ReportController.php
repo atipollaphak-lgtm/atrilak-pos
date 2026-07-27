@@ -4,10 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Services\Sales\DailyPaymentSummaryService;
+use App\Services\Sales\SaleDecimalService;
+use App\Services\Sales\SaleFinancialSnapshotService;
 use Illuminate\Http\Request;
 
 class ReportController extends Controller
 {
+    public function __construct(
+        private readonly SaleFinancialSnapshotService $financialSnapshots,
+        private readonly SaleDecimalService $decimalService,
+        private readonly DailyPaymentSummaryService $dailyPaymentSummaryService
+    ) {}
+
     public function sales()
     {
         return view('reports.sales');
@@ -27,29 +36,25 @@ class ReportController extends Controller
     {
         $date = $request->input('date', date('Y-m-d'));
 
-        $sales = Sale::with(['customer', 'items'])
+        $sales = Sale::with(['customer', 'items'])->active()
             ->whereDate('sale_date', $date)
             ->orderBy('sale_date')
             ->get();
 
-        $totalSales = $sales->sum('total_amount');
-
-        $totalCost = $sales->sum(function ($sale) {
-            return $sale->items->sum(function ($item) {
-                return $item->cost_price * $item->qty;
-            });
-        });
-
-        $totalProfit = $sales->sum(function ($sale) {
-            return $sale->items->sum('profit');
-        });
+        $financialsBySaleId = $this->financialSnapshots->summariesBySale($sales);
+        $totalSales = $this->financialSnapshots->sumRevenue($sales);
+        $totalCost = $this->financialSnapshots->sumCost($sales);
+        $totalProfit = $this->financialSnapshots->sumProfit($sales);
+        $paymentSummary = $this->dailyPaymentSummaryService->forBusinessDate($date);
 
         return view('reports.daily-profit', compact(
             'date',
             'sales',
             'totalSales',
             'totalCost',
-            'totalProfit'
+            'totalProfit',
+            'financialsBySaleId',
+            'paymentSummary'
         ));
     }
 
@@ -58,23 +63,16 @@ class ReportController extends Controller
         $month = $request->input('month', date('m'));
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items'])
+        $sales = Sale::with(['customer', 'items'])->active()
             ->whereMonth('sale_date', $month)
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
             ->get();
 
-        $totalSales = $sales->sum('total_amount');
-
-        $totalCost = $sales->sum(function ($sale) {
-            return $sale->items->sum(function ($item) {
-                return $item->cost_price * $item->qty;
-            });
-        });
-
-        $totalProfit = $sales->sum(function ($sale) {
-            return $sale->items->sum('profit');
-        });
+        $financialsBySaleId = $this->financialSnapshots->summariesBySale($sales);
+        $totalSales = $this->financialSnapshots->sumRevenue($sales);
+        $totalCost = $this->financialSnapshots->sumCost($sales);
+        $totalProfit = $this->financialSnapshots->sumProfit($sales);
 
         return view('reports.monthly-profit', compact(
             'month',
@@ -82,7 +80,8 @@ class ReportController extends Controller
             'sales',
             'totalSales',
             'totalCost',
-            'totalProfit'
+            'totalProfit',
+            'financialsBySaleId'
         ));
     }
 
@@ -90,31 +89,26 @@ class ReportController extends Controller
     {
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items'])
+        $sales = Sale::with(['customer', 'items'])->active()
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
             ->get();
 
-        $totalSales = $sales->sum('total_amount');
-
-        $totalCost = $sales->sum(function ($sale) {
-            return $sale->items->sum(function ($item) {
-                return $item->cost_price * $item->qty;
-            });
-        });
-
-        $totalProfit = $sales->sum(function ($sale) {
-            return $sale->items->sum('profit');
-        });
+        $financialsBySaleId = $this->financialSnapshots->summariesBySale($sales);
+        $totalSales = $this->financialSnapshots->sumRevenue($sales);
+        $totalCost = $this->financialSnapshots->sumCost($sales);
+        $totalProfit = $this->financialSnapshots->sumProfit($sales);
 
         return view('reports.yearly-profit', compact(
             'year',
             'sales',
             'totalSales',
             'totalCost',
-            'totalProfit'
+            'totalProfit',
+            'financialsBySaleId'
         ));
     }
+
     public function productSales()
     {
         $month = request('month', date('m'));
@@ -122,7 +116,7 @@ class ReportController extends Controller
 
         $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -132,17 +126,30 @@ class ReportController extends Controller
         foreach ($items as $item) {
             $productId = $item->product_id;
 
-            if (!isset($products[$productId])) {
+            if (! isset($products[$productId])) {
                 $products[$productId] = [
                     'name' => $item->product->name ?? '-',
                     'unit' => $item->product->unit ?? '',
                     'qty' => 0,
-                    'sales' => 0,
+                    'sales' => '0.00',
+                    'cost' => '0.00',
+                    'profit' => '0.00',
                 ];
             }
 
             $products[$productId]['qty'] += $item->qty;
-            $products[$productId]['sales'] += $item->total;
+            $products[$productId]['sales'] = $this->decimalService->addMoney(
+                $products[$productId]['sales'],
+                $this->financialSnapshots->itemRevenue($item)
+            );
+            $products[$productId]['cost'] = $this->decimalService->addMoney(
+                $products[$productId]['cost'],
+                $this->financialSnapshots->itemCost($item)
+            );
+            $products[$productId]['profit'] = $this->decimalService->addMoney(
+                $products[$productId]['profit'],
+                $this->financialSnapshots->itemProfit($item)
+            );
         }
 
         return view('reports.product_sales', compact(
@@ -151,14 +158,15 @@ class ReportController extends Controller
             'products'
         ));
     }
+
     public function bestSeller()
     {
         $month = request('month', date('m'));
         $year = request('year', date('Y'));
 
-        $items = \App\Models\SaleItem::with('product', 'sale')
+        $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -169,7 +177,7 @@ class ReportController extends Controller
 
             $productId = $item->product_id;
 
-            if (!isset($products[$productId])) {
+            if (! isset($products[$productId])) {
 
                 $products[$productId] = [
                     'name' => $item->product->name ?? '-',
@@ -200,16 +208,16 @@ class ReportController extends Controller
     {
         $date = $request->input('date', date('Y-m-d'));
 
-        $sales = Sale::with(['customer', 'items.product'])
+        $sales = Sale::with(['customer', 'items.product'])->active()
             ->whereDate('sale_date', $date)
             ->orderBy('sale_date')
             ->get();
 
-        $fileName = 'daily-profit-' . $date . '.csv';
+        $fileName = 'daily-profit-'.$date.'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
         ];
 
         $callback = function () use ($sales) {
@@ -225,19 +233,18 @@ class ReportController extends Controller
                 'สินค้า',
                 'จำนวน',
                 'ราคาขาย',
-                'ต้นทุน',
+                'ต้นทุนรวม',
                 'ยอดขาย',
                 'กำไร',
             ]);
 
             foreach ($sales as $sale) {
                 foreach ($sale->items as $item) {
-                    $costPrice = $item->cost_price ?? $item->product->cost_price ?? 0;
                     $sellingPrice = $item->selling_price ?? 0;
                     $qty = $item->qty ?? 0;
-
-                    $total = $sellingPrice * $qty;
-                    $profit = ($sellingPrice - $costPrice) * $qty;
+                    $total = $this->financialSnapshots->itemRevenue($item);
+                    $profit = $this->financialSnapshots->itemProfit($item);
+                    $totalCost = $this->financialSnapshots->itemCost($item);
 
                     fputcsv($file, [
                         $sale->sale_no,
@@ -246,7 +253,7 @@ class ReportController extends Controller
                         $item->product->name ?? '-',
                         $qty,
                         $sellingPrice,
-                        $costPrice,
+                        $totalCost,
                         $total,
                         $profit,
                     ]);
@@ -268,17 +275,17 @@ class ReportController extends Controller
         $month = $request->input('month', date('m'));
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items.product'])
+        $sales = Sale::with(['customer', 'items.product'])->active()
             ->whereMonth('sale_date', $month)
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
             ->get();
 
-        $fileName = 'monthly-profit-' . $year . '-' . $month . '.csv';
+        $fileName = 'monthly-profit-'.$year.'-'.$month.'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
         ];
 
         $callback = function () use ($sales) {
@@ -293,19 +300,18 @@ class ReportController extends Controller
                 'สินค้า',
                 'จำนวน',
                 'ราคาขาย',
-                'ต้นทุน',
+                'ต้นทุนรวม',
                 'ยอดขาย',
                 'กำไร',
             ]);
 
             foreach ($sales as $sale) {
                 foreach ($sale->items as $item) {
-                    $costPrice = $item->cost_price ?? $item->product->cost_price ?? 0;
                     $sellingPrice = $item->selling_price ?? 0;
                     $qty = $item->qty ?? 0;
-
-                    $total = $sellingPrice * $qty;
-                    $profit = ($sellingPrice - $costPrice) * $qty;
+                    $total = $this->financialSnapshots->itemRevenue($item);
+                    $profit = $this->financialSnapshots->itemProfit($item);
+                    $totalCost = $this->financialSnapshots->itemCost($item);
 
                     fputcsv($file, [
                         $sale->sale_no,
@@ -314,7 +320,7 @@ class ReportController extends Controller
                         $item->product->name ?? '-',
                         $qty,
                         $sellingPrice,
-                        $costPrice,
+                        $totalCost,
                         $total,
                         $profit,
                     ]);
@@ -335,16 +341,16 @@ class ReportController extends Controller
     {
         $year = $request->input('year', date('Y'));
 
-        $sales = Sale::with(['customer', 'items.product'])
+        $sales = Sale::with(['customer', 'items.product'])->active()
             ->whereYear('sale_date', $year)
             ->orderBy('sale_date')
             ->get();
 
-        $fileName = 'yearly-profit-' . $year . '.csv';
+        $fileName = 'yearly-profit-'.$year.'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
         ];
 
         $callback = function () use ($sales) {
@@ -360,7 +366,7 @@ class ReportController extends Controller
                 'สินค้า',
                 'จำนวน',
                 'ราคาขาย',
-                'ต้นทุน',
+                'ต้นทุนรวม',
                 'ยอดขาย',
                 'กำไร',
             ]);
@@ -369,18 +375,11 @@ class ReportController extends Controller
 
                 foreach ($sale->items as $item) {
 
-                    $costPrice = $item->cost_price
-                        ?? $item->product->cost_price
-                        ?? 0;
-
                     $sellingPrice = $item->selling_price ?? 0;
                     $qty = $item->qty ?? 0;
-
-                    $total = $sellingPrice * $qty;
-
-                    $profit =
-                        ($sellingPrice - $costPrice)
-                        * $qty;
+                    $total = $this->financialSnapshots->itemRevenue($item);
+                    $profit = $this->financialSnapshots->itemProfit($item);
+                    $totalCost = $this->financialSnapshots->itemCost($item);
 
                     fputcsv($file, [
                         $sale->sale_no,
@@ -389,7 +388,7 @@ class ReportController extends Controller
                         $item->product->name ?? '-',
                         $qty,
                         $sellingPrice,
-                        $costPrice,
+                        $totalCost,
                         $total,
                         $profit,
                     ]);
@@ -405,6 +404,7 @@ class ReportController extends Controller
             $headers
         );
     }
+
     public function exportProductSales(Request $request)
     {
         $month = $request->input('month', date('m'));
@@ -412,7 +412,7 @@ class ReportController extends Controller
 
         $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -422,24 +422,37 @@ class ReportController extends Controller
         foreach ($items as $item) {
             $productId = $item->product_id;
 
-            if (!isset($products[$productId])) {
+            if (! isset($products[$productId])) {
                 $products[$productId] = [
                     'name' => $item->product->name ?? '-',
                     'unit' => $item->product->unit ?? '',
                     'qty' => 0,
-                    'sales' => 0,
+                    'sales' => '0.00',
+                    'cost' => '0.00',
+                    'profit' => '0.00',
                 ];
             }
 
             $products[$productId]['qty'] += $item->qty;
-            $products[$productId]['sales'] += $item->total;
+            $products[$productId]['sales'] = $this->decimalService->addMoney(
+                $products[$productId]['sales'],
+                $this->financialSnapshots->itemRevenue($item)
+            );
+            $products[$productId]['cost'] = $this->decimalService->addMoney(
+                $products[$productId]['cost'],
+                $this->financialSnapshots->itemCost($item)
+            );
+            $products[$productId]['profit'] = $this->decimalService->addMoney(
+                $products[$productId]['profit'],
+                $this->financialSnapshots->itemProfit($item)
+            );
         }
 
-        $fileName = 'product-sales-' . $year . '-' . $month . '.csv';
+        $fileName = 'product-sales-'.$year.'-'.$month.'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
         ];
 
         $callback = function () use ($products) {
@@ -480,7 +493,7 @@ class ReportController extends Controller
 
         $items = SaleItem::with('product', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -490,7 +503,7 @@ class ReportController extends Controller
         foreach ($items as $item) {
             $productId = $item->product_id;
 
-            if (!isset($products[$productId])) {
+            if (! isset($products[$productId])) {
                 $products[$productId] = [
                     'name' => $item->product->name ?? '-',
                     'unit' => $item->product->unit ?? '',
@@ -507,11 +520,11 @@ class ReportController extends Controller
 
         $products = array_slice($products, 0, 10);
 
-        $fileName = 'best-seller-' . $year . '-' . $month . '.csv';
+        $fileName = 'best-seller-'.$year.'-'.$month.'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
         ];
 
         $callback = function () use ($products) {

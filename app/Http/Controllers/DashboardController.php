@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
-use Carbon\Carbon;
-use App\Models\Customer;
-use App\Models\Supplier;
 use App\Models\SaleItem;
+use App\Models\Supplier;
+use App\Services\Sales\SaleFinancialSnapshotService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(SaleFinancialSnapshotService $financialSnapshots)
     {
         $today = Carbon::today();
 
@@ -21,7 +22,7 @@ class DashboardController extends Controller
 
         $totalSuppliers = Supplier::count();
 
-        $todaySaleCount = Sale::whereDate(
+        $todaySaleCount = Sale::query()->active()->whereDate(
             'sale_date',
             $today
         )->count();
@@ -45,24 +46,19 @@ class DashboardController extends Controller
 
         $lowStockCount = $lowStockProducts->count();
 
-        $todaySales = Sale::whereDate('sale_date', $today)
+        $todaySales = Sale::query()->active()->whereDate('sale_date', $today)
             ->sum('total_amount');
 
-        $todayProfit = Sale::with('items')
+        $todayProfit = $financialSnapshots->sumProfit(Sale::with('items')->active()
             ->whereDate('sale_date', $today)
-            ->get()
-            ->sum(function ($sale) {
-                return $sale->items->sum(function ($item) {
-                    return ($item->selling_price - $item->cost_price) * $item->qty;
-                });
-            });
+            ->get());
 
         $month = date('m');
         $year = date('Y');
 
         $items = SaleItem::with('product.unitRelation', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
-                $query->whereMonth('sale_date', $month)
+                $query->active()->whereMonth('sale_date', $month)
                     ->whereYear('sale_date', $year);
             })
             ->get();
@@ -72,7 +68,7 @@ class DashboardController extends Controller
         foreach ($items as $item) {
             $productId = $item->product_id;
 
-            if (!isset($bestProducts[$productId])) {
+            if (! isset($bestProducts[$productId])) {
                 $bestProducts[$productId] = [
                     'name' => $item->product->name ?? '-',
                     'unit' => $item->product->unitRelation->name
@@ -91,7 +87,7 @@ class DashboardController extends Controller
 
         $bestProducts = array_slice($bestProducts, 0, 10);
 
-        $salesChart = Sale::select(
+        $salesChart = Sale::query()->active()->select(
             DB::raw('DATE(sale_date) as sale_day'),
             DB::raw('SUM(total_amount) as total_sales')
         )
@@ -119,7 +115,7 @@ class DashboardController extends Controller
                 (float) $row->total_sales;
         }
 
-        $monthSales = Sale::whereMonth(
+        $monthSales = Sale::query()->active()->whereMonth(
             'sale_date',
             date('m')
         )->whereYear(
@@ -127,21 +123,16 @@ class DashboardController extends Controller
             date('Y')
         )->sum('total_amount');
 
-        $monthProfit = Sale::with('items')
+        $monthProfit = $financialSnapshots->sumProfit(Sale::with('items')->active()
             ->whereMonth('sale_date', date('m'))
             ->whereYear('sale_date', date('Y'))
-            ->get()
-            ->sum(function ($sale) {
-                return $sale->items->sum(function ($item) {
-                    return ($item->selling_price - $item->cost_price)
-                        * $item->qty;
-                });
-            });
+            ->get());
         $stockValue = Product::where('active', true)
             ->get()
             ->sum(function ($product) {
                 return $product->stock_qty * $product->cost_price;
             });
+
         return view(
 
             'dashboard',

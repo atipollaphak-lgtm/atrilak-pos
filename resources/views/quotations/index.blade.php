@@ -8,11 +8,7 @@
 
 @section('content')
 
-@if(session('success'))
-    <div class="alert alert-success">
-        {{ session('success') }}
-    </div>
-@endif
+@include('partials.flash-messages')
 
 <div class="card">
 

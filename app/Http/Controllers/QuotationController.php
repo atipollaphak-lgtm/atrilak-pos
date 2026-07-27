@@ -6,14 +6,20 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
+use App\Services\SaleService;
+use App\Services\TransactionDocumentSnapshotService;
+use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\Sale;
-use App\Models\SaleItem;
-use App\Models\StockMovement;
+use Throwable;
 
 class QuotationController extends Controller
 {
+    public function __construct(
+        private SaleService $saleService,
+        private TransactionDocumentSnapshotService $documentSnapshotService
+    ) {}
+
     public function index()
     {
         $quotations = Quotation::with('customer')
@@ -58,21 +64,32 @@ class QuotationController extends Controller
         DB::transaction(function () use ($request) {
 
             $date = $request->quotation_date;
+            $productIds = collect($request->product_id)
+                ->filter()
+                ->map(fn ($productId) => (int) $productId)
+                ->unique()
+                ->values();
+            $products = Product::query()
+                ->whereIn('id', $productIds->all())
+                ->get()
+                ->keyBy('id');
+            $itemSnapshots = $this->documentSnapshotService
+                ->quotationItemSnapshots($products);
 
             $running = Quotation::whereDate(
                 'quotation_date',
                 $date
             )->count() + 1;
 
-            $quotationNo = 'QT-' .
-                date('Ymd', strtotime($date)) .
-                '-' .
+            $quotationNo = 'QT-'.
+                date('Ymd', strtotime($date)).
+                '-'.
                 str_pad($running, 4, '0', STR_PAD_LEFT);
 
             $totalAmount = 0;
 
             foreach ($request->product_id as $index => $productId) {
-                if (!$productId) {
+                if (! $productId) {
                     continue;
                 }
 
@@ -82,17 +99,21 @@ class QuotationController extends Controller
                 $totalAmount += $qty * $price;
             }
 
-            $quotation = Quotation::create([
+            $quotation = Quotation::create(array_merge([
                 'quotation_no' => $quotationNo,
                 'customer_id' => $request->customer_id,
                 'quotation_date' => $date,
                 'total_amount' => $totalAmount,
                 'remark' => $request->remark,
                 'status' => 'draft',
-            ]);
+            ], $this->documentSnapshotService->quotationHeaderSnapshots(
+                $request->customer_id === null || $request->customer_id === ''
+                    ? null
+                    : (int) $request->customer_id
+            )));
 
             foreach ($request->product_id as $index => $productId) {
-                if (!$productId) {
+                if (! $productId) {
                     continue;
                 }
 
@@ -100,13 +121,13 @@ class QuotationController extends Controller
                 $price = (float) ($request->selling_price[$index] ?? 0);
                 $total = $qty * $price;
 
-                QuotationItem::create([
+                QuotationItem::create(array_merge([
                     'quotation_id' => $quotation->id,
                     'product_id' => $productId,
                     'qty' => $qty,
                     'selling_price' => $price,
                     'total' => $total,
-                ]);
+                ], $itemSnapshots[(int) $productId] ?? []));
             }
         });
 
@@ -120,6 +141,7 @@ class QuotationController extends Controller
         $quotation->load([
             'customer',
             'items.product',
+            'convertedSale',
         ]);
 
         return view(
@@ -143,7 +165,18 @@ class QuotationController extends Controller
 
     public function destroy(Quotation $quotation)
     {
-        $quotation->delete();
+        try {
+            $this->saleService->deleteQuotation($quotation);
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with(
+                'error',
+                'ไม่สามารถลบใบเสนอราคาได้ กรุณาลองใหม่อีกครั้ง'
+            );
+        }
 
         return redirect()
             ->route('quotations.index')
@@ -152,64 +185,18 @@ class QuotationController extends Controller
 
     public function convertToSale(Quotation $quotation)
     {
-        DB::transaction(function () use ($quotation, &$sale) {
+        try {
+            $sale = $this->saleService->createSaleFromQuotation($quotation);
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            report($exception);
 
-            $running = Sale::whereDate(
-                'sale_date',
-                now()
-            )->count() + 1;
-
-            $saleNo =
-                'SAL-' .
-                now()->format('Ymd') .
-                '-' .
-                str_pad($running, 4, '0', STR_PAD_LEFT);
-
-            $sale = Sale::create([
-                'sale_no'      => $saleNo,
-                'customer_id'  => $quotation->customer_id,
-                'sale_date'    => now()->toDateString(),
-                'total_amount' => $quotation->total_amount,
-            ]);
-
-            foreach ($quotation->items as $item) {
-
-                $product = $item->product;
-
-                SaleItem::create([
-                    'sale_id'       => $sale->id,
-                    'product_id'    => $product->id,
-                    'qty'           => $item->qty,
-                    'selling_price' => $item->selling_price,
-                    'cost_price'    => $product->cost_price,
-                    'profit'        => ($item->selling_price - $product->cost_price)
-                        * $item->qty,
-                    'total'         => $item->total,
-                ]);
-
-                $before = $product->stock_qty;
-                $after  = $before - $item->qty;
-
-                $product->update([
-                    'stock_qty' => $after,
-                ]);
-
-                StockMovement::create([
-                    'product_id'     => $product->id,
-                    'type'           => 'OUT',
-                    'qty'            => $item->qty,
-                    'stock_before'   => $before,
-                    'stock_after'    => $after,
-                    'reference_type' => Sale::class,
-                    'reference_id'   => $sale->id,
-                    'remark'         => 'Quotation Convert',
-                ]);
-            }
-
-            $quotation->update([
-                'status' => 'converted',
-            ]);
-        });
+            return back()->with(
+                'error',
+                'ไม่สามารถแปลงใบเสนอราคาเป็นใบขายได้ กรุณาลองใหม่อีกครั้ง'
+            );
+        }
 
         return redirect()
             ->route('sales.show', $sale)

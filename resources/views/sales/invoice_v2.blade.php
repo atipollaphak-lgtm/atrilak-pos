@@ -292,6 +292,13 @@
             margin-bottom: 5px;
         }
 
+        .document-payment-details {
+            margin: 0 0 12px;
+            text-align: left;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
         .signature-row {
             margin-top: 20px;
             display: flex;
@@ -416,6 +423,8 @@
     </div>
 
     <div class="invoice">
+
+        @include('sales.partials.void-document-marker', ['sale' => $sale])
 
         <div class="watermark">
             ATRILAK CONCRETE

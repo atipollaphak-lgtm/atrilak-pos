@@ -33,6 +33,13 @@
                             Export Excel
                         </a>
                     </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <a href="{{ route('daily-payment-closings.create', ['business_date' => $date]) }}"
+                            class="btn btn-primary">
+                            <i class="fas fa-cash-register"></i>
+                            ปิดยอดประจำวัน
+                        </a>
+                    </div>
                 </div>
             </form>
         </div>
@@ -80,6 +87,23 @@
     </div>
 
     <div class="card">
+        <div class="card-header">สรุปการชำระเงิน</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4"><strong>เงินสดสุทธิที่รับจากการขาย:</strong> {{ number_format($paymentSummary['cash_total'], 2) }}</div>
+                <div class="col-md-4"><strong>พร้อมเพย์รวม:</strong> {{ number_format($paymentSummary['promptpay_total'], 2) }}</div>
+                <div class="col-md-4"><strong>ยอดขายรวมที่มีข้อมูลการชำระ:</strong> {{ number_format($paymentSummary['recorded_total'], 2) }}</div>
+            </div>
+            <div class="mt-2">
+                จำนวนบิลเงินสด: {{ $paymentSummary['cash_count'] }} |
+                จำนวนบิลพร้อมเพย์: {{ $paymentSummary['promptpay_count'] }} |
+                จำนวนบิลแบบผสม: {{ $paymentSummary['mixed_count'] }} |
+                ไม่ระบุวิธีชำระ: {{ $paymentSummary['unrecorded_count'] }}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
         <div class="card-header">
             รายการขายวันที่ {{ \Carbon\Carbon::parse($date)->format('d/m/Y') }}
         </div>
@@ -100,20 +124,14 @@
 
                 <tbody>
                     @forelse ($sales as $sale)
-                        @php
-                            $cost = $sale->items->sum(function ($item) {
-                                return $item->cost_price * $item->qty;
-                            });
-
-                            $profit = $sale->items->sum('profit');
-                        @endphp
+                        @php($financial = $financialsBySaleId[$sale->id])
 
                         <tr>
                             <td>{{ $sale->sale_no }}</td>
                             <td>{{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}</td>
-                            <td class="text-right">{{ number_format($sale->total_amount, 2) }}</td>
-                            <td class="text-right">{{ number_format($cost, 2) }}</td>
-                            <td class="text-right">{{ number_format($profit, 2) }}</td>
+                            <td class="text-right">{{ number_format($financial['revenue'], 2) }}</td>
+                            <td class="text-right">{{ number_format($financial['cost'], 2) }}</td>
+                            <td class="text-right">{{ number_format($financial['profit'], 2) }}</td>
                             <td>
                                 <a href="{{ route('sales.show', $sale) }}" class="btn btn-sm btn-info">
                                     ดูบิล

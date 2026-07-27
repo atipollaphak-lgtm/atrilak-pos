@@ -90,7 +90,7 @@
                 </td>
 
                 <td>
-                    {{ number_format($item->qty) }}
+                    {{ rtrim(rtrim(number_format($item->qty, 4, '.', ''), '0'), '.') }}
                 </td>
 
                 <td>

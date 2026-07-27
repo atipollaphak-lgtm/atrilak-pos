@@ -36,9 +36,7 @@
                 @csrf
 
                 <button type="submit" class="btn btn-primary">
-
                     สำรองข้อมูล / ดาวน์โหลด Backup
-
                 </button>
 
             </form>
@@ -54,17 +52,10 @@
 
         <div class="card-body">
 
-            <form action="{{ route('backups.restore') }}" method="POST" enctype="multipart/form-data">
-
-                @csrf
-
-                <input type="file" name="backup_file" class="form-control" accept=".sql" required>
-
-                <button type="submit" class="btn btn-danger mt-2"
-                    onclick="return confirm('ยืนยัน Restore Database? ข้อมูลปัจจุบันอาจถูกแทนที่')">
-                    Restore Database
-                </button>
-            </form>
+            <div class="alert alert-warning mb-0">
+                Restore ผ่านหน้าเว็บถูกปิดเพื่อความปลอดภัย<br>
+                การกู้คืนต้องทำผ่านคำสั่งสำหรับ Owner และคู่มือการกู้คืน
+            </div>
 
         </div>
 

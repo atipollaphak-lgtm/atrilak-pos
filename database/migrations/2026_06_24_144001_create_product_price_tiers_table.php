@@ -12,9 +12,7 @@ return new class extends Migration
 
             $table->id();
 
-            $table->foreignId('product_unit_id')
-                ->constrained()
-                ->cascadeOnDelete();
+            $table->foreignId('product_unit_id');
 
             $table->integer('min_qty');
 
@@ -34,7 +32,7 @@ return new class extends Migration
 
             $table->unique([
                 'product_unit_id',
-                'min_qty'
+                'min_qty',
             ]);
         });
     }

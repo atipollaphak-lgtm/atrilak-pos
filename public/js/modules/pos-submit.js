@@ -1,106 +1,130 @@
 function bindSubmitSale() {
-
     const button = document.getElementById("btn-submit-sale");
 
     if (!button) {
         return;
     }
 
-    button.addEventListener("click", function () {
-
-        const items = cart.map(item => ({
-            product_id: item.productId,
-            product_unit_id: item.productUnitId,
-            qty: item.qty,
-            selling_price: item.price
-        }));
-
-        fetch("/sales-v2/store", {
-
-            method: "POST",
-
-            headers: {
-                "Content-Type": "application/json",
-
-                "X-CSRF-TOKEN": document
-                    .querySelector('meta[name="csrf-token"]')
-                    .getAttribute("content")
-            },
-
-            body: JSON.stringify({
-                customer_id: document.getElementById("customer-id")?.value || null,
-
-                customer_delivery_address_id:
-                    document.getElementById("delivery-address-id")?.value || null,
-
-                delivery_zone_id:
-                    customerAddresses.find(function (item) {
-                        return item.id == document.getElementById("delivery-address-id")?.value;
-                    })?.delivery_zone_id || null,
-
-                technician_id:
-                    document.getElementById("technician-id")?.value || null,
-
-                sale_date:
-                    document.getElementById("sale-date")?.value,
-
-                delivery_fee: deliveryFee,
-
-                delivery_type:
-                    document.getElementById("is-pickup")?.checked
-                        ? "pickup"
-                        : "delivery",
-
-                discount: discount,
-
-                items: items
-            })
-
-        })
-            .then(async response => {
-
-                const text = await response.text();
-
-                let data = {};
-
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    console.error("Response is not JSON:", text);
-                    throw new Error("Backend ไม่ได้ส่ง JSON กลับมา");
-                }
-
-                if (!response.ok) {
-                    throw new Error(data.message || "ไม่สามารถบันทึกการขายได้");
-                }
-
-                return data;
-            })
-            .then(data => {
-
-                console.log("POS V2 Response :", data);
-
-                if (data.success && data.invoice_url) {
-                    window.open(data.invoice_url, "_blank");
-
-                    resetPOS();
-
-                    return;
-                }
-
-                alert(data.message || "ไม่สามารถบันทึกการขายได้");
-
-            })
-            .catch(error => {
-
-                console.error(error);
-
-                alert(error.message || "เกิดข้อผิดพลาดระหว่างบันทึกการขาย");
-
-            });
-
+    const pendingIntent = SaleIntentStorage.createManager({
+        storageKey: "atrilak.pos.v2.pending-sale.v1"
+    });
+    const submissionGuard = SaleIntentStorage.createSubmissionGuard();
+    const paymentController = PosPayment.createController({
+        getTotal: function () {
+            return document.getElementById("cart-total")?.textContent || "0.00";
+        },
+        onConfirm: submitSale
     });
 
+    button.addEventListener("click", function () {
+        if (!Array.isArray(cart) || cart.length === 0) {
+            alert("กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ");
+            return;
+        }
+
+        paymentController.open();
+    });
+
+    async function submitSale(payment) {
+        if (!submissionGuard.start()) {
+            return;
+        }
+
+        const payload = buildSalePayload(PosPayment.payload(payment));
+        button.disabled = true;
+        let intent = null;
+
+        try {
+            intent = await pendingIntent.keyFor(payload);
+            payload.idempotency_key = intent.key;
+
+            const response = await fetch("/sales-v2/store", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-CSRF-TOKEN": document
+                        .querySelector('meta[name="csrf-token"]')
+                        .getAttribute("content")
+                },
+                body: JSON.stringify(payload)
+            });
+            let data;
+
+            try {
+                data = await parseSaleResponse(response);
+            } catch (error) {
+                error.status = response.status;
+                throw error;
+            }
+
+            if (!response.ok) {
+                const error = new Error(data.message || "ไม่สามารถบันทึกการขายได้");
+                error.status = response.status;
+                throw error;
+            }
+
+            if (!data.success || !data.invoice_url) {
+                throw new Error(data.message || "ไม่สามารถบันทึกการขายได้");
+            }
+
+            const invoiceUrl = data.invoice_url;
+
+            pendingIntent.clear(intent.key);
+            resetPOS();
+            window.location.assign(invoiceUrl);
+        } catch (error) {
+            console.error(error);
+
+            if (SaleIntentStorage.isDefinitiveClientError(error.status)) {
+                pendingIntent.clear(intent?.key);
+            }
+
+            throw error;
+        } finally {
+            submissionGuard.release();
+            button.disabled = false;
+        }
+    }
+}
+
+function buildSalePayload(payment = {}) {
+    const items = cart.map(item => ({
+        product_id: item.productId,
+        product_unit_id: item.productUnitId,
+        qty: item.qty,
+        selling_price: item.price
+    }));
+
+    return {
+        customer_id: document.getElementById("customer-id")?.value || null,
+        customer_delivery_address_id:
+            document.getElementById("delivery-address-id")?.value || null,
+        delivery_zone_id:
+            customerAddresses.find(function (item) {
+                return item.id == document.getElementById("delivery-address-id")?.value;
+            })?.delivery_zone_id || null,
+        technician_id: document.getElementById("technician-id")?.value || null,
+        sale_date: document.getElementById("sale-date")?.value,
+        delivery_fee: deliveryFee,
+        delivery_type: document.getElementById("is-pickup")?.checked
+            ? "pickup"
+            : "delivery",
+        discount: discount,
+        items: items,
+        ...payment
+    };
+}
+
+async function parseSaleResponse(response) {
+    const text = await response.text();
+
+    try {
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("Response is not JSON:", text);
+        throw new Error("Backend ไม่ได้ส่ง JSON กลับมา");
+    }
 }
 
 function resetPOS() {

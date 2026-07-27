@@ -14,7 +14,11 @@ class PurchaseItem extends Model
         'total',
     ];
 
-
+    protected $casts = [
+        'qty' => 'decimal:4',
+        'cost_price' => 'decimal:2',
+        'total' => 'decimal:2',
+    ];
 
     public function product()
     {
@@ -25,5 +29,4 @@ class PurchaseItem extends Model
     {
         return $this->belongsTo(Purchase::class);
     }
-
 }

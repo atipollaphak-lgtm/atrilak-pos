@@ -200,6 +200,13 @@
     margin-bottom: 5px;
 }
 
+.document-payment-details {
+    margin: 0 0 12px;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 .signature-row {
     margin-top: 20px;
     display: flex;
@@ -325,6 +332,30 @@
 
     <div class="invoice">
 
+        @include('sales.partials.void-document-marker', ['sale' => $sale])
+
+        @php
+            $storeName = \App\Support\DocumentSnapshotValue::resolve(
+                $sale->store_name_snapshot,
+                $setting?->store_name,
+                'อตรีลักษณ์ คอนกรีต'
+            );
+            $storeAddress = \App\Support\DocumentSnapshotValue::resolve(
+                $sale->store_address_snapshot,
+                $setting?->store_address,
+                'ที่อยู่ร้าน'
+            );
+            $storePhone = \App\Support\DocumentSnapshotValue::resolve(
+                $sale->store_phone_snapshot,
+                $setting?->store_phone
+            );
+            $storeTaxNumber = \App\Support\DocumentSnapshotValue::resolve(
+                $sale->store_tax_number_snapshot,
+                $setting?->tax_number,
+                null
+            );
+        @endphp
+
         <div class="watermark">
             ATRILAK CONCRETE
         </div>
@@ -339,20 +370,20 @@
 
                 <td style="width: 50%;">
                     <div class="store-name">
-                        {{ $setting->store_name ?? 'อตรีลักษณ์ คอนกรีต' }}
+                        {{ $storeName }}
                     </div>
 
                     <div>
-                        {{ $setting->store_address ?? 'ที่อยู่ร้าน' }}
+                        {{ $storeAddress }}
                     </div>
 
                     <div>
-                        โทร {{ $setting->store_phone ?? '-' }}
+                        โทร {{ $storePhone }}
                     </div>
 
-                    @if (!empty($setting?->tax_no))
+                    @if ($storeTaxNumber !== null && $storeTaxNumber !== '')
                         <div>
-                            เลขผู้เสียภาษี {{ $setting->tax_no }}
+                            เลขผู้เสียภาษี {{ $storeTaxNumber }}
                         </div>
                     @endif
                 </td>
@@ -391,7 +422,11 @@
                     </td>
 
                     <td style="width: 45%;">
-                        {{ $sale->customer->name ?? 'ลูกค้าทั่วไป' }}
+                        {{ \App\Support\DocumentSnapshotValue::resolve(
+                            $sale->customer_name_snapshot,
+                            $sale->customer?->name,
+                            'ลูกค้าทั่วไป'
+                        ) }}
                     </td>
 
                     <td class="info-label">
@@ -399,7 +434,10 @@
                     </td>
 
                     <td style="width: 25%;">
-                        {{ $sale->customer->phone ?? '-' }}
+                        {{ \App\Support\DocumentSnapshotValue::resolve(
+                            $sale->customer_phone_snapshot,
+                            $sale->customer?->phone
+                        ) }}
                     </td>
                 </tr>
 
@@ -409,7 +447,10 @@
                     </td>
 
                     <td colspan="3">
-                        {{ $sale->customer->address ?? '-' }}
+                        {{ \App\Support\DocumentSnapshotValue::resolve(
+                            $sale->customer_address_snapshot,
+                            $sale->customer?->address
+                        ) }}
                     </td>
                 </tr>
 
@@ -419,7 +460,7 @@
                     </td>
 
                     <td>
-                        @if (($sale->delivery_method ?? '') === 'pickup')
+                        @if (($sale->delivery_type ?? '') === 'pickup')
                             🏪 ลูกค้ารับเอง
                         @else
                             🚚 จัดส่ง
@@ -431,11 +472,10 @@
                     </td>
 
                     <td>
-                        @if (!empty($sale->technician))
-                            {{ $sale->technician->name ?? '-' }}
-                        @else
-                            -
-                        @endif
+                        {{ \App\Support\DocumentSnapshotValue::resolve(
+                            $sale->technician_name_snapshot,
+                            $sale->technician?->name
+                        ) }}
                     </td>
                 </tr>
             </table>
@@ -486,7 +526,10 @@
                         </td>
 
                         <td class="item-name">
-                            {{ $item->product->name ?? '-' }}
+                            {{ \App\Support\DocumentSnapshotValue::resolve(
+                                $item->product_name_snapshot,
+                                $item->product?->name
+                            ) }}
                         </td>
 
                         <td class="qty">
@@ -494,7 +537,12 @@
 </td>
 
                         <td class="unit">
-                            {{ $item->product->unit->name ?? ($item->product->unit ?? '-') }}
+                            {{ \App\Support\DocumentSnapshotValue::resolve(
+                                $item->unit_name_snapshot,
+                                $item->productUnit?->unit?->name
+                                    ?? $item->product?->unitRelation?->name
+                                    ?? $item->product?->unit
+                            ) }}
                         </td>
 
                         <td class="price">
@@ -520,6 +568,11 @@
         <table class="payment-summary-table">
     <tr>
         <td class="payment-cell">
+            @include('sales.partials.payment-details', [
+                'paymentRows' => \App\Support\SalePaymentDisplay::documentRows($sale),
+                'paymentClass' => 'document-payment-details',
+            ])
+
             @if (!empty($setting?->qr_image))
                 <div class="payment-title">
                     QR Payment

@@ -174,6 +174,13 @@ function setCartQuantity(product, qty) {
     renderCart();
 }
 
+function findCartIndex(productId, productUnitId) {
+    return cart.findIndex(function (item) {
+        return String(item.productId) === String(productId)
+            && String(item.productUnitId ?? "") === String(productUnitId ?? "");
+    });
+}
+
 function renderCart() {
     const cartItems = document.getElementById("cart-items");
     const cartSubtotal = document.getElementById("cart-subtotal");
@@ -221,7 +228,11 @@ function renderCart() {
         subtotal += lineTotal;
 
         cartItems.innerHTML += `
-            <tr>
+            <tr
+                class="cart-row"
+                data-product-id="${item.productId}"
+                data-product-unit-id="${item.productUnitId ?? ""}"
+            >
                 <td>
     <strong>${item.name}</strong>
 
@@ -235,7 +246,8 @@ function renderCart() {
                 <td class="text-center">
                     <button
                         class="btn btn-sm btn-outline-secondary cart-minus"
-                        data-id="${item.id}"
+                        data-product-id="${item.productId}"
+                        data-product-unit-id="${item.productUnitId ?? ""}"
                     >
                         −
                     </button>
@@ -252,7 +264,8 @@ function renderCart() {
 
                     <button
                         class="btn btn-sm btn-outline-primary cart-plus"
-                        data-id="${item.id}"
+                        data-product-id="${item.productId}"
+                        data-product-unit-id="${item.productUnitId ?? ""}"
                     >
                         +
                     </button>
@@ -270,7 +283,8 @@ function renderCart() {
 
     <button
         class="btn btn-sm btn-outline-danger cart-remove"
-        data-id="${item.id}"
+        data-product-id="${item.productId}"
+        data-product-unit-id="${item.productUnitId ?? ""}"
         title="ลบรายการ"
     >
         🗑️
@@ -333,9 +347,11 @@ function updateCartSummary(subtotal) {
 function bindCartButtons() {
     document.querySelectorAll(".cart-plus").forEach(function (button) {
         button.addEventListener("click", function () {
-            const id = this.dataset.id;
-
-            const item = cart.find((product) => product.id === id);
+            const index = findCartIndex(
+                this.dataset.productId,
+                this.dataset.productUnitId
+            );
+            const item = cart[index];
 
             if (item) {
 
@@ -353,9 +369,10 @@ function bindCartButtons() {
 
     document.querySelectorAll(".cart-minus").forEach(function (button) {
         button.addEventListener("click", function () {
-            const id = this.dataset.id;
-
-            const index = cart.findIndex((product) => product.id === id);
+            const index = findCartIndex(
+                this.dataset.productId,
+                this.dataset.productUnitId
+            );
 
             if (index === -1) {
                 return;
@@ -398,16 +415,18 @@ function bindCartRows() {
             }
 
             const productId = this.dataset.productId;
+            const productUnitId = this.dataset.productUnitId;
 
-            const item = cart.find(function (cartItem) {
-                return String(cartItem.productId) === String(productId);
-            });
+            const item = cart[findCartIndex(productId, productUnitId)];
 
             if (!item) {
                 return;
             }
 
-            openQuantityDialog(item.product);
+            openQuantityDialog({
+                ...item.product,
+                forceProductUnitId: item.productUnitId,
+            });
 
         });
 
@@ -418,9 +437,10 @@ function bindCartRows() {
 function bindRemoveButtons() {
     document.querySelectorAll(".cart-remove").forEach(function (button) {
         button.addEventListener("click", function () {
-            const id = this.dataset.id;
-
-            const index = cart.findIndex((product) => product.id === id);
+            const index = findCartIndex(
+                this.dataset.productId,
+                this.dataset.productUnitId
+            );
 
             if (index === -1) {
                 return;

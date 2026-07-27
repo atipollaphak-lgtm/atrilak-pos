@@ -10,25 +10,29 @@ return new class extends Migration
      * Run the migrations.
      */
     public function up(): void
-{
-    Schema::table('delivery_zones', function (Blueprint $table) {
+    {
+        if (Schema::hasColumn('delivery_zones', 'sort_order')) {
+            return;
+        }
 
-        $table->unsignedInteger('sort_order')
-            ->default(0)
-            ->after('name');
-
-    });
-}
+        Schema::table('delivery_zones', function (Blueprint $table) {
+            $table->unsignedInteger('sort_order')
+                ->default(0)
+                ->after('name');
+        });
+    }
 
     /**
      * Reverse the migrations.
      */
     public function down(): void
-{
-    Schema::table('delivery_zones', function (Blueprint $table) {
+    {
+        if (! Schema::hasColumn('delivery_zones', 'sort_order')) {
+            return;
+        }
 
-        $table->dropColumn('sort_order');
-
-    });
-}
+        Schema::table('delivery_zones', function (Blueprint $table) {
+            $table->dropColumn('sort_order');
+        });
+    }
 };

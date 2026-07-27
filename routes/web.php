@@ -31,12 +31,7 @@ use App\Http\Controllers\TechnicianPaymentBatchController;
 use App\Http\Controllers\DeliveryZoneController;
 use App\Http\Controllers\CustomerDeliveryAddressController;
 use App\Http\Controllers\PricingManagementController;
-
-Route::resource(
-    'units',
-    UnitController::class
-);
-
+use App\Http\Controllers\DailyPaymentClosingController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -53,7 +48,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard');
 
-
     Route::get('/home', function () {
         return redirect('/dashboard');
     });
@@ -66,18 +60,6 @@ Route::middleware(['auth'])->group(function () {
 
     Route::delete('/profile', [ProfileController::class, 'destroy'])
         ->name('profile.destroy');
-
-    Route::post('/units/seed', [UnitController::class, 'seed'])
-        ->name('units.seed');
-
-    Route::post('/units/merge', [UnitController::class, 'merge'])
-        ->name('units.merge');
-
-    Route::resource('units', UnitController::class)->except([
-        'create',
-        'show',
-        'edit',
-    ]);
 
     // Cashier ขึ้นไป
     Route::middleware(['role:cashier'])->group(function () {
@@ -100,7 +82,7 @@ Route::middleware(['auth'])->group(function () {
             [SaleController::class, 'storeV2']
         )->name('sales.v2.store');
 
-        Route::resource('sales', SaleController::class);
+        Route::resource('sales', SaleController::class)->except('destroy');
 
         Route::get('/sales/{sale}/invoice', [SaleController::class, 'invoice'])
             ->name('sales.invoice');
@@ -155,6 +137,25 @@ Route::middleware(['auth'])->group(function () {
 
     // Manager ขึ้นไป
     Route::middleware(['role:manager'])->group(function () {
+        Route::get('/daily-payment-closings', [DailyPaymentClosingController::class, 'index'])
+            ->name('daily-payment-closings.index');
+        Route::get('/daily-payment-closings/create', [DailyPaymentClosingController::class, 'create'])
+            ->name('daily-payment-closings.create');
+        Route::get('/daily-payment-closings/{dailyPaymentClosing}/edit', [DailyPaymentClosingController::class, 'edit'])
+            ->name('daily-payment-closings.edit');
+        Route::get('/daily-payment-closings/{dailyPaymentClosing}/print', [DailyPaymentClosingController::class, 'print'])
+            ->name('daily-payment-closings.print');
+        Route::get('/daily-payment-closings/{dailyPaymentClosing}', [DailyPaymentClosingController::class, 'show'])
+            ->name('daily-payment-closings.show');
+        Route::post('/daily-payment-closings', [DailyPaymentClosingController::class, 'store'])
+            ->name('daily-payment-closings.store');
+        Route::put('/daily-payment-closings/{dailyPaymentClosing}', [DailyPaymentClosingController::class, 'update'])
+            ->name('daily-payment-closings.update');
+        Route::post('/daily-payment-closings/{dailyPaymentClosing}/finalize', [DailyPaymentClosingController::class, 'finalize'])
+            ->name('daily-payment-closings.finalize');
+        Route::post('/sales/{sale}/void', [SaleController::class, 'void'])
+            ->name('sales.void');
+
         Route::resource('products', ProductController::class);
         Route::post(
             '/products/{product}/restore',
@@ -276,6 +277,13 @@ Route::middleware(['auth'])->group(function () {
             'units',
             UnitController::class
         );
+
+        Route::post('/units/seed', [UnitController::class, 'seed'])
+            ->name('units.seed');
+
+        Route::post('/units/merge', [UnitController::class, 'merge'])
+            ->name('units.merge');
+
         Route::resource(
             'technician-commission-rules',
             TechnicianCommissionRuleController::class
@@ -318,10 +326,17 @@ Route::middleware(['auth'])->group(function () {
             'customers.delivery-addresses',
             CustomerDeliveryAddressController::class
         );
+
+        Route::post(
+            '/customers/{customer}/delivery-addresses/{deliveryAddress}/set-primary',
+            [CustomerDeliveryAddressController::class, 'setPrimary']
+        )->name('customers.delivery-addresses.set-primary');
     });
 
     // Owner เท่านั้น
     Route::middleware(['role:owner'])->group(function () {
+        Route::post('/daily-payment-closings/{dailyPaymentClosing}/reopen', [DailyPaymentClosingController::class, 'reopen'])
+            ->name('daily-payment-closings.reopen');
         Route::resource('users', UserController::class);
 
         Route::post('/users/{user}/update-role', [UserController::class, 'updateRole'])
@@ -341,9 +356,6 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('/backups/{fileName}/download', [BackupController::class, 'downloadFile'])
             ->name('backups.download');
-
-        Route::post('/backups/restore', [BackupController::class, 'restore'])
-            ->name('backups.restore');
 
         Route::get('/reports/daily-profit', [ReportController::class, 'dailyProfit'])
             ->name('reports.daily-profit');
