@@ -9,6 +9,7 @@ use App\Models\ProductUnit;
 use App\Models\Unit;
 use App\Services\Pricing\PricingService;
 use App\Services\ProductBarcodeService;
+use App\Services\ProductCreationService;
 use App\Services\ProductUnitService;
 use App\Services\ProductUpdateService;
 use Illuminate\Http\Request;
@@ -22,14 +23,18 @@ class ProductController extends Controller
 
     protected ProductUpdateService $productUpdateService;
 
+    protected ProductCreationService $productCreationService;
+
     public function __construct(
         ProductUnitService $productUnitService,
         ProductBarcodeService $productBarcodeService,
-        ProductUpdateService $productUpdateService
+        ProductUpdateService $productUpdateService,
+        ProductCreationService $productCreationService
     ) {
         $this->productUnitService = $productUnitService;
         $this->productBarcodeService = $productBarcodeService;
         $this->productUpdateService = $productUpdateService;
+        $this->productCreationService = $productCreationService;
     }
 
     public function index(Request $request)
@@ -102,9 +107,7 @@ class ProductController extends Controller
             'category_id' => 'required|exists:categories,id',
             'unit_id' => 'nullable|exists:units,id',
             'name' => 'required|string|max:255',
-            'product_code' => 'nullable|string|max:255',
             'sku' => 'nullable|string|max:255',
-            'barcode' => 'nullable|string|max:255',
             'cost_price' => 'nullable|numeric|min:0',
             'selling_price' => 'nullable|numeric|min:0',
             'stock_qty' => 'nullable|numeric|min:0',
@@ -119,18 +122,7 @@ class ProductController extends Controller
             $validated['image_path'] = $request->file('image')->store('products', 'public');
         }
 
-        $product = Product::create($validated);
-
-        if ($request->unit_id) {
-            $this->productUnitService->createOrUpdateBaseUnit(
-                $product,
-                [
-                    'unit_id' => $request->unit_id,
-                    'purchase_price' => $request->cost_price,
-                    'selling_price' => $request->selling_price,
-                ]
-            );
-        }
+        $product = $this->productCreationService->create($validated);
 
         return redirect()->route('products.index', $this->indexQuery($request))->with(
             'success',
@@ -204,9 +196,7 @@ class ProductController extends Controller
             'category_id' => 'required|exists:categories,id',
             'unit_id' => 'nullable|exists:units,id',
             'name' => 'required|string|max:255',
-            'product_code' => 'nullable|string|max:255',
             'sku' => 'nullable|string|max:255',
-            'barcode' => 'nullable|string|max:255',
             'remark' => 'nullable|string',
             'vat_enabled' => 'nullable|boolean',
             'active' => 'nullable|boolean',

@@ -14,6 +14,16 @@
 </div>
 @endif
 
+@if($errors->any())
+<div class="alert alert-danger">
+    <ul class="mb-0">
+        @foreach($errors->all() as $error)
+            <li>{{ $error }}</li>
+        @endforeach
+    </ul>
+</div>
+@endif
+
 <div class="card">
 
     <div class="card-header">
@@ -25,13 +35,21 @@
 
             <div class="row">
 
-                <div class="col-md-8">
+                <div class="col-md-4">
 
                     <input type="text"
                            name="name"
                            class="form-control"
                            placeholder="ชื่อหมวดสินค้า">
 
+                </div>
+
+                <div class="col-md-2">
+                    <input type="text" name="code_prefix" class="form-control" placeholder="ตัวย่อ เช่น CEM" maxlength="20">
+                </div>
+
+                <div class="col-md-2">
+                    <input type="text" name="barcode_prefix" class="form-control" placeholder="Barcode เช่น 001" maxlength="3">
                 </div>
 
                 <div class="col-md-4">
@@ -56,6 +74,8 @@
                 <tr>
                     <th>ID</th>
                     <th>ชื่อหมวดสินค้า</th>
+                    <th>Code Prefix</th>
+                    <th>Barcode Prefix</th>
                     <th width="250">จัดการ</th>
                 </tr>
             </thead>
@@ -69,6 +89,8 @@
                     <td>{{ $category->id }}</td>
 
                     <td>{{ $category->name }}</td>
+                    <td>{{ $category->code_prefix ?: '—' }}</td>
+                    <td>{{ $category->barcode_prefix ?: '—' }}</td>
 
                     <td>
 
@@ -83,6 +105,9 @@
                             <input type="text"
                                    name="name"
                                    value="{{ $category->name }}">
+
+                            <input type="text" name="code_prefix" value="{{ $category->code_prefix }}" maxlength="20" placeholder="Code Prefix">
+                            <input type="text" name="barcode_prefix" value="{{ $category->barcode_prefix }}" maxlength="3" placeholder="Barcode Prefix">
 
                             <button class="btn btn-warning btn-sm">
                                 แก้ไข

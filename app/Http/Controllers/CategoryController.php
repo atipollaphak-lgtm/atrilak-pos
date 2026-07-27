@@ -16,26 +16,26 @@ class CategoryController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'name' => 'required'
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'code_prefix' => ['nullable', 'string', 'max:20', 'regex:/^[A-Z]+$/', 'unique:categories,code_prefix'],
+            'barcode_prefix' => ['nullable', 'digits:3', 'unique:categories,barcode_prefix'],
         ]);
 
-        Category::create([
-            'name' => $request->name
-        ]);
+        Category::create($validated);
 
         return back()->with('success', 'เพิ่มหมวดสินค้าเรียบร้อย');
     }
 
     public function update(Request $request, Category $category)
     {
-        $request->validate([
-            'name' => 'required'
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'code_prefix' => ['nullable', 'string', 'max:20', 'regex:/^[A-Z]+$/', 'unique:categories,code_prefix,'.$category->id],
+            'barcode_prefix' => ['nullable', 'digits:3', 'unique:categories,barcode_prefix,'.$category->id],
         ]);
 
-        $category->update([
-            'name' => $request->name
-        ]);
+        $category->update($validated);
 
         return back()->with('success', 'แก้ไขเรียบร้อย');
     }

@@ -85,7 +85,10 @@ class ProductManagementTest extends TestCase
             ->assertSee('คงเหลือปัจจุบัน')
             ->assertSee('id="productReadOnlySection"', false)
             ->assertSee('id="productReadOnlySelling"', false)
-            ->assertSee('id="productReadOnlyStock"', false);
+            ->assertSee('id="productReadOnlyStock"', false)
+            ->assertSee('id="productModalCode"', false)
+            ->assertSee('id="productModalBarcode"', false)
+            ->assertSee('readonly', false);
     }
 
     public function test_product_image_is_stored_and_path_is_persisted(): void
@@ -163,8 +166,12 @@ class ProductManagementTest extends TestCase
 
     private function category(string $name): Category
     {
+        $prefix = strtoupper(substr(preg_replace('/[^A-Za-z]/', '', $name), 0, 3));
+
         return Category::query()->create([
             'name' => $name,
+            'code_prefix' => $prefix,
+            'barcode_prefix' => str_pad((string) (Category::query()->count() + 1), 3, '0', STR_PAD_LEFT),
             'active' => true,
         ]);
     }

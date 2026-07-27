@@ -22,6 +22,19 @@
     };
 
     const setValue = (field, value) => { if (field) field.value = value ?? ''; };
+    const updateAutoNumberHints = () => {
+        if (!fields.category || method.value !== 'POST') return;
+
+        const option = fields.category.options[fields.category.selectedIndex];
+        const codePrefix = option ? option.dataset.codePrefix : '';
+        const barcodePrefix = option ? option.dataset.barcodePrefix : '';
+        document.getElementById('productModalCodeHint').textContent = codePrefix
+            ? `รูปแบบรหัสสินค้า: ${codePrefix}-XXXX`
+            : 'ระบบจะสร้างอัตโนมัติ';
+        document.getElementById('productModalBarcodeHint').textContent = barcodePrefix
+            ? `ใช้ Prefix ${barcodePrefix} สร้าง EAN-13 อัตโนมัติ`
+            : 'ระบบจะสร้าง EAN-13 อัตโนมัติ';
+    };
     const setReadOnlySummary = (product) => {
         document.getElementById('productReadOnlyCost').textContent = Number(product.cost_price || 0).toFixed(2);
         document.getElementById('productReadOnlySelling').textContent = Number(product.selling_price || 0).toFixed(2);
@@ -47,6 +60,8 @@
         document.getElementById('productModalId').value = isDetails ? product.id : '';
         fields.cost.disabled = Boolean(isDetails);
         fields.selling.disabled = Boolean(isDetails);
+        fields.productCode.readOnly = true;
+        fields.barcode.readOnly = true;
 
         if (isDetails) {
             setValue(fields.name, product.name);
@@ -54,6 +69,8 @@
             setValue(fields.category, product.category_id);
             setValue(fields.unit, product.unit_id);
             setValue(fields.barcode, product.barcode);
+            document.getElementById('productModalCodeHint').textContent = 'สร้างไว้แล้วและแก้ไขไม่ได้';
+            document.getElementById('productModalBarcodeHint').textContent = 'สร้างไว้แล้วและแก้ไขไม่ได้';
             setValue(fields.active, product.active ? '1' : '0');
             setValue(fields.remark, product.remark);
             imagePreview.src = product.image_path ? `/storage/${product.image_path}` : placeholder;
@@ -62,8 +79,17 @@
             form.reset();
             method.value = 'POST';
             imagePreview.src = placeholder;
+            setValue(fields.productCode, '');
+            setValue(fields.barcode, '');
+            fields.productCode.placeholder = 'ระบบจะสร้างอัตโนมัติ';
+            fields.barcode.placeholder = 'ระบบจะสร้าง EAN-13 อัตโนมัติ';
+            document.getElementById('productModalCodeHint').textContent = 'ระบบจะสร้างอัตโนมัติ';
+            document.getElementById('productModalBarcodeHint').textContent = 'ระบบจะสร้าง EAN-13 อัตโนมัติ';
+            updateAutoNumberHints();
         }
     });
+
+    fields.category.addEventListener('change', updateAutoNumberHints);
 
     if (modal.dataset.validationErrors === '1') {
         const oldProductId = modal.dataset.oldProductId;

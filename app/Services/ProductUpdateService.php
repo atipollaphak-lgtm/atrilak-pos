@@ -25,7 +25,6 @@ class ProductUpdateService
             $oldSellingPrice = $lockedProduct->selling_price;
 
             $lockedProduct->update([
-                'barcode' => $data['barcode'] ?? null,
                 'name' => $data['name'],
                 'category_id' => $data['category_id'],
                 'unit_id' => $data['unit_id'] ?? null,
@@ -37,7 +36,6 @@ class ProductUpdateService
                 'vat_enabled' => $data['vat_enabled'] ?? 0,
                 'active' => $data['active'] ?? 1,
                 'remark' => $data['remark'] ?? null,
-                'product_code' => $data['product_code'] ?? null,
                 'sku' => $data['sku'] ?? null,
                 'image_path' => $data['image_path'] ?? $lockedProduct->image_path,
             ]);

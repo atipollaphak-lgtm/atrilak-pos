@@ -89,6 +89,8 @@ class ProductMinimumStockTest extends TestCase
     {
         return Category::query()->create([
             'name' => 'Product minimum stock category',
+            'code_prefix' => 'MIN',
+            'barcode_prefix' => '901',
             'active' => true,
         ]);
     }
