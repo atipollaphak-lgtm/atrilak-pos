@@ -38,8 +38,8 @@ class CustomerController extends Controller
             });
 
         if ($sort === 'zone') {
-            $customers->orderByRaw('(select dz.sort_order from customer_delivery_addresses cda join delivery_zones dz on dz.id = cda.delivery_zone_id where cda.customer_id = customers.id and cda.is_default = 1 limit 1) is null asc')
-                ->orderByRaw('(select dz.sort_order from customer_delivery_addresses cda join delivery_zones dz on dz.id = cda.delivery_zone_id where cda.customer_id = customers.id and cda.is_default = 1 limit 1) '.$direction)
+            $customers->orderByRaw('(select dz.sort_order from customer_delivery_addresses cda join delivery_zones dz on dz.id = cda.delivery_zone_id where cda.customer_id = customers.id and cda.is_default = true limit 1) is null asc')
+                ->orderByRaw('(select dz.sort_order from customer_delivery_addresses cda join delivery_zones dz on dz.id = cda.delivery_zone_id where cda.customer_id = customers.id and cda.is_default = true limit 1) '.$direction)
                 ->orderBy('name', 'asc');
         } else {
             $customers->orderBy($sort, $direction);

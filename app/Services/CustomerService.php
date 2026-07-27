@@ -69,6 +69,7 @@ class CustomerService
 
         $values = [
             'name' => $data['address_name'] ?? 'หลัก',
+            'receiver_name' => $data['receiver_name'] ?? null,
             'receiver_phone' => $receiverPhone,
             'address' => $data['address'] ?? null,
             'delivery_zone_id' => $data['delivery_zone_id'] ?? null,

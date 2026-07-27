@@ -36,6 +36,7 @@ class CustomerModuleTest extends TestCase
             'phone' => '0800000001',
             'delivery_zone_id' => $zone->id,
             'address' => '99/1 site road',
+            'receiver_name' => 'Site Receiver',
             'use_customer_phone' => '1',
             'code' => 'EVIL-CODE',
         ]);
@@ -47,6 +48,7 @@ class CustomerModuleTest extends TestCase
         $this->assertSame('CUS-0001', $customer->code);
         $this->assertTrue($address->is_default);
         $this->assertSame('0800000001', $address->receiver_phone);
+        $this->assertSame('Site Receiver', $address->receiver_name);
     }
 
     public function test_customer_update_updates_primary_address_without_creating_another(): void
@@ -68,6 +70,7 @@ class CustomerModuleTest extends TestCase
             'primary_address_id' => $address->id,
             'delivery_zone_id' => $zone->id,
             'address' => 'New address',
+            'receiver_name' => 'Updated Receiver',
             'receiver_phone' => '0899999999',
             'use_customer_phone' => '0',
         ]);
@@ -77,6 +80,7 @@ class CustomerModuleTest extends TestCase
         $this->assertSame('Builder Updated', $customer->fresh()->name);
         $this->assertSame('New address', $address->fresh()->address);
         $this->assertSame('0899999999', $address->fresh()->receiver_phone);
+        $this->assertSame('Updated Receiver', $address->fresh()->receiver_name);
     }
 
     public function test_customer_list_searches_all_addresses_and_has_one_show_action(): void
