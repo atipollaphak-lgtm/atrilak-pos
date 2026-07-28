@@ -12,6 +12,7 @@ class DeliveryZone extends Model
 
     protected $fillable = [
         'name',
+        'price_markup_percent',
         'sort_order',
         'base_delivery_fee',
         'free_delivery_min_amount',
@@ -21,6 +22,7 @@ class DeliveryZone extends Model
     ];
 
     protected $casts = [
+        'price_markup_percent' => 'decimal:2',
         'base_delivery_fee' => 'decimal:2',
         'free_delivery_min_amount' => 'decimal:2',
         'active' => 'boolean',

@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Sales;
 
+use App\Models\Customer;
+use App\Models\CustomerDeliveryAddress;
+use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\Sale;
@@ -64,7 +67,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
         $this->assertSame($beforeStock, $product->fresh()->stock_qty);
         $this->assertSame(321, $updated->fresh()->customer_id);
         $this->assertSame('2026-07-16', $updated->fresh()->sale_date);
-        $this->assertSame('200', (string) $updated->fresh()->total_amount);
+        $this->assertSame('200.00', (string) $updated->fresh()->total_amount);
     }
 
     public function test_header_only_fee_or_discount_change_recomputes_only_the_header(): void
@@ -78,7 +81,7 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
         ]), (int) $sale->fresh()->revision);
 
         $this->assertSame($item->id, $updated->fresh()->items()->sole()->id);
-        $this->assertSame('210', (string) $updated->fresh()->total_amount);
+        $this->assertSame('200.00', (string) $updated->fresh()->total_amount);
         $this->assertSame('76.0000', $product->fresh()->stock_qty);
         $this->assertSame($beforeMovements, StockMovement::count());
     }
@@ -193,9 +196,22 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
             'stock_qty' => '76.0000',
         ]);
         $productUnit = $this->productUnit($product, 'Historical unit', '12.0000');
+        $customer = Customer::create(['name' => 'Snapshot customer']);
+        $zone = DeliveryZone::create([
+            'name' => 'Snapshot zone',
+            'minimum_profit' => '186.00',
+            'active' => true,
+        ]);
+        $address = CustomerDeliveryAddress::create([
+            'customer_id' => $customer->id,
+            'delivery_zone_id' => $zone->id,
+            'name' => 'Snapshot address',
+        ]);
         $sale = Sale::create([
             'sale_no' => 'SAL-SNAPSHOT-0001',
-            'customer_id' => 123,
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'delivery_zone_id' => $zone->id,
             'sale_date' => '2026-07-15',
             'total_amount' => '200.00',
             'delivery_fee' => '20.00',

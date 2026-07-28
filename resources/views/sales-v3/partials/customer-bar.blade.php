@@ -24,6 +24,6 @@
             </label>
             <label class="pos-v3-pickup"><span>การจัดส่ง</span><span><input id="v3-pickup" type="checkbox"> รับเอง</span></label>
         </div>
-        <div id="v3-address-summary" class="pos-v3-address-summary d-none"><span id="v3-address-text"></span><strong id="v3-address-fee">ค่าจัดส่ง 0.00 บาท</strong></div>
+        <div id="v3-address-summary" class="pos-v3-address-summary d-none"><span id="v3-address-text"></span><strong id="v3-address-zone">โซนจัดส่ง: -</strong><strong id="v3-address-fee">ค่าส่งปัจจุบัน 0.00 บาท</strong></div>
     </div>
 </section>

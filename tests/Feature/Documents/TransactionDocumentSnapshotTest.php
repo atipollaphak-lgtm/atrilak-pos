@@ -381,8 +381,8 @@ class TransactionDocumentSnapshotTest extends TestCase
             'active' => true,
         ]);
         $product->forceFill([
-            'sku' => 'SKU-SNAPSHOT',
-            'product_code' => 'PRODUCT-SNAPSHOT',
+            'sku' => $unitCode === 'PACK' ? 'SKU-SNAPSHOT' : 'SKU-'.$unitCode,
+            'product_code' => $unitCode === 'PACK' ? 'PRODUCT-SNAPSHOT' : 'PRODUCT-'.$unitCode,
         ])->save();
         $productUnit = ProductUnit::query()->create([
             'product_id' => $product->id,

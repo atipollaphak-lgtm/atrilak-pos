@@ -199,7 +199,7 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertEquals(4.00, $commission->fresh()->commission_amount);
     }
 
-    public function test_profit_guard_failure_keeps_pending_commission_and_every_sale_write_unchanged(): void
+    public function test_dynamic_delivery_fee_closes_profit_shortfall_and_refreshes_commission(): void
     {
         [$sale, , $commission] = $this->createCommissionedSale();
         $customer = Customer::query()->create(['name' => 'Guard customer', 'active' => true]);
@@ -229,19 +229,16 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $payload = $this->updatePayload($sale);
         $payload['items'][0]['selling_price'] = '1.00';
 
-        try {
-            app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision);
-            $this->fail('Expected Profit Guard rejection.');
-        } catch (\DomainException) {
-            // Expected.
-        }
+        $updated = app(SaleService::class)->updateSale($sale, $payload, (int) $sale->fresh()->revision)->fresh();
 
-        $this->assertSame($item->id, $sale->fresh()->items()->sole()->id);
-        $this->assertSame('10.00', $item->fresh()->selling_price);
+        $this->assertSame($item->id, $updated->items()->sole()->id);
+        $this->assertSame('1.00', $item->fresh()->selling_price);
+        $this->assertSame('108.00', $updated->delivery_fee);
+        $this->assertSame('110.00', $updated->total_amount);
         $this->assertSame($beforeStock, $product->fresh()->stock_qty);
-        $this->assertSame($beforeMovements, StockMovement::query()->count());
-        $this->assertSame($beforeCommission, $this->commissionSnapshot($commission->fresh()));
-        $this->assertSame($beforeRevision, $sale->fresh()->revision);
+        $this->assertSame($beforeMovements + 2, StockMovement::query()->count());
+        $this->assertNotSame($beforeCommission, $this->commissionSnapshot($commission->fresh()));
+        $this->assertGreaterThan($beforeRevision, $updated->revision);
     }
 
     public function test_failure_during_pending_commission_refresh_rolls_back_sale_stock_and_items(): void

@@ -1,9 +1,9 @@
 @extends('adminlte::page')
 
-@section('title', 'เพิ่มโซนจัดส่ง')
+@section('title', 'เพิ่มราคาตามโซน')
 
 @section('content_header')
-    <h1>เพิ่มโซนจัดส่ง</h1>
+    <h1>เพิ่มราคาตามโซน</h1>
 @stop
 
 @section('content')
@@ -34,21 +34,10 @@
 
                 </div>
                 <div class="form-group mb-3">
-                    <label>ค่าส่งพื้นฐาน</label>
-
-                    <input type="number" step="0.01" min="0" name="base_delivery_fee" class="form-control"
-                        value="{{ old('base_delivery_fee', 0) }}" required>
-                </div>
-
-                <div class="form-group mb-3">
-                    <label>ส่งฟรีเมื่อยอดถึง</label>
-
-                    <input type="number" step="0.01" min="0" name="free_delivery_min_amount" class="form-control"
-                        value="{{ old('free_delivery_min_amount') }}">
-
-                    <small class="text-muted">
-                        เว้นว่าง = ไม่มีโปรส่งฟรี
-                    </small>
+                    <label>เปอร์เซ็นต์บวกราคาสินค้า</label>
+                    <input type="number" step="0.01" min="0" max="100" name="price_markup_percent" class="form-control"
+                        value="{{ old('price_markup_percent', 0) }}" required>
+                    <small class="text-muted">ระบบจะบวกราคาสินค้าตามเปอร์เซ็นต์นี้เมื่อเลือกส่งสินค้าไปยังโซนนี้</small>
                 </div>
                 <div class="form-group mb-3">
                     <label>กำไรขั้นต่ำของโซน</label>
@@ -57,7 +46,7 @@
                         value="{{ old('minimum_profit', 0) }}">
 
                     <small class="text-muted">
-                        ใช้ตรวจสอบกำไรของบิลก่อนยืนยันการขาย
+                        หากกำไรหลังปรับราคาแล้วยังต่ำกว่าค่านี้ ส่วนต่างจะถูกคิดเป็นค่าส่ง
                     </small>
                 </div>
 

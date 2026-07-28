@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\StaleSaleRevisionException;
 use App\Models\CustomerDeliveryAddress;
+use App\Models\DeliveryZone;
 use App\Models\Quotation;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -19,6 +20,7 @@ use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\SalePaymentResolver;
 use App\Services\Sales\SaleValidationService;
 use App\Services\Sales\StockService;
+use App\Services\Sales\ZonePricingService;
 use App\ValueObjects\Sales\ResolvedSaleLine;
 use Brick\Math\BigDecimal;
 use DomainException;
@@ -26,6 +28,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class SaleService
 {
@@ -55,6 +58,8 @@ class SaleService
 
     protected SalePaymentResolver $salePaymentResolver;
 
+    protected ZonePricingService $zonePricingService;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -68,7 +73,8 @@ class SaleService
         ?TransactionDocumentSnapshotService $documentSnapshotService = null,
         ?SaleDecimalService $saleDecimalService = null,
         ?SaleItemQuantityService $saleItemQuantityService = null,
-        ?SalePaymentResolver $salePaymentResolver = null
+        ?SalePaymentResolver $salePaymentResolver = null,
+        ?ZonePricingService $zonePricingService = null
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -86,6 +92,8 @@ class SaleService
             ?? new SaleItemQuantityService;
         $this->salePaymentResolver = $salePaymentResolver
             ?? new SalePaymentResolver($this->saleDecimalService);
+        $this->zonePricingService = $zonePricingService
+            ?? new ZonePricingService($this->saleDecimalService);
     }
 
     public function createSale(array $data, ?int $quotationId = null)
@@ -115,6 +123,10 @@ class SaleService
                 $lockedProducts = $this->stockLockService->lockProducts(
                     array_column($items, 'product_id')
                 );
+                $lockedProducts->load('productUnits');
+                if (Schema::hasTable('product_price_tiers')) {
+                    $lockedProducts->load('productUnits.priceTiers');
+                }
 
                 if ($idempotencyKey !== null) {
                     $replay = $this->saleIdempotencyService->replay($idempotencyKey, $payloadHash);
@@ -239,32 +251,57 @@ class SaleService
         $items = collect($resolvedLines)
             ->map(fn ($line): array => $line->toArray())
             ->all();
+        [$zone, $address] = $this->resolveZoneContext($data);
+        $pickup = ($data['delivery_type'] ?? 'delivery') === 'pickup';
+        $items = collect($items)->map(function (array $item) use ($lockedProducts, $zone, $pickup): array {
+            if ($pickup) {
+                return $item;
+            }
+
+            $product = $lockedProducts->get((int) $item['product_id']);
+            $unit = $product?->productUnits?->firstWhere('id', $item['product_unit_id'] ?? null);
+            $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $zone, $pickup);
+
+            return [
+                ...$item,
+                'selling_price' => $pricing['zone_unit_price'],
+            ];
+        })->all();
         $this->stockLockService->assertSufficientBaseQuantities(
             $lockedProducts,
             $requiredBaseQtyByProduct
         );
 
         $saleDate = $data['sale_date'];
-        $grandTotal = array_key_exists('grand_total', $data)
-            ? $this->saleValidationService->money($data['grand_total'])
-            : $this->saleValidationService->calculateItemsTotal($items);
+        $grandTotal = $this->saleValidationService->calculateItemsTotal($items);
         $deliveryType = $data['delivery_type'] ?? 'delivery';
         $discount = $this->saleValidationService->money($data['discount'] ?? 0);
         $deliveryFee = '0.00';
         $minimumProfit = '0.00';
         $deliveryZoneId = null;
         $deliveryAddressId = $data['customer_delivery_address_id'] ?? null;
-        $address = $deliveryAddressId === null
-            ? null
-            : CustomerDeliveryAddress::with('deliveryZone')->find($deliveryAddressId);
-
-        if ($deliveryType === 'delivery' && $address && $address->deliveryZone) {
-            $deliveryFee = $this->saleValidationService
-                ->money($address->deliveryZone->base_delivery_fee);
-            $minimumProfit = $this->saleValidationService
-                ->money($address->deliveryZone->minimum_profit);
-            $deliveryZoneId = $address->deliveryZone->id;
+        if ($deliveryType === 'delivery' && $zone !== null) {
+            $minimumProfit = $this->saleValidationService->money($zone->minimum_profit);
+            $deliveryZoneId = $zone->id;
         }
+
+        $rawProductProfit = $this->saleDecimalService->sumMoney(
+            collect($items)->map(fn (array $item): string => $this->saleDecimalService->lineProfitFromBaseQuantity(
+                $item['qty'],
+                $item['selling_price'],
+                $item['base_qty'],
+                $lockedProducts->get((int) $item['product_id'])->cost_price ?? 0
+            ))
+        );
+        $productProfitAfterDiscount = $this->saleDecimalService->subtractMoney(
+            $rawProductProfit,
+            $discount
+        );
+        $deliveryFee = $this->zonePricingService->deliveryFee(
+            $productProfitAfterDiscount,
+            $zone,
+            $pickup
+        );
 
         $netTotal = $this->saleValidationService->calculateNetTotal(
             $grandTotal,
@@ -301,6 +338,10 @@ class SaleService
         $sale->delivery_fee = $deliveryFee;
         $sale->delivery_type = $deliveryType;
         $sale->discount = $discount;
+        $sale->delivery_zone_id = $deliveryZoneId;
+        $sale->delivery_zone_name_snapshot = $zone?->name;
+        $sale->delivery_zone_markup_percent_snapshot = $zone?->price_markup_percent;
+        $sale->delivery_zone_minimum_profit_snapshot = $zone?->minimum_profit;
         $sale->notes = $data['notes'] ?? null;
 
         if ($payment !== null) {
@@ -337,6 +378,30 @@ class SaleService
         $this->commissionService->createFromSale($sale);
 
         return $sale;
+    }
+
+    /** @return array{0: ?DeliveryZone, 1: ?CustomerDeliveryAddress} */
+    private function resolveZoneContext(array $data): array
+    {
+        if (($data['delivery_type'] ?? 'delivery') === 'pickup') {
+            return [null, null];
+        }
+
+        $addressId = $data['customer_delivery_address_id'] ?? null;
+        if ($addressId === null || $addressId === '') {
+            throw new DomainException('การจัดส่งต้องเลือกที่อยู่จัดส่งและโซนที่ใช้งานอยู่');
+        }
+
+        $address = CustomerDeliveryAddress::with('deliveryZone')->find($addressId);
+        $zone = $address?->deliveryZone;
+        if ($address === null || $zone === null) {
+            throw new DomainException('ที่อยู่จัดส่งนี้ยังไม่ได้ผูกโซน กรุณาเลือกที่อยู่หรือแก้ข้อมูลโซนก่อนบันทึกบิล');
+        }
+        if (! $zone->active) {
+            throw new DomainException('โซนจัดส่งนี้ปิดใช้งานแล้ว กรุณาเลือกโซนที่เปิดใช้งาน');
+        }
+
+        return [$zone, $address];
     }
 
     private function assertQuotationFinancialConsistency(
@@ -443,6 +508,14 @@ class SaleService
             if (! $itemsChanged) {
                 $itemsTotal = $this->saleValidationService
                     ->calculateStoredItemsTotal($lockedItems);
+                $data['delivery_fee'] = $this->authoritativeDeliveryFee(
+                    $lockedSale,
+                    $data,
+                    $this->saleDecimalService->subtractMoney(
+                        $this->saleDecimalService->sumMoney($lockedItems->pluck('profit')),
+                        $data['discount'] ?? $lockedSale->discount
+                    )
+                );
                 $finalNetTotal = $this->finalNetTotal($lockedSale, $data, $itemsTotal);
                 $commissionAffected = $this->headerAffectsCommission(
                     $lockedSale,
@@ -506,6 +579,14 @@ class SaleService
             );
             $productProfit = $this->saleDecimalService->sumMoney(
                 $plannedAttributes->pluck('profit')
+            );
+            $data['delivery_fee'] = $this->authoritativeDeliveryFee(
+                $lockedSale,
+                $data,
+                $this->saleDecimalService->subtractMoney(
+                    $productProfit,
+                    $data['discount'] ?? $lockedSale->discount
+                )
             );
             $finalNetTotal = $this->finalNetTotal($lockedSale, $data, $grandTotal);
             $commissionAffected = $updatePlan['commission_affected']
@@ -886,6 +967,22 @@ class SaleService
         if (! $result['passed']) {
             throw new DomainException($result['message']);
         }
+    }
+
+    private function authoritativeDeliveryFee(Sale $sale, array $data, mixed $profitAfterDiscount): string
+    {
+        $deliveryType = $data['delivery_type'] ?? $sale->delivery_type;
+        $addressId = $data['customer_delivery_address_id'] ?? $sale->customer_delivery_address_id;
+        [$zone] = $this->resolveZoneContext([
+            'delivery_type' => $deliveryType,
+            'customer_delivery_address_id' => $addressId,
+        ]);
+
+        return $this->zonePricingService->deliveryFee(
+            $profitAfterDiscount,
+            $zone,
+            $deliveryType === 'pickup'
+        );
     }
 
     private function saleItemMatches($existingItem, array $submittedItem): bool

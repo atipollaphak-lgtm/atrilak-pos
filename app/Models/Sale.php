@@ -22,6 +22,10 @@ class Sale extends Model
         'sale_date',
         'total_amount',
         'delivery_fee',
+        'delivery_zone_id',
+        'delivery_zone_name_snapshot',
+        'delivery_zone_markup_percent_snapshot',
+        'delivery_zone_minimum_profit_snapshot',
         'delivery_type',
         'discount',
         'notes',
@@ -63,6 +67,8 @@ class Sale extends Model
             'promptpay_amount' => 'decimal:2',
             'received_amount' => 'decimal:2',
             'change_amount' => 'decimal:2',
+            'delivery_zone_markup_percent_snapshot' => 'decimal:2',
+            'delivery_zone_minimum_profit_snapshot' => 'decimal:2',
         ];
     }
 

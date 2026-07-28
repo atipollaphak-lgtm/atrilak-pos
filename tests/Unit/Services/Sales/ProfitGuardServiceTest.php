@@ -7,22 +7,23 @@ use PHPUnit\Framework\TestCase;
 
 class ProfitGuardServiceTest extends TestCase
 {
-    public function test_delivery_fee_is_part_of_the_current_minimum_profit_check(): void
+    public function test_delivery_fee_is_the_profit_shortfall(): void
     {
         $result = (new ProfitGuardService)->check([
             'delivery_type' => 'delivery',
-            'delivery_fee' => 50,
+            'delivery_fee' => 999,
             'minimum_profit' => 120,
             'delivery_zone_id' => 7,
         ], 80);
 
         $this->assertTrue($result['passed']);
-        $this->assertEquals(130.0, $result['total_profit']);
-        $this->assertEquals(0.0, $result['short_amount']);
+        $this->assertEquals('120.00', $result['total_profit']);
+        $this->assertEquals('40.00', $result['short_amount']);
+        $this->assertEquals('40.00', $result['delivery_fee']);
         $this->assertSame(7, $result['delivery_zone_id']);
     }
 
-    public function test_delivery_is_rejected_by_the_current_rule_when_profit_is_short(): void
+    public function test_delivery_is_allowed_when_fee_closes_the_profit_shortfall(): void
     {
         $result = (new ProfitGuardService)->check([
             'delivery_type' => 'delivery',
@@ -30,13 +31,13 @@ class ProfitGuardServiceTest extends TestCase
             'minimum_profit' => 150,
         ], 100);
 
-        $this->assertFalse($result['passed']);
-        $this->assertEquals(120.0, $result['total_profit']);
-        $this->assertEquals(30.0, $result['short_amount']);
-        $this->assertNotNull($result['message']);
+        $this->assertTrue($result['passed']);
+        $this->assertEquals('150.00', $result['total_profit']);
+        $this->assertEquals('50.00', $result['short_amount']);
+        $this->assertEquals('50.00', $result['delivery_fee']);
     }
 
-    public function test_pickup_zeroes_delivery_values_but_still_rejects_negative_product_profit(): void
+    public function test_pickup_always_has_zero_delivery_fee_and_zone_minimum(): void
     {
         $result = (new ProfitGuardService)->check([
             'delivery_type' => 'pickup',
@@ -44,11 +45,11 @@ class ProfitGuardServiceTest extends TestCase
             'minimum_profit' => 500,
         ], -25);
 
-        $this->assertFalse($result['passed']);
-        $this->assertEquals(0.0, $result['delivery_fee']);
-        $this->assertEquals(0.0, $result['minimum_profit']);
-        $this->assertEquals(-25.0, $result['total_profit']);
-        $this->assertEquals(25.0, $result['short_amount']);
+        $this->assertTrue($result['passed']);
+        $this->assertEquals('0.00', $result['delivery_fee']);
+        $this->assertEquals('0.00', $result['minimum_profit']);
+        $this->assertEquals('-25.00', $result['total_profit']);
+        $this->assertEquals('0.00', $result['short_amount']);
     }
 
     public function test_decimal_profit_comparison_is_deterministic(): void
@@ -61,6 +62,6 @@ class ProfitGuardServiceTest extends TestCase
 
         $this->assertTrue($result['passed']);
         $this->assertSame('0.03', (string) $result['total_profit']);
-        $this->assertSame('0.00', (string) $result['short_amount']);
+        $this->assertSame('0.02', (string) $result['short_amount']);
     }
 }

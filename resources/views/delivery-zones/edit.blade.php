@@ -1,9 +1,9 @@
 @extends('adminlte::page')
 
-@section('title', 'แก้ไขโซนจัดส่ง')
+@section('title', 'แก้ไขราคาตามโซน')
 
 @section('content_header')
-    <h1>แก้ไขโซนจัดส่ง</h1>
+    <h1>แก้ไขราคาตามโซน</h1>
 @stop
 
 @section('content')
@@ -47,34 +47,18 @@
             </div>
 
             <div class="form-group mb-3">
-                <label>ค่าส่งพื้นฐาน</label>
+                <label>เปอร์เซ็นต์บวกราคาสินค้า</label>
 
                 <input
                     type="number"
                     step="0.01"
                     min="0"
-                    name="base_delivery_fee"
+                    name="price_markup_percent"
                     class="form-control"
-                    value="{{ old('base_delivery_fee', $deliveryZone->base_delivery_fee) }}"
+                    value="{{ old('price_markup_percent', $deliveryZone->price_markup_percent ?? 0) }}"
                     required
                 >
-            </div>
-
-            <div class="form-group mb-3">
-                <label>ส่งฟรีเมื่อยอดถึง</label>
-
-                <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    name="free_delivery_min_amount"
-                    class="form-control"
-                    value="{{ old('free_delivery_min_amount', $deliveryZone->free_delivery_min_amount) }}"
-                >
-
-                <small class="text-muted">
-                    เว้นว่าง = ไม่มีโปรส่งฟรี
-                </small>
+                <small class="text-muted">ระบบจะบวกราคาสินค้าตามเปอร์เซ็นต์นี้เมื่อเลือกส่งสินค้าไปยังโซนนี้</small>
             </div>
 
             <div class="form-group mb-3">
@@ -90,9 +74,11 @@
                 >
 
                 <small class="text-muted">
-                    ใช้ตรวจสอบกำไรของบิลก่อนยืนยันการขาย
+                    หากกำไรหลังปรับราคาแล้วยังต่ำกว่าค่านี้ ส่วนต่างจะถูกคิดเป็นค่าส่ง
                 </small>
             </div>
+
+            <div class="alert alert-info">ตัวอย่าง: ราคาปกติ 100.00 บาท + {{ old('price_markup_percent', $deliveryZone->price_markup_percent ?? 0) }}% = ราคาตามโซนสำหรับใช้อธิบายการตั้งค่า</div>
 
             <div class="form-group mb-3">
 

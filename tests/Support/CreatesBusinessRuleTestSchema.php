@@ -63,6 +63,10 @@ trait CreatesBusinessRuleTestSchema
             $table->string('sale_no')->nullable();
             $table->unsignedBigInteger('customer_id')->nullable();
             $table->unsignedBigInteger('customer_delivery_address_id')->nullable();
+            $table->unsignedBigInteger('delivery_zone_id')->nullable();
+            $table->string('delivery_zone_name_snapshot')->nullable();
+            $table->decimal('delivery_zone_markup_percent_snapshot', 5, 2)->nullable();
+            $table->decimal('delivery_zone_minimum_profit_snapshot', 12, 2)->nullable();
             $table->unsignedBigInteger('technician_id')->nullable();
             $table->date('sale_date');
             $table->decimal('total_amount', 12, 2)->default(0);
@@ -132,6 +136,7 @@ trait CreatesBusinessRuleTestSchema
         Schema::create('delivery_zones', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->decimal('price_markup_percent', 5, 2)->default(0);
             $table->decimal('base_delivery_fee', 12, 2)->default(0);
             $table->decimal('free_delivery_min_amount', 12, 2)->default(0);
             $table->decimal('minimum_profit', 12, 2)->default(0);

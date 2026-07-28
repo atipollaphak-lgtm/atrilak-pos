@@ -10,6 +10,8 @@ use App\Services\Sales\ProductUnitConversionService;
 use App\Services\Sales\SaleDecimalService;
 use App\Services\SaleService;
 use App\ValueObjects\Sales\ResolvedSaleLine;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use DomainException;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +30,7 @@ class ProductUnitConversionTest extends TestCase
         Schema::create('delivery_zones', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->decimal('price_markup_percent', 5, 2)->default(0);
             $table->decimal('base_delivery_fee', 12, 2)->default(0);
             $table->decimal('minimum_profit', 12, 2)->default(0);
             $table->boolean('active')->default(true);
@@ -216,23 +219,20 @@ class ProductUnitConversionTest extends TestCase
         $this->assertSame('120.00', $sale->items()->sole()->profit);
     }
 
-    public function test_profit_guard_rejects_legacy_false_pass_and_rolls_back_everything(): void
+    public function test_dynamic_delivery_fee_closes_the_profit_shortfall(): void
     {
         $product = $this->product('Guard rollback', '100.0000');
         $case = $this->unit($product, 'case', '24.0000');
 
-        $this->expectDomainFailure(fn () => $this->deliverySale(
+        $sale = $this->deliverySale(
             [$this->line($product, '2.00', '180.00', $case)],
             '20.00',
             '300.00'
-        ));
+        );
 
-        $this->assertSame(0, Sale::count());
-        $this->assertSame(0, DB::table('sale_items')->count());
-        $this->assertSame(0, StockMovement::count());
-        $this->assertSame(0, DB::table('technician_commissions')->count());
-        $this->assertSame('100.0000', $product->fresh()->stock_qty);
-        $this->assertSame(0, DB::table('sale_number_counters')->count());
+        $this->assertSame('180.00', $sale->delivery_fee);
+        $this->assertSame('120.00', $sale->items()->sole()->profit);
+        $this->assertSame('52.0000', $product->fresh()->stock_qty);
     }
 
     public function test_resolved_lines_preserve_order_source_and_aggregate_mixed_units(): void
@@ -680,7 +680,7 @@ class ProductUnitConversionTest extends TestCase
         $this->assertDatabaseCount('stock_movements', 0);
     }
 
-    public function test_update_profit_guard_uses_canonical_base_profit_and_rolls_back(): void
+    public function test_update_recalculates_delivery_fee_from_canonical_base_profit(): void
     {
         $product = $this->product('Update guard', '100.0000');
         $case = $this->unit($product, 'case', '24.0000');
@@ -689,7 +689,7 @@ class ProductUnitConversionTest extends TestCase
         $beforeMovements = StockMovement::count();
         $beforeRevision = $sale->fresh()->revision;
 
-        $this->expectDomainFailure(fn () => app(SaleService::class)->updateSale(
+        $updated = app(SaleService::class)->updateSale(
             $sale,
             $this->updatePayload($sale, [[
                 'sale_item_id' => $item->id,
@@ -699,13 +699,14 @@ class ProductUnitConversionTest extends TestCase
                 'selling_price' => '100.00',
             ]]),
             (int) $sale->fresh()->revision
-        ));
+        );
 
-        $this->assertSame('180.00', $item->fresh()->selling_price);
-        $this->assertSame('120.00', $item->fresh()->profit);
+        $this->assertSame('100.00', $updated->items()->sole()->selling_price);
+        $this->assertSame('-40.00', $updated->items()->sole()->profit);
+        $this->assertSame('180.00', $updated->delivery_fee);
         $this->assertSame('52.0000', $product->fresh()->stock_qty);
-        $this->assertSame($beforeMovements, StockMovement::count());
-        $this->assertSame($beforeRevision, $sale->fresh()->revision);
+        $this->assertGreaterThan($beforeMovements, StockMovement::count());
+        $this->assertGreaterThan($beforeRevision, $updated->revision);
     }
 
     public function test_update_adds_and_removes_lines_selectively_and_preserves_retained_identity(): void
@@ -865,6 +866,7 @@ class ProductUnitConversionTest extends TestCase
         ]);
         $zoneId = DB::table('delivery_zones')->insertGetId([
             'name' => 'Synthetic zone',
+            'price_markup_percent' => '0.00',
             'base_delivery_fee' => $deliveryFee,
             'minimum_profit' => $minimumProfit,
             'active' => true,
@@ -879,9 +881,38 @@ class ProductUnitConversionTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $total = app(SaleDecimalService::class)->netTotal(
-            app(SaleDecimalService::class)->itemsTotal($items),
-            $deliveryFee,
+        foreach ($items as $item) {
+            if (! empty($item['product_unit_id'])) {
+                ProductUnit::query()
+                    ->whereKey($item['product_unit_id'])
+                    ->update(['selling_price' => $item['selling_price']]);
+            }
+        }
+
+        $decimalService = app(SaleDecimalService::class);
+        $rawProfit = collect($items)->map(function (array $item) use ($decimalService): string {
+            $product = Product::query()->findOrFail($item['product_id']);
+            $conversionRate = empty($item['product_unit_id'])
+                ? '1.0000'
+                : (string) ProductUnit::query()->findOrFail($item['product_unit_id'])->conversion_rate;
+            $baseQty = (string) BigDecimal::of($item['qty'])
+                ->multipliedBy($conversionRate)
+                ->toScale(4, RoundingMode::HALF_UP);
+
+            return $decimalService->lineProfitFromBaseQuantity(
+                $item['qty'],
+                $item['selling_price'],
+                $baseQty,
+                $product->cost_price
+            );
+        })->reduce(
+            fn (string $carry, string $profit): string => $decimalService->addMoney($carry, $profit),
+            '0.00'
+        );
+        $dynamicFee = $decimalService->nonNegativeDifference($minimumProfit, $rawProfit);
+        $total = $decimalService->netTotal(
+            $decimalService->itemsTotal($items),
+            $dynamicFee,
             '0.00'
         );
 

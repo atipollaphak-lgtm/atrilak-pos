@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Sales;
 
+use App\Models\Customer;
+use App\Models\CustomerDeliveryAddress;
+use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -197,8 +200,22 @@ class SaleUpdateTest extends TestCase
             'selling_price' => 60,
             'stock_qty' => 17,
         ]);
+        $customer = Customer::create(['name' => 'Update customer']);
+        $zone = DeliveryZone::create([
+            'name' => 'Update zone',
+            'minimum_profit' => '135.00',
+            'active' => true,
+        ]);
+        $address = CustomerDeliveryAddress::create([
+            'customer_id' => $customer->id,
+            'delivery_zone_id' => $zone->id,
+            'name' => 'Update address',
+        ]);
         $sale = Sale::create([
             'sale_no' => 'SAL-TX-0001',
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'delivery_zone_id' => $zone->id,
             'sale_date' => '2026-07-13',
             'total_amount' => 390,
             'delivery_fee' => 20,

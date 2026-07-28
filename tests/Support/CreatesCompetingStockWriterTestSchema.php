@@ -34,6 +34,8 @@ trait CreatesCompetingStockWriterTestSchema
             $table->decimal('profit_percent', 8, 2)->nullable();
             $table->string('satang_rounding_mode')->nullable();
             $table->string('baht_rounding_mode')->nullable();
+            $table->decimal('pricing_reviewed_cost', 12, 2)->nullable();
+            $table->text('image_path')->nullable();
         });
 
         Schema::create('pricing_settings', function (Blueprint $table) {

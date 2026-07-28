@@ -14,20 +14,21 @@ class ProfitGuardService
     public function check(array $data, mixed $productProfit): array
     {
         $deliveryType = $data['delivery_type'] ?? 'delivery';
-        $deliveryFee = $this->decimalService->money($data['delivery_fee'] ?? 0);
         $minimumProfit = $this->decimalService->money($data['minimum_profit'] ?? 0);
         $deliveryZoneId = $data['delivery_zone_id'] ?? null;
 
         if ($deliveryType === 'pickup') {
-            $deliveryFee = '0.00';
             $minimumProfit = '0.00';
         }
 
         $productProfit = $this->decimalService->money($productProfit);
+        $shortAmount = $this->decimalService->nonNegativeDifference($minimumProfit, $productProfit);
+        if ($deliveryType === 'pickup') {
+            $shortAmount = '0.00';
+        }
+        $deliveryFee = $deliveryType === 'pickup' ? '0.00' : $shortAmount;
         $totalProfit = $this->decimalService->addMoney($productProfit, $deliveryFee);
-        $shortAmount = $this->decimalService
-            ->nonNegativeDifference($minimumProfit, $totalProfit);
-        $passed = ! $this->decimalService->isPositive($shortAmount);
+        $passed = true;
 
         return [
             'passed' => $passed,

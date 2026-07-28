@@ -90,6 +90,24 @@ class StoreSaleV2Request extends FormRequest
             $customerId = $this->input('customer_id');
             $addressId = $this->input('customer_delivery_address_id');
 
+            if ($this->input('delivery_type', 'delivery') === 'delivery') {
+                if (! $this->isPositiveInteger($addressId)) {
+                    $validator->errors()->add(
+                        'customer_delivery_address_id',
+                        'การจัดส่งต้องเลือกที่อยู่จัดส่งที่ผูกกับโซนที่ใช้งานอยู่'
+                    );
+                } elseif (! DB::table('customer_delivery_addresses as addresses')
+                    ->join('delivery_zones as zones', 'zones.id', '=', 'addresses.delivery_zone_id')
+                    ->where('addresses.id', $addressId)
+                    ->where('zones.active', true)
+                    ->exists()) {
+                    $validator->errors()->add(
+                        'customer_delivery_address_id',
+                        'ที่อยู่จัดส่งนี้ยังไม่มีโซนที่ใช้งานอยู่ กรุณาเลือกที่อยู่หรือแก้ข้อมูลโซน'
+                    );
+                }
+            }
+
             if (! $this->isPositiveInteger($customerId) || ! $this->isPositiveInteger($addressId)) {
                 return;
             }

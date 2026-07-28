@@ -1,5 +1,13 @@
 <?php
 
+use JeroenNoten\LaravelAdminLte\Menu\Filters\ActiveFilter;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\ClassesFilter;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\DataFilter;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\GateFilter;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\HrefFilter;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\LangFilter;
+use JeroenNoten\LaravelAdminLte\Menu\Filters\SearchFilter;
+
 return [
 
     /*
@@ -302,69 +310,69 @@ return [
 
         [
             'text' => 'Dashboard',
-            'url'  => 'dashboard',
+            'url' => 'dashboard',
             'icon' => 'fas fa-fw fa-tachometer-alt',
-            'can'  => 'cashier',
+            'can' => 'cashier',
         ],
 
         ['header' => 'งานขาย'],
 
         [
             'text' => 'POS ขายสินค้า',
-            'url'  => 'sales',
+            'url' => 'sales',
             'icon' => 'fas fa-cash-register',
-            'can'  => 'cashier',
+            'can' => 'cashier',
         ],
         [
             'text' => 'ขายสินค้า POS V2',
-            'url'  => 'sales-v2',
+            'url' => 'sales-v2',
             'icon' => 'fas fa-fw fa-cash-register',
         ],
 
         [
             'text' => 'ประวัติการขาย',
-            'url'  => 'sales-history',
+            'url' => 'sales-history',
             'icon' => 'fas fa-receipt',
-            'can'  => 'cashier',
+            'can' => 'cashier',
         ],
         [
             'text' => 'ใบเสนอราคา',
-            'url'  => 'quotations',
+            'url' => 'quotations',
             'icon' => 'fas fa-file-invoice',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         ['header' => 'สินค้า'],
 
         [
             'text' => 'สินค้า',
-            'url'  => 'products',
+            'url' => 'products',
             'icon' => 'fas fa-box',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
         [
             'text' => 'ตั้งค่าเรทราคา',
-            'url'  => 'product-price-tiers',
+            'url' => 'product-price-tiers',
             'icon' => 'fas fa-fw fa-tags',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
         [
             'text' => 'จัดการราคา',
-            'url'  => 'pricing-management',
+            'url' => 'pricing-management',
             'icon' => 'fas fa-fw fa-calculator',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
         [
             'text' => 'หมวดสินค้า',
-            'url'  => 'categories',
+            'url' => 'categories',
             'icon' => 'fas fa-tags',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
         [
             'text' => 'หน่วยนับ',
-            'url'  => 'units',
+            'url' => 'units',
             'icon' => 'fas fa-fw fa-balance-scale',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         [
@@ -372,53 +380,52 @@ return [
             'can' => 'manager',
         ],
 
-
         [
             'text' => 'รับสินค้าเข้า',
-            'url'  => 'purchases',
+            'url' => 'purchases',
             'icon' => 'fas fa-truck-loading',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
         [
             'text' => 'พิมพ์บาร์โค้ด',
-            'url'  => 'barcodes',
+            'url' => 'barcodes',
             'icon' => 'fas fa-barcode',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
         [
             'text' => 'ประวัติสต็อก',
-            'url'  => 'stock-movements',
+            'url' => 'stock-movements',
             'icon' => 'fas fa-fw fa-exchange-alt',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         [
             'text' => 'ตรวจนับสต็อก',
-            'url'  => 'stock-counts',
+            'url' => 'stock-counts',
             'icon' => 'fas fa-fw fa-clipboard-check',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         ['header' => 'ลูกค้า'],
 
         [
             'text' => 'ลูกค้า',
-            'url'  => 'customers',
+            'url' => 'customers',
             'icon' => 'fas fa-users',
-            'can'  => 'cashier',
+            'can' => 'cashier',
         ],
         [
-            'text' => 'โซนจัดส่ง',
-            'url'  => 'delivery-zones',
+            'text' => 'ราคาตามโซน',
+            'url' => 'delivery-zones',
             'icon' => 'fas fa-map-marked-alt',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         [
             'text' => 'ผู้จำหน่าย',
-            'url'  => 'suppliers',
+            'url' => 'suppliers',
             'icon' => 'fas fa-truck',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
         [
             'header' => 'ระบบช่าง',
@@ -427,97 +434,97 @@ return [
 
         [
             'text' => 'ประวัติค่าช่าง',
-            'url'  => 'technician-commissions',
+            'url' => 'technician-commissions',
             'icon' => 'fas fa-fw fa-history',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'กฎค่าช่าง',
-            'url'  => 'technician-commission-rules',
+            'url' => 'technician-commission-rules',
             'icon' => 'fas fa-fw fa-percentage',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'จ่ายค่าช่าง',
-            'url'  => 'technician-payments',
+            'url' => 'technician-payments',
             'icon' => 'fas fa-fw fa-money-bill',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         [
             'text' => 'รอบจ่ายค่าช่าง',
-            'url'  => 'technician-payment-batches',
+            'url' => 'technician-payment-batches',
             'icon' => 'fas fa-fw fa-money-check-alt',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         ['header' => 'รายงาน'],
 
         [
             'text' => 'ปิดยอดประจำวัน',
-            'url'  => 'daily-payment-closings',
+            'url' => 'daily-payment-closings',
             'icon' => 'fas fa-fw fa-cash-register',
-            'can'  => 'manager',
+            'can' => 'manager',
         ],
 
         [
             'text' => 'รายงานกำไรรายวัน',
-            'url'  => 'reports/daily-profit',
+            'url' => 'reports/daily-profit',
             'icon' => 'fas fa-fw fa-chart-line',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'รายงานกำไรรายเดือน',
-            'url'  => 'reports/monthly-profit',
+            'url' => 'reports/monthly-profit',
             'icon' => 'fas fa-fw fa-calendar-alt',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'รายงานกำไรรายปี',
-            'url'  => 'reports/yearly-profit',
+            'url' => 'reports/yearly-profit',
             'icon' => 'fas fa-fw fa-calendar',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'รายงานยอดขายสินค้า',
-            'url'  => 'reports/product-sales',
+            'url' => 'reports/product-sales',
             'icon' => 'fas fa-fw fa-box',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'รายงานสินค้าขายดี',
-            'url'  => 'reports/best-seller',
+            'url' => 'reports/best-seller',
             'icon' => 'fas fa-fw fa-trophy',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         ['header' => 'ตั้งค่า'],
 
         [
             'text' => 'ผู้ใช้งาน',
-            'url'  => 'users',
+            'url' => 'users',
             'icon' => 'fas fa-user-cog',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'ตั้งค่าร้าน',
-            'url'  => 'settings',
+            'url' => 'settings',
             'icon' => 'fas fa-store',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
         [
             'text' => 'สำรองข้อมูล',
-            'url'  => 'backups',
+            'url' => 'backups',
             'icon' => 'fas fa-fw fa-database',
-            'can'  => 'owner',
+            'can' => 'owner',
         ],
 
     ],
@@ -535,13 +542,13 @@ return [
     */
 
     'filters' => [
-        JeroenNoten\LaravelAdminLte\Menu\Filters\GateFilter::class,
-        JeroenNoten\LaravelAdminLte\Menu\Filters\HrefFilter::class,
-        JeroenNoten\LaravelAdminLte\Menu\Filters\SearchFilter::class,
-        JeroenNoten\LaravelAdminLte\Menu\Filters\ActiveFilter::class,
-        JeroenNoten\LaravelAdminLte\Menu\Filters\ClassesFilter::class,
-        JeroenNoten\LaravelAdminLte\Menu\Filters\LangFilter::class,
-        JeroenNoten\LaravelAdminLte\Menu\Filters\DataFilter::class,
+        GateFilter::class,
+        HrefFilter::class,
+        SearchFilter::class,
+        ActiveFilter::class,
+        ClassesFilter::class,
+        LangFilter::class,
+        DataFilter::class,
     ],
 
     /*
