@@ -34,9 +34,51 @@ class PricingManagementController extends Controller
         return view('pricing-management.index', compact('products', 'summary', 'categoryRules', 'categories'));
     }
 
-    public function show(Product $product, PricingService $pricingService)
+    public function show(Request $request, Product $product, PricingService $pricingService)
     {
-        return response()->json($pricingService->calculate($product->load('category')));
+        $validated = $request->validate([
+            'pricing_source' => ['nullable', 'in:category,product,fixed'],
+            'pricing_method' => ['nullable', 'in:category,percentage,fixed,manual'],
+            'pricing_value' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
+            'rounding_direction' => ['nullable', 'in:up,down,nearest'],
+            'rounding_unit' => ['nullable', 'in:0.01,0.05,0.10,0.50,1,5,10,100'],
+            'category_id' => ['nullable', 'integer'],
+        ]);
+
+        if (isset($validated['category_id']) && (int) $validated['category_id'] !== (int) $product->category_id) {
+            return response()->json(['message' => 'หมวดสินค้าที่ส่งมาไม่ตรงกับสินค้า'], 422);
+        }
+
+        $hasPreviewContext = collect([
+            'pricing_source',
+            'pricing_method',
+            'pricing_value',
+            'rounding_direction',
+            'rounding_unit',
+        ])->contains(fn (string $key): bool => array_key_exists($key, $validated));
+
+        if (! $hasPreviewContext) {
+            return response()->json($pricingService->calculate($product->load('category')));
+        }
+
+        if (($validated['pricing_source'] ?? null) === PricingService::CATEGORY_SOURCE) {
+            $validated['pricing_method'] = PricingService::CATEGORY_SOURCE;
+        } elseif (($validated['pricing_source'] ?? null) === 'fixed') {
+            $validated['pricing_method'] = 'manual';
+        }
+
+        $preview = $pricingService->calculate(
+            $product->load('category.categoryPricingRule'),
+            null,
+            $validated
+        );
+
+        if (($validated['pricing_source'] ?? null) === PricingService::CATEGORY_SOURCE
+            && ! $preview['category_rule_available']) {
+            return response()->json(['message' => 'หมวดนี้ยังไม่ได้ตั้งค่าราคา'], 422);
+        }
+
+        return response()->json($preview);
     }
 
     public function update(Request $request, Product $product, PricingService $pricingService)

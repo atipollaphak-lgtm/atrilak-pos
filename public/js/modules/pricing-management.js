@@ -7,39 +7,66 @@ document.addEventListener('DOMContentLoaded', () => {
     const unit = document.getElementById('roundingUnit');
     let productId = null;
     let product = null;
+    let latestPreview = null;
+    let previewRequestId = 0;
 
     const money = input => input === null || input === undefined || input === '' ? '-' : Number(input).toFixed(2);
     const statusLabel = { pending_review: 'รอทบทวน', unpriced: 'ยังไม่ตั้งราคา', normal: 'ปกติ', inactive: 'ไม่ใช้งาน' };
     const csrf = () => document.querySelector('meta[name="csrf-token"]').content;
 
-    function calculatePreview() {
-        const cost = Number(product?.average_cost);
-        const pricingValue = Number(value.value);
-        if (!Number.isFinite(cost) || !Number.isFinite(pricingValue)) return null;
-        const currentMethod = method.value === 'category' ? product?.category_rule?.pricing_method : method.value;
-        const before = currentMethod === 'percentage' ? cost + (cost * pricingValue / 100) : cost + pricingValue;
-        const final = window.PricingRounding.roundPrice(before, direction.value, unit.value);
-        const profit = final - cost;
-        return { before, final, profit, percent: cost ? profit / cost * 100 : null };
-    }
-
-    function renderCalculation() {
-        const preview = method.value === 'manual' ? (() => {
-            const cost = Number(product?.average_cost);
-            const final = Number(value.value);
-            if (!Number.isFinite(cost) || !Number.isFinite(final)) return null;
-            const profit = final - cost;
-            return { before: final, final, profit, percent: cost ? profit / cost * 100 : null };
-        })() : calculatePreview();
-
-        if (!preview) {
+    function renderCalculation(preview = latestPreview) {
+        if (!preview || preview.final_price === null) {
             document.getElementById('drawerResult').textContent = 'ยังไม่มีต้นทุนเฉลี่ยเพียงพอสำหรับคำนวณราคา';
             document.getElementById('calculationDetails').textContent = '';
             return;
         }
 
-        document.getElementById('drawerResult').innerHTML = `<strong>ราคาแนะนำ</strong><div class="h4">${money(preview.final)} บาท</div><strong>กำไรต่อหน่วย</strong><div>${money(preview.profit)} บาท (${preview.percent === null ? '-' : money(preview.percent)}%)</div>`;
-        document.getElementById('calculationDetails').innerHTML = `ต้นทุนเฉลี่ย ${money(product.average_cost)} บาท<br>กำไรก่อนปัด ${money(preview.before - Number(product.average_cost))} บาท<br>ราคาก่อนปัด ${money(preview.before)} บาท<br>ราคาหลังปัด ${money(preview.final)} บาท<br>กำไรสุดท้าย ${money(preview.profit)} บาท (${preview.percent === null ? '-' : money(preview.percent)}%)`;
+        document.getElementById('drawerResult').innerHTML = `<strong>ราคาแนะนำ</strong><div class="h4">${money(preview.final_price)} บาท</div><strong>กำไรต่อหน่วย</strong><div>${money(preview.profit_amount)} บาท (${preview.profit_percent === null ? '-' : money(preview.profit_percent)}%)</div>`;
+        document.getElementById('calculationDetails').innerHTML = `ต้นทุนเฉลี่ย ${money(preview.average_cost)} บาท<br>กำไรก่อนปัด ${money(preview.profit_before_round)} บาท<br>ราคาก่อนปัด ${money(preview.price_before_round)} บาท<br>ราคาหลังปัด ${money(preview.final_price)} บาท<br>กำไรสุดท้าย ${money(preview.profit_amount)} บาท (${preview.profit_percent === null ? '-' : money(preview.profit_percent)}%)`;
+    }
+
+    function previewContext() {
+        if (method.value === 'category') {
+            return { pricing_source: 'category' };
+        }
+
+        return {
+            pricing_source: method.value === 'manual' ? 'fixed' : 'product',
+            pricing_method: method.value,
+            pricing_value: value.value,
+            rounding_direction: direction.value,
+            rounding_unit: unit.value,
+        };
+    }
+
+    async function requestPreview() {
+        if (!productId || !product) return;
+        const requestId = ++previewRequestId;
+        const query = new URLSearchParams(previewContext());
+        const response = await fetch(`/pricing-management/${productId}?${query}`, { headers: { Accept: 'application/json' } });
+        const body = await response.json().catch(() => ({}));
+        if (requestId !== previewRequestId) return;
+        if (!response.ok) {
+            latestPreview = null;
+            document.getElementById('drawerResult').textContent = body.message || 'ไม่สามารถคำนวณราคาแนะนำได้';
+            document.getElementById('calculationDetails').textContent = '';
+            if (method.value === 'category') {
+                document.getElementById('drawerSave').disabled = true;
+            }
+            return;
+        }
+
+        latestPreview = body;
+        updateMethodFields();
+        renderCalculation(body);
+    }
+
+    function refreshPreview() {
+        requestPreview().catch(error => {
+            latestPreview = null;
+            document.getElementById('drawerResult').textContent = error.message || 'ไม่สามารถคำนวณราคาแนะนำได้';
+            document.getElementById('calculationDetails').textContent = '';
+        });
     }
 
     function updateMethodFields() {
@@ -47,7 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const manual = selected === 'manual';
         const category = selected === 'category';
         document.getElementById('pricingValueLabel').textContent = manual ? 'ราคาขาย' : 'ค่า';
-        document.getElementById('pricingValueSuffix').textContent = selected === 'percentage' || (category && product?.category_rule?.pricing_method === 'percentage') ? '%' : 'บาท';
+        const rule = latestPreview?.category_rule || product?.category_rule;
+        document.getElementById('pricingValueSuffix').textContent = selected === 'percentage' || (category && rule?.pricing_method === 'percentage') ? '%' : 'บาท';
         document.getElementById('roundingRow').classList.toggle('d-none', manual);
         value.readOnly = category;
         direction.disabled = category;
@@ -55,22 +83,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const info = document.getElementById('categoryPricingInfo');
         if (category) {
-            const rule = product?.category_rule;
             info.classList.remove('d-none');
-            if (!product?.category_rule_available || !rule) {
+            if (latestPreview && (!latestPreview.category_rule_available || !rule)) {
                 info.className = 'alert alert-danger';
                 info.textContent = 'หมวดนี้ยังไม่ได้ตั้งค่าราคา ไม่สามารถบันทึกการใช้กฎหมวดได้';
                 document.getElementById('drawerSave').disabled = true;
-            } else {
+            } else if (rule) {
                 info.className = 'alert alert-info';
                 info.textContent = `หมวด ${product.category_name || '-'}: ${rule.pricing_method === 'percentage' ? '+' : '+'}${money(rule.pricing_value)}${rule.pricing_method === 'percentage' ? '%' : ' บาท'} | ${rule.rounding_direction || '-'} ${rule.rounding_unit || '-'} บาท`;
                 document.getElementById('drawerSave').disabled = product.status === 'inactive';
+                value.value = rule.pricing_value || '';
+                direction.value = rule.rounding_direction || 'up';
+                window.PricingRounding.selectOption(unit, rule.rounding_unit || '5');
+            } else {
+                info.className = 'alert alert-info';
+                info.textContent = 'กำลังตรวจสอบกฎราคาของหมวดจาก Server...';
+                document.getElementById('drawerSave').disabled = true;
             }
         } else {
             info.classList.add('d-none');
             document.getElementById('drawerSave').disabled = product?.status === 'inactive';
         }
-        renderCalculation();
     }
 
     async function openDrawer(id) {
@@ -78,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!response.ok) throw new Error('โหลดข้อมูลราคาไม่สำเร็จ');
         product = await response.json();
         productId = id;
+        latestPreview = null;
         document.getElementById('drawerProductName').textContent = product.product_name;
         document.getElementById('drawerCategory').textContent = `หมวด: ${product.category_name || '-'}`;
         document.getElementById('drawerStatus').innerHTML = `<span class="badge badge-info">${statusLabel[product.status]}</span>`;
@@ -89,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMethodFields();
         drawer.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
+        refreshPreview();
     }
 
     function closeDrawer() {
@@ -99,10 +134,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.js-open-pricing').forEach(button => button.addEventListener('click', () => openDrawer(button.dataset.productId).catch(error => alert(error.message))));
     document.getElementById('drawerClose').addEventListener('click', closeDrawer);
     document.getElementById('drawerCancel').addEventListener('click', closeDrawer);
-    method.addEventListener('change', updateMethodFields);
-    value.addEventListener('input', renderCalculation);
-    direction.addEventListener('change', renderCalculation);
-    unit.addEventListener('change', renderCalculation);
+    method.addEventListener('change', () => { latestPreview = null; updateMethodFields(); refreshPreview(); });
+    value.addEventListener('input', refreshPreview);
+    direction.addEventListener('change', refreshPreview);
+    unit.addEventListener('change', refreshPreview);
 
     form.addEventListener('submit', async event => {
         event.preventDefault();
@@ -112,10 +147,11 @@ document.addEventListener('DOMContentLoaded', () => {
         error.classList.add('d-none');
         try {
             const payload = Object.fromEntries(new FormData(form));
-            if (method.value === 'category' && product?.category_rule) {
-                payload.pricing_value = product.category_rule.pricing_value;
-                payload.rounding_direction = product.category_rule.rounding_direction;
-                payload.rounding_unit = product.category_rule.rounding_unit;
+            if (method.value === 'category' && (latestPreview?.category_rule || product?.category_rule)) {
+                const rule = latestPreview?.category_rule || product.category_rule;
+                payload.pricing_value = rule.pricing_value;
+                payload.rounding_direction = rule.rounding_direction;
+                payload.rounding_unit = rule.rounding_unit;
             }
             const response = await fetch(`/pricing-management/${productId}`, { method: 'PUT', headers: { 'X-CSRF-TOKEN': csrf(), Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!response.ok) {

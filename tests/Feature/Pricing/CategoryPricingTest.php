@@ -18,6 +18,127 @@ class CategoryPricingTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_preview_uses_selected_category_source_without_persisting_it(): void
+    {
+        $user = User::factory()->create(['role' => 'owner']);
+        $category = Category::query()->create(['name' => 'Preview category']);
+        $rule = CategoryPricingRule::query()->create([
+            'category_id' => $category->id,
+            'pricing_method' => 'percentage',
+            'pricing_value' => '10.00',
+            'rounding_direction' => 'up',
+            'rounding_unit' => '1.00',
+            'active' => true,
+        ]);
+        $product = $this->product($category, 'Preview product', 'product', '50.00', '15.00');
+
+        $this->actingAs($user)
+            ->getJson(route('pricing-management.show', $product).'?pricing_source=category')
+            ->assertOk()
+            ->assertJsonPath('pricing_source', 'category')
+            ->assertJsonPath('category_rule.id', $rule->id)
+            ->assertJsonPath('suggested_price', '11.00');
+
+        $fresh = $product->fresh();
+        $this->assertSame('product', $fresh->pricing_source);
+        $this->assertSame('15.00', $fresh->selling_price);
+        $this->assertDatabaseCount('product_price_histories', 0);
+    }
+
+    public function test_preview_rejects_category_source_when_the_product_category_has_no_active_rule(): void
+    {
+        $user = User::factory()->create(['role' => 'owner']);
+        $category = Category::query()->create(['name' => 'Unconfigured preview category']);
+        $product = $this->product($category, 'Unconfigured preview product', 'product', '50.00', '15.00');
+
+        $this->actingAs($user)
+            ->getJson(route('pricing-management.show', $product).'?pricing_source=category')
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'หมวดนี้ยังไม่ได้ตั้งค่าราคา');
+
+        $this->assertSame('product', $product->fresh()->pricing_source);
+        $this->assertDatabaseCount('product_price_histories', 0);
+    }
+
+    public function test_preview_uses_temporary_product_specific_values_without_persisting_them(): void
+    {
+        $user = User::factory()->create(['role' => 'owner']);
+        $category = Category::query()->create(['name' => 'Product preview category']);
+        $product = $this->product($category, 'Product preview', 'product', '50.00', '15.00');
+
+        $this->actingAs($user)
+            ->getJson(route('pricing-management.show', $product).'?'.http_build_query([
+                'pricing_source' => 'product',
+                'pricing_method' => 'percentage',
+                'pricing_value' => '30.00',
+                'rounding_direction' => 'up',
+                'rounding_unit' => '1.00',
+            ]))
+            ->assertOk()
+            ->assertJsonPath('pricing_source', 'product')
+            ->assertJsonPath('suggested_price', '13.00');
+
+        $this->assertSame('50.00', $product->fresh()->pricing_value);
+        $this->assertSame('15.00', $product->fresh()->selling_price);
+        $this->assertDatabaseCount('product_price_histories', 0);
+    }
+
+    public function test_preview_uses_temporary_fixed_price_without_persisting_it(): void
+    {
+        $user = User::factory()->create(['role' => 'owner']);
+        $category = Category::query()->create(['name' => 'Fixed preview category']);
+        $product = $this->product($category, 'Fixed preview', 'product', '50.00', '15.00');
+
+        $this->actingAs($user)
+            ->getJson(route('pricing-management.show', $product).'?'.http_build_query([
+                'pricing_source' => 'fixed',
+                'pricing_method' => 'manual',
+                'pricing_value' => '18.00',
+            ]))
+            ->assertOk()
+            ->assertJsonPath('pricing_source', 'fixed')
+            ->assertJsonPath('pricing_method', 'manual')
+            ->assertJsonPath('suggested_price', '18.00');
+
+        $this->assertSame('product', $product->fresh()->pricing_source);
+        $this->assertSame('15.00', $product->fresh()->selling_price);
+        $this->assertDatabaseCount('product_price_histories', 0);
+    }
+
+    public function test_preview_rejects_a_browser_category_that_does_not_match_the_product(): void
+    {
+        $user = User::factory()->create(['role' => 'owner']);
+        $productCategory = Category::query()->create(['name' => 'Product category']);
+        $browserCategory = Category::query()->create(['name' => 'Browser category']);
+        CategoryPricingRule::query()->create([
+            'category_id' => $browserCategory->id,
+            'pricing_method' => 'percentage',
+            'pricing_value' => '99.00',
+            'rounding_direction' => 'up',
+            'rounding_unit' => '1.00',
+            'active' => true,
+        ]);
+        $product = $this->product($productCategory, 'Cross category preview', 'product', '50.00', '15.00');
+
+        $this->actingAs($user)
+            ->getJson(route('pricing-management.show', $product).'?'.http_build_query([
+                'pricing_source' => 'category',
+                'category_id' => $browserCategory->id,
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'หมวดสินค้าที่ส่งมาไม่ตรงกับสินค้า');
+    }
+
+    public function test_preview_requires_pricing_permission(): void
+    {
+        $category = Category::query()->create(['name' => 'Restricted preview category']);
+        $product = $this->product($category, 'Restricted preview', 'product', '50.00', '15.00');
+
+        $this->actingAs(User::factory()->create(['role' => 'manager']))
+            ->getJson(route('pricing-management.show', $product).'?pricing_source=category')
+            ->assertForbidden();
+    }
+
     public function test_category_source_resolves_category_rule_without_affecting_product_source(): void
     {
         $category = Category::query()->create(['name' => 'Category pricing']);
@@ -125,6 +246,7 @@ class CategoryPricingTest extends TestCase
                 'pricing_value' => '25.00',
                 'rounding_direction' => 'up',
                 'rounding_unit' => '1.00',
+                'suggested_price' => '999.00',
             ])
             ->assertOk()
             ->assertJsonPath('final_price', '13.00');
