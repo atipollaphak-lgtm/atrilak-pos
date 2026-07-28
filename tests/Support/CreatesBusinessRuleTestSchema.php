@@ -66,6 +66,7 @@ trait CreatesBusinessRuleTestSchema
             $table->unsignedBigInteger('delivery_zone_id')->nullable();
             $table->string('delivery_zone_name_snapshot')->nullable();
             $table->decimal('delivery_zone_markup_percent_snapshot', 5, 2)->nullable();
+            $table->decimal('delivery_zone_rounding_increment_snapshot', 4, 2)->nullable();
             $table->decimal('delivery_zone_minimum_profit_snapshot', 12, 2)->nullable();
             $table->unsignedBigInteger('technician_id')->nullable();
             $table->date('sale_date');

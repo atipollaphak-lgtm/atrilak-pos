@@ -206,6 +206,8 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $zone = DeliveryZone::query()->create([
             'name' => 'Guard zone',
             'base_delivery_fee' => '0.00',
+            'price_markup_percent' => '3.00',
+            'rounding_increment' => '0.50',
             'minimum_profit' => '100.00',
             'active' => true,
         ]);
@@ -233,8 +235,11 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
 
         $this->assertSame($item->id, $updated->items()->sole()->id);
         $this->assertSame('1.00', $item->fresh()->selling_price);
-        $this->assertSame('108.00', $updated->delivery_fee);
-        $this->assertSame('110.00', $updated->total_amount);
+        $this->assertEquals('108.00', $updated->delivery_fee);
+        $this->assertEquals('110.00', $updated->total_amount);
+        $this->assertSame('3.00', $updated->delivery_zone_markup_percent_snapshot);
+        $this->assertSame('0.50', $updated->delivery_zone_rounding_increment_snapshot);
+        $this->assertSame('100.00', $updated->delivery_zone_minimum_profit_snapshot);
         $this->assertSame($beforeStock, $product->fresh()->stock_qty);
         $this->assertSame($beforeMovements + 2, StockMovement::query()->count());
         $this->assertNotSame($beforeCommission, $this->commissionSnapshot($commission->fresh()));

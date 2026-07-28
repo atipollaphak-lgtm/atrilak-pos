@@ -14,6 +14,8 @@ class SaleV3CartWorkflowTest extends TestCase
         $this->assertStringContainsString('F9', $script);
         $this->assertStringContainsString('v3-quantity-input', $script);
         $this->assertStringContainsString('createSubmissionGuard', $script);
+        $this->assertStringContainsString('ZonePricingMath', file_get_contents(base_path('public/js/modules/zone-pricing.js')));
+        $this->assertStringContainsString('rounding_increment', $script);
         $this->assertStringContainsString('sales.v3.store', file_get_contents(base_path('routes/web.php')));
     }
 }

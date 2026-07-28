@@ -30,6 +30,15 @@
             </div>
 
             <div class="form-group mb-3">
+                <label>วิธีปัดเศษราคาตามโซน</label>
+                <select name="rounding_increment" id="zone-rounding-increment" class="form-control" required>
+                    @foreach (['0.25', '0.50', '1.00', '5.00', '10.00'] as $increment)
+                        <option value="{{ $increment }}" @selected(old('rounding_increment', $deliveryZone->rounding_increment ?? '0.25') === $increment)>ปัดขึ้นทีละ {{ number_format($increment, 2) }} บาท</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="form-group mb-3">
                 <label>ลำดับการแสดงผล</label>
 
                 <input
@@ -79,6 +88,8 @@
             </div>
 
             <div class="alert alert-info">ตัวอย่าง: ราคาปกติ 100.00 บาท + {{ old('price_markup_percent', $deliveryZone->price_markup_percent ?? 0) }}% = ราคาตามโซนสำหรับใช้อธิบายการตั้งค่า</div>
+
+            @include('delivery-zones._preview')
 
             <div class="form-group mb-3">
 
@@ -133,4 +144,9 @@
 
 </div>
 
+@stop
+
+@section('js')
+    <script src="{{ asset('js/modules/zone-pricing.js') }}"></script>
+    <script src="{{ asset('js/modules/zone-pricing-form.js') }}"></script>
 @stop

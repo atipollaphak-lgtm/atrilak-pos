@@ -36,5 +36,6 @@
     <script src="{{ asset('js/modules/pos-utils.js') }}"></script>
     <script src="{{ asset('js/modules/sale-intent-storage.js') }}"></script>
     <script src="{{ asset('js/modules/pos-payment.js') }}"></script>
+    <script src="{{ asset('js/modules/zone-pricing.js') }}"></script>
     <script src="{{ asset('js/modules/sale-v3.js') }}"></script>
 @stop

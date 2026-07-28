@@ -25,6 +25,7 @@ class Sale extends Model
         'delivery_zone_id',
         'delivery_zone_name_snapshot',
         'delivery_zone_markup_percent_snapshot',
+        'delivery_zone_rounding_increment_snapshot',
         'delivery_zone_minimum_profit_snapshot',
         'delivery_type',
         'discount',
@@ -68,6 +69,7 @@ class Sale extends Model
             'received_amount' => 'decimal:2',
             'change_amount' => 'decimal:2',
             'delivery_zone_markup_percent_snapshot' => 'decimal:2',
+            'delivery_zone_rounding_increment_snapshot' => 'decimal:2',
             'delivery_zone_minimum_profit_snapshot' => 'decimal:2',
         ];
     }

@@ -27,9 +27,12 @@ class DeliveryZoneController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'sort_order' => ['required', 'integer', 'min:0'],
             'price_markup_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'rounding_increment' => ['required', 'in:0.25,0.50,1.00,5.00,10.00'],
             'minimum_profit' => ['required', 'numeric', 'min:0'],
             'active' => ['nullable', 'boolean'],
             'remark' => ['nullable', 'string'],
+        ], [
+            'rounding_increment.in' => 'วิธีปัดเศษไม่ถูกต้อง',
         ]);
 
         $validated['active'] = $request->has('active');
@@ -52,9 +55,12 @@ class DeliveryZoneController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'sort_order' => ['required', 'integer', 'min:0'],
             'price_markup_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'rounding_increment' => ['required', 'in:0.25,0.50,1.00,5.00,10.00'],
             'minimum_profit' => ['required', 'numeric', 'min:0'],
             'active' => ['nullable', 'boolean'],
             'remark' => ['nullable', 'string'],
+        ], [
+            'rounding_increment.in' => 'วิธีปัดเศษไม่ถูกต้อง',
         ]);
 
         $validated['active'] = $request->has('active');

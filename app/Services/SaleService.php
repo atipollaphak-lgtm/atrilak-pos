@@ -341,6 +341,7 @@ class SaleService
         $sale->delivery_zone_id = $deliveryZoneId;
         $sale->delivery_zone_name_snapshot = $zone?->name;
         $sale->delivery_zone_markup_percent_snapshot = $zone?->price_markup_percent;
+        $sale->delivery_zone_rounding_increment_snapshot = $pickup ? null : $zone?->rounding_increment;
         $sale->delivery_zone_minimum_profit_snapshot = $zone?->minimum_profit;
         $sale->notes = $data['notes'] ?? null;
 
@@ -702,6 +703,19 @@ class SaleService
             'delivery_fee' => $deliveryFee,
             'discount' => $discount,
         ];
+
+        $deliveryType = $data['delivery_type'] ?? $sale->delivery_type;
+        $deliveryAddressId = $data['customer_delivery_address_id'] ?? $sale->customer_delivery_address_id;
+        [$zone] = $this->resolveZoneContext([
+            'delivery_type' => $deliveryType,
+            'customer_delivery_address_id' => $deliveryAddressId,
+        ]);
+        $updates['delivery_type'] = $deliveryType;
+        $updates['delivery_zone_id'] = $zone?->id;
+        $updates['delivery_zone_name_snapshot'] = $zone?->name;
+        $updates['delivery_zone_markup_percent_snapshot'] = $zone?->price_markup_percent;
+        $updates['delivery_zone_rounding_increment_snapshot'] = $zone?->rounding_increment;
+        $updates['delivery_zone_minimum_profit_snapshot'] = $zone?->minimum_profit;
 
         if ($payment !== null) {
             $updates = array_merge($updates, $payment);

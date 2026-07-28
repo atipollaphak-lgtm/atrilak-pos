@@ -48,17 +48,23 @@ class ZonePricingService
         $beforeRound = $basePrice->multipliedBy(
             BigDecimal::one()->plus($markup->dividedBy('100', 8, RoundingMode::HALF_UP))
         );
-        $rounded = $this->roundPrice(
-            $beforeRound,
-            (string) ($product->rounding_unit ?? '5'),
-            (string) ($product->rounding_direction ?? 'up')
-        );
+        $zoneIncrement = $pickup || $zone === null
+            ? BigDecimal::zero()
+            : BigDecimal::of((string) ($zone->rounding_increment ?: '0.25'));
+        $rounded = $zoneIncrement->isZero()
+            ? $this->roundPrice(
+                $beforeRound,
+                (string) ($product->rounding_unit ?? '5'),
+                (string) ($product->rounding_direction ?? 'up')
+            )
+            : $this->roundPrice($beforeRound, (string) $zoneIncrement, 'up');
 
         return [
             'base_unit_price' => $this->decimalService->money($basePrice),
             'zone_markup_percent' => $this->decimalService->money($markup),
             'zone_unit_price_before_rounding' => (string) $beforeRound->toScale(8, RoundingMode::HALF_UP),
             'zone_unit_price' => $this->decimalService->money($rounded),
+            'rounding_increment' => $this->decimalService->money($zoneIncrement),
         ];
     }
 

@@ -20,6 +20,15 @@
                     <label>ชื่อโซน</label>
 
                     <input type="text" name="name" class="form-control" value="{{ old('name') }}" required>
+            </div>
+
+            <div class="form-group mb-3">
+                    <label>วิธีปัดเศษราคาตามโซน</label>
+                    <select name="rounding_increment" id="zone-rounding-increment" class="form-control" required>
+                        @foreach (['0.25', '0.50', '1.00', '5.00', '10.00'] as $increment)
+                            <option value="{{ $increment }}" @selected(old('rounding_increment', '0.25') === $increment)>ปัดขึ้นทีละ {{ number_format($increment, 2) }} บาท</option>
+                        @endforeach
+                    </select>
                 </div>
                 <div class="form-group mb-3">
 
@@ -33,6 +42,7 @@
                     </small>
 
                 </div>
+
                 <div class="form-group mb-3">
                     <label>เปอร์เซ็นต์บวกราคาสินค้า</label>
                     <input type="number" step="0.01" min="0" max="100" name="price_markup_percent" class="form-control"
@@ -49,6 +59,8 @@
                         หากกำไรหลังปรับราคาแล้วยังต่ำกว่าค่านี้ ส่วนต่างจะถูกคิดเป็นค่าส่ง
                     </small>
                 </div>
+
+                @include('delivery-zones._preview')
 
                 <div class="form-group mb-3">
 
@@ -92,4 +104,9 @@
 
     </div>
 
+@stop
+
+@section('js')
+    <script src="{{ asset('js/modules/zone-pricing.js') }}"></script>
+    <script src="{{ asset('js/modules/zone-pricing-form.js') }}"></script>
 @stop

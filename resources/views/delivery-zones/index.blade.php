@@ -33,6 +33,7 @@
                         <th width="80">ลำดับ</th>
                         <th>ชื่อโซน</th>
                         <th width="140">เพิ่มราคาสินค้า</th>
+                        <th width="140">ปัดขึ้นทีละ</th>
                         <th width="150">กำไรขั้นต่ำ</th>
                         <th width="100">สถานะ</th>
                         <th width="150">จัดการ</th>
@@ -50,6 +51,8 @@
                             <td>{{ $zone->name }}</td>
 
                             <td class="text-end">{{ number_format($zone->price_markup_percent ?? 0, 2) }}%</td>
+
+                            <td class="text-end">{{ number_format($zone->rounding_increment ?? 0.25, 2) }} บาท</td>
 
                             <td class="text-end">
                                 {{ number_format($zone->minimum_profit ?? 0, 2) }}
@@ -83,7 +86,7 @@
 
                         <tr>
 
-                            <td colspan="6" class="text-center">
+                            <td colspan="7" class="text-center">
                                 ยังไม่มีข้อมูล
                             </td>
 

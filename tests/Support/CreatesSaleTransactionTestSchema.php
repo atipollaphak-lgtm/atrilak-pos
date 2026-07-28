@@ -81,6 +81,7 @@ trait CreatesSaleTransactionTestSchema
             $table->id();
             $table->string('name');
             $table->decimal('price_markup_percent', 5, 2)->default(0);
+            $table->decimal('rounding_increment', 4, 2)->default(0.25);
             $table->decimal('base_delivery_fee', 12, 2)->default(0);
             $table->decimal('free_delivery_min_amount', 12, 2)->default(0);
             $table->decimal('minimum_profit', 12, 2)->default(0);
@@ -110,6 +111,7 @@ trait CreatesSaleTransactionTestSchema
             $table->unsignedBigInteger('delivery_zone_id')->nullable();
             $table->string('delivery_zone_name_snapshot')->nullable();
             $table->decimal('delivery_zone_markup_percent_snapshot', 5, 2)->nullable();
+            $table->decimal('delivery_zone_rounding_increment_snapshot', 4, 2)->nullable();
             $table->decimal('delivery_zone_minimum_profit_snapshot', 12, 2)->nullable();
             $table->foreignId('technician_id')->nullable()->constrained()->nullOnDelete();
             $table->date('sale_date');
