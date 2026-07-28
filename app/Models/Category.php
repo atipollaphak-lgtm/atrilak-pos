@@ -10,12 +10,15 @@ class Category extends Model
 
     protected $fillable = [
         'name',
+        'description',
         'code_prefix',
         'barcode_prefix',
+        'active',
         'rounding_override',
     ];
 
     protected $casts = [
+        'active' => 'boolean',
         'rounding_override' => 'decimal:2',
     ];
 

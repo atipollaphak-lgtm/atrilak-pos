@@ -1,105 +1,111 @@
 @extends('adminlte::page')
 
-@section('title', 'หมวดสินค้า')
+@section('title', 'หมวดหมู่สินค้า')
+
+@section('css')
+    <link rel="stylesheet" href="{{ asset('css/categories.css') }}">
+@stop
 
 @section('content_header')
-<h1>หมวดสินค้า</h1>
+    <div class="category-page-heading d-flex align-items-center justify-content-between">
+        <div>
+            <h1 class="mb-1">หมวดหมู่สินค้า</h1>
+            <p class="text-muted mb-0">จัดการหมวดหมู่และ Prefix สำหรับข้อมูลสินค้าใหม่</p>
+        </div>
+        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#categoryModal" data-category-mode="create">
+            <i class="fas fa-plus mr-1"></i> เพิ่มหมวดหมู่
+        </button>
+    </div>
 @stop
 
 @section('content')
-@if(session('success'))
-    <div class="alert alert-success">{{ session('success') }}</div>
-@endif
+    <div class="card category-workspace-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="text-muted">ทั้งหมด <span id="category-count">{{ $categories->count() }}</span> รายการ</div>
+                <span class="badge badge-light">Prefix ใช้กับสินค้าใหม่เท่านั้น</span>
+            </div>
 
-@if($errors->any())
-    <div class="alert alert-danger">
-        <ul class="mb-0">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-@endif
-
-<div class="card">
-    <div class="card-header">
-        <form method="POST" action="{{ route('categories.store') }}">
-            @csrf
-            <div class="row align-items-end">
-                <div class="col-md-3">
-                    <label>ชื่อหมวดสินค้า</label>
-                    <input type="text" name="name" class="form-control" placeholder="ชื่อหมวดสินค้า" required>
-                </div>
-                <div class="col-md-2">
-                    <label>Code Prefix</label>
-                    <input type="text" name="code_prefix" class="form-control" placeholder="เช่น CEM" maxlength="20">
-                </div>
-                <div class="col-md-2">
-                    <label>Barcode Prefix</label>
-                    <input type="text" name="barcode_prefix" class="form-control" placeholder="เช่น 001" maxlength="3">
-                </div>
-                <div class="col-md-3">
-                    <label>การปัดเศษเมื่อขายตามโซน</label>
-                    <select name="rounding_override" class="form-control">
-                        <option value="">ใช้ค่าของโซน</option>
-                        @foreach($roundingOverrides as $increment)
-                            <option value="{{ $increment }}">{{ number_format($increment, 2) }} บาท</option>
-                        @endforeach
-                    </select>
-                    <small class="text-muted">มีผลเฉพาะการขายแบบจัดส่ง ไม่กระทบราคาปกติหรือกฎราคาหมวดสินค้าเดิม</small>
-                </div>
-                <div class="col-md-2">
-                    <button class="btn btn-primary">เพิ่มหมวดสินค้า</button>
+            <div class="category-toolbar mb-3">
+                <label for="category-search">ค้นหา</label>
+                <div class="input-group">
+                    <div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-search"></i></span></div>
+                    <input id="category-search" type="search" class="form-control" placeholder="ชื่อหมวดหมู่, Code Prefix หรือ Barcode Prefix">
                 </div>
             </div>
-        </form>
+
+            <div class="table-responsive">
+                <table class="table category-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Code Prefix</th>
+                            <th>Barcode Prefix</th>
+                            <th>Product Count</th>
+                            <th>Status</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="category-table-body">
+                        @forelse ($categories as $category)
+                            <tr data-category-row data-product-count="{{ $category->products_count }}" data-search="{{ strtolower($category->name.' '.$category->code_prefix.' '.$category->barcode_prefix) }}">
+                                <td>
+                                    <div class="font-weight-bold">{{ $category->name }}</div>
+                                    @if ($category->description)
+                                        <div class="small text-muted">{{ $category->description }}</div>
+                                    @endif
+                                </td>
+                                <td><span class="badge badge-light">{{ $category->code_prefix ?: '—' }}</span></td>
+                                <td><span class="badge badge-light">{{ $category->barcode_prefix ?: '—' }}</span></td>
+                                <td>{{ number_format($category->products_count) }}</td>
+                                <td><span class="badge {{ $category->active ? 'badge-success' : 'badge-secondary' }}">{{ $category->active ? 'เปิดใช้งาน' : 'ปิดใช้งาน' }}</span></td>
+                                <td class="text-right text-nowrap">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#categoryModal" data-category-mode="edit" data-category='@json($category)'>
+                                        <i class="fas fa-edit"></i> แก้ไข
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" data-category-delete data-url="{{ route('categories.destroy', $category) }}" data-name="{{ $category->name }}" data-product-count="{{ $category->products_count }}">
+                                        <i class="fas fa-trash"></i> ลบ
+                                    </button>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr id="category-empty-row"><td colspan="6" class="text-center text-muted py-5">ยังไม่มีหมวดหมู่สินค้า</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
-    <div class="card-body">
-        <table class="table table-bordered">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>ชื่อหมวดสินค้า</th>
-                    <th>Code Prefix</th>
-                    <th>Barcode Prefix</th>
-                    <th>ปัดเศษตามโซน</th>
-                    <th width="360">จัดการ</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach($categories as $category)
-                    <tr>
-                        <td>{{ $category->id }}</td>
-                        <td>{{ $category->name }}</td>
-                        <td>{{ $category->code_prefix ?: '—' }}</td>
-                        <td>{{ $category->barcode_prefix ?: '—' }}</td>
-                        <td>{{ $category->rounding_override ? number_format($category->rounding_override, 2).' บาท' : 'ใช้ค่าของโซน' }}</td>
-                        <td>
-                            <form action="{{ route('categories.update', $category) }}" method="POST" class="d-inline-flex flex-wrap align-items-center">
-                                @csrf
-                                @method('PUT')
-                                <input type="text" name="name" value="{{ $category->name }}" required>
-                                <input type="text" name="code_prefix" value="{{ $category->code_prefix }}" maxlength="20" placeholder="Code Prefix">
-                                <input type="text" name="barcode_prefix" value="{{ $category->barcode_prefix }}" maxlength="3" placeholder="Barcode Prefix">
-                                <select name="rounding_override" class="form-control d-inline-block" style="width: 150px">
-                                    <option value="">ใช้ค่าของโซน</option>
-                                    @foreach($roundingOverrides as $increment)
-                                        <option value="{{ $increment }}" @selected((string) $category->rounding_override === (string) $increment)>{{ number_format($increment, 2) }} บาท</option>
-                                    @endforeach
-                                </select>
-                                <button class="btn btn-warning btn-sm">แก้ไข</button>
-                            </form>
-                            <form action="{{ route('categories.destroy', $category) }}" method="POST" class="d-inline">
-                                @csrf
-                                @method('DELETE')
-                                <button class="btn btn-danger btn-sm" onclick="return confirm('ลบข้อมูล?')">ลบ</button>
-                            </form>
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
+    <div class="modal fade category-modal" id="categoryModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div><h5 class="modal-title" id="categoryModalTitle">เพิ่มหมวดหมู่</h5><small class="text-muted">ข้อมูลพื้นฐานของหมวดหมู่</small></div>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <form id="categoryModalForm" method="POST" action="{{ route('categories.store') }}">
+                    @csrf
+                    <input type="hidden" id="categoryModalMethod" name="_method" value="POST">
+                    <div class="modal-body">
+                        <div id="categoryModalErrors" class="alert alert-danger d-none"></div>
+                        <div class="row">
+                            <div class="col-md-6 form-group"><label for="categoryModalName">ชื่อหมวดหมู่</label><input id="categoryModalName" name="name" class="form-control" required maxlength="255"></div>
+                            <div class="col-md-6 form-group"><label for="categoryModalCode">Code Prefix</label><input id="categoryModalCode" name="code_prefix" class="form-control text-uppercase" maxlength="20" pattern="[A-Z]+"><small class="form-text text-muted">สร้างอัตโนมัติจากชื่อ แก้ไขได้</small></div>
+                            <div class="col-md-6 form-group"><label for="categoryModalBarcode">Barcode Prefix</label><input id="categoryModalBarcode" name="barcode_prefix" class="form-control" maxlength="3" inputmode="numeric" pattern="[0-9]{3}"><small class="form-text text-muted">เลข 3 หลักและต้องไม่ซ้ำ</small></div>
+                            <div class="col-md-6 form-group"><label for="categoryModalActive">สถานะ</label><div class="custom-control custom-switch mt-2"><input type="checkbox" class="custom-control-input" id="categoryModalActive" name="active" value="1" checked><label class="custom-control-label" for="categoryModalActive">เปิดใช้งาน</label></div></div>
+                            <div class="col-12 form-group"><label for="categoryModalDescription">คำอธิบาย</label><textarea id="categoryModalDescription" name="description" class="form-control" rows="3" maxlength="5000"></textarea></div>
+                            <div class="col-12 form-group"><label for="categoryModalRounding">การปัดเศษตามโซน</label><select id="categoryModalRounding" name="rounding_override" class="form-control"><option value="">ใช้ค่าของโซน</option>@foreach ($roundingOverrides as $increment)<option value="{{ $increment }}">{{ number_format($increment, 2) }} บาท</option>@endforeach</select></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-light" data-dismiss="modal">ยกเลิก</button><button type="submit" class="btn btn-primary" id="categoryModalSubmit"><i class="fas fa-save mr-1"></i> บันทึก</button></div>
+                </form>
+            </div>
+        </div>
     </div>
-</div>
+@stop
+
+@section('js')
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="{{ asset('js/modules/category-management.js') }}"></script>
 @stop

@@ -1,0 +1,9 @@
+.category-page-heading h1 { font-weight: 700; }
+.category-workspace-card { border: 0; box-shadow: 0 8px 30px rgba(33, 52, 72, .08); }
+.category-toolbar { max-width: 520px; }
+.category-toolbar label, .category-table th { color: #667085; font-size: .78rem; font-weight: 700; }
+.category-table th { text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; }
+.category-table td { vertical-align: middle; }
+.category-modal .modal-header { background: #f8fafc; }
+.category-modal [readonly], .category-modal :disabled { background: #f8fafc; }
+@media (max-width: 576px) { .category-page-heading { align-items: flex-start !important; gap: 1rem; } .category-page-heading .btn { white-space: nowrap; } }
