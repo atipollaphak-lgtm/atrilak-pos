@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CategoryPricingRule;
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
 use App\Models\StockMovement;
@@ -23,6 +24,15 @@ class ProductUpdateService
             $newStock = $data['stock_qty'];
             $oldCostPrice = $lockedProduct->cost_price;
             $oldSellingPrice = $lockedProduct->selling_price;
+
+            if ($lockedProduct->pricing_source === 'category'
+                && (int) $lockedProduct->category_id !== (int) $data['category_id']
+                && ! CategoryPricingRule::query()
+                    ->where('category_id', $data['category_id'])
+                    ->where('active', true)
+                    ->exists()) {
+                throw new \DomainException('หมวดใหม่ยังไม่ได้ตั้งค่าราคา ไม่สามารถย้ายสินค้าที่ใช้กฎหมวดได้');
+            }
 
             $lockedProduct->update([
                 'name' => $data['name'],

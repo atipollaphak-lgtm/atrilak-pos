@@ -2,6 +2,7 @@
 
 namespace App\Services\Pricing;
 
+use App\Models\CategoryPricingRule;
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
 use Brick\Math\BigDecimal;
@@ -11,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 
 class PricingService
 {
+    public const CATEGORY_SOURCE = 'category';
+
     public const METHODS = ['percentage', 'fixed', 'manual'];
 
     public const ROUNDING_DIRECTIONS = ['up', 'down', 'nearest'];
@@ -30,7 +33,7 @@ class PricingService
         );
 
         $currentPrice = $product->selling_price !== null ? $this->money($product->selling_price) : null;
-        $status = $this->status($product);
+        $status = $this->status($product, $calculation['final_price'], $config);
 
         if (in_array($status, ['normal', 'inactive'], true) && $currentPrice !== null && $cost !== null) {
             [$calculation['profit_amount'], $calculation['profit_percent']] = $this->profitForPrice($cost, $currentPrice);
@@ -45,6 +48,7 @@ class PricingService
             'average_cost' => $cost === null ? null : $this->money($cost),
             'old_average_cost' => $product->pricing_reviewed_cost === null ? null : $this->money($product->pricing_reviewed_cost),
             'pricing_method' => $config['pricing_method'],
+            'pricing_source' => $config['pricing_source'],
             'pricing_value' => $config['pricing_value'],
             'rounding_direction' => $config['rounding_direction'],
             'rounding_unit' => $config['rounding_unit'],
@@ -59,6 +63,8 @@ class PricingService
             'suggested_price' => $calculation['final_price'],
             'final_price' => $calculation['final_price'],
             'changed' => $currentPrice !== $calculation['final_price'],
+            'category_rule_available' => $config['category_rule_available'],
+            'category_rule' => $config['category_rule'],
             ...$calculation,
         ];
     }
@@ -123,7 +129,7 @@ class PricingService
         ];
     }
 
-    public function status(Product $product): string
+    public function status(Product $product, ?string $suggestedPrice = null, ?array $configuration = null): string
     {
         if (! $product->active) {
             return 'inactive';
@@ -139,6 +145,17 @@ class PricingService
             return 'pending_review';
         }
 
+        if (($configuration['pricing_source'] ?? null) === self::CATEGORY_SOURCE) {
+            if (($configuration['category_rule_available'] ?? true) === false) {
+                return 'pending_review';
+            }
+
+            if ($suggestedPrice !== null && $product->selling_price !== null
+                && ! $this->sameMoney($product->selling_price, $suggestedPrice)) {
+                return 'pending_review';
+            }
+        }
+
         return 'normal';
     }
 
@@ -149,7 +166,13 @@ class PricingService
             if (! $locked->active) {
                 throw new \DomainException('ไม่สามารถแก้ไขราคาสินค้าที่ไม่ใช้งานได้');
             }
-            $preview = $this->calculate($locked, null, $data);
+            $source = $data['pricing_method'] === self::CATEGORY_SOURCE
+                ? self::CATEGORY_SOURCE
+                : ($data['pricing_method'] === 'manual' ? 'fixed' : 'product');
+            $preview = $this->calculate($locked->load('category.categoryPricingRule'), null, [
+                ...$data,
+                'pricing_source' => $source,
+            ]);
 
             if ($preview['final_price'] === null) {
                 throw new \DomainException('ไม่สามารถคำนวณราคาได้ เนื่องจากยังไม่มีต้นทุนเฉลี่ยหรือค่าตั้งราคา');
@@ -160,6 +183,7 @@ class PricingService
 
             $locked->update([
                 'pricing_method' => $data['pricing_method'],
+                'pricing_source' => $source,
                 'pricing_value' => $data['pricing_value'],
                 'rounding_direction' => $data['rounding_direction'] ?? null,
                 'rounding_unit' => $data['rounding_unit'] ?? null,
@@ -176,7 +200,12 @@ class PricingService
                 'old_average_cost' => $oldCost,
                 'average_cost' => $preview['average_cost'],
                 'pricing_method' => $preview['pricing_method'],
+                'pricing_source' => $preview['pricing_source'],
                 'pricing_value' => $preview['pricing_value'],
+                'category_pricing_rule_id' => $preview['category_rule']['id'] ?? null,
+                'category_id' => $locked->category_id,
+                'category_name_snapshot' => $locked->category?->name,
+                'category_rule_value' => $preview['category_rule']['pricing_value'] ?? null,
                 'rounding_direction' => $preview['rounding_direction'],
                 'rounding_unit' => $preview['rounding_unit'],
                 'profit_amount' => $preview['profit_amount'],
@@ -189,12 +218,56 @@ class PricingService
                 'remark' => 'Pricing review',
             ]);
 
-            return $this->calculate($locked->fresh('category'));
+            return $this->calculate($locked->fresh('category.categoryPricingRule'));
         });
     }
 
     public function configuration(Product $product, ?array $overrides = null): array
     {
+        $source = $overrides['pricing_source']
+            ?? (($overrides['pricing_method'] ?? null) === self::CATEGORY_SOURCE ? self::CATEGORY_SOURCE : null)
+            ?? $product->pricing_source;
+
+        if ($source === self::CATEGORY_SOURCE) {
+            $rule = $product->category?->categoryPricingRule;
+
+            if (! $rule && $product->category_id) {
+                $rule = CategoryPricingRule::query()
+                    ->where('category_id', $product->category_id)
+                    ->where('active', true)
+                    ->first();
+            }
+
+            if (! $rule) {
+                return [
+                    'pricing_source' => self::CATEGORY_SOURCE,
+                    'pricing_method' => 'percentage',
+                    'pricing_value' => null,
+                    'rounding_direction' => null,
+                    'rounding_unit' => null,
+                    'category_rule_available' => false,
+                    'category_rule' => null,
+                ];
+            }
+
+            return [
+                'pricing_source' => self::CATEGORY_SOURCE,
+                'pricing_method' => $rule->pricing_method,
+                'pricing_value' => $this->money($rule->pricing_value),
+                'rounding_direction' => $rule->rounding_direction,
+                'rounding_unit' => $rule->rounding_unit === null ? null : $this->money($rule->rounding_unit),
+                'category_rule_available' => true,
+                'category_rule' => [
+                    'id' => $rule->id,
+                    'pricing_method' => $rule->pricing_method,
+                    'pricing_value' => $this->money($rule->pricing_value),
+                    'rounding_direction' => $rule->rounding_direction,
+                    'rounding_unit' => $rule->rounding_unit === null ? null : $this->money($rule->rounding_unit),
+                    'active' => (bool) $rule->active,
+                ],
+            ];
+        }
+
         $method = $overrides['pricing_method'] ?? $product->pricing_method ?? 'percentage';
         $value = $overrides['pricing_value'] ?? $product->pricing_value;
 
@@ -203,10 +276,13 @@ class PricingService
         }
 
         return [
+            'pricing_source' => $source ?? ($method === 'manual' ? 'fixed' : 'product'),
             'pricing_method' => $method,
             'pricing_value' => $value === null ? null : $this->money($value),
             'rounding_direction' => $overrides['rounding_direction'] ?? $product->rounding_direction ?? 'up',
             'rounding_unit' => $overrides['rounding_unit'] ?? $product->rounding_unit ?? '5',
+            'category_rule_available' => true,
+            'category_rule' => null,
         ];
     }
 
@@ -275,5 +351,10 @@ class PricingService
     private function money(mixed $value): string
     {
         return BigDecimal::of((string) $value)->toScale(2, RoundingMode::HALF_UP)->__toString();
+    }
+
+    private function sameMoney(mixed $left, mixed $right): bool
+    {
+        return BigDecimal::of((string) $left)->compareTo(BigDecimal::of((string) $right)) === 0;
     }
 }

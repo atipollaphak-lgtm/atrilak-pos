@@ -399,6 +399,26 @@ Route::middleware(['auth'])->group(function () {
         )->name('pricing-management.history');
 
         Route::get(
+            '/pricing-management/category-rules',
+            [PricingManagementController::class, 'categoryRules']
+        )->name('pricing-management.category-rules');
+
+        Route::post(
+            '/pricing-management/category-rules',
+            [PricingManagementController::class, 'storeCategoryRule']
+        )->name('pricing-management.category-rules.store');
+
+        Route::put(
+            '/pricing-management/category-rules/{categoryPricingRule}',
+            [PricingManagementController::class, 'updateCategoryRule']
+        )->name('pricing-management.category-rules.update');
+
+        Route::delete(
+            '/pricing-management/category-rules/{categoryPricingRule}',
+            [PricingManagementController::class, 'destroyCategoryRule']
+        )->name('pricing-management.category-rules.destroy');
+
+        Route::get(
             '/pricing-management/{product}',
             [PricingManagementController::class, 'show']
         )->name('pricing-management.show');

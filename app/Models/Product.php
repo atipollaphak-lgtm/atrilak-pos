@@ -18,6 +18,7 @@ class Product extends Model
         'cost_price',
         'selling_price',
         'pricing_method',
+        'pricing_source',
         'pricing_value',
         'rounding_direction',
         'rounding_unit',

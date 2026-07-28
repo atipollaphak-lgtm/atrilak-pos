@@ -16,4 +16,9 @@ class Category extends Model
     {
         return $this->hasMany(Product::class);
     }
+
+    public function categoryPricingRule()
+    {
+        return $this->hasOne(CategoryPricingRule::class)->where('active', true);
+    }
 }
