@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 trait CreatesBusinessRuleTestSchema
@@ -68,6 +69,7 @@ trait CreatesBusinessRuleTestSchema
             $table->decimal('delivery_fee', 12, 2)->default(0);
             $table->string('delivery_type')->default('delivery');
             $table->decimal('discount', 12, 2)->default(0);
+            $table->text('notes')->nullable();
             $table->string('payment_method', 20)->nullable();
             $table->decimal('cash_amount', 15, 2)->nullable();
             $table->decimal('promptpay_amount', 15, 2)->nullable();
@@ -177,20 +179,25 @@ trait CreatesBusinessRuleTestSchema
     protected function dropBusinessRuleTestSchema(): void
     {
         foreach ([
+            'daily_payment_closing_sales',
+            'daily_payment_closings',
+            'technician_payment_batches',
             'technician_commissions',
             'technician_commission_rules',
-            'customer_delivery_addresses',
-            'delivery_zones',
+            'quotation_items',
+            'quotations',
             'stock_movements',
             'sale_items',
             'sales',
+            'customer_delivery_addresses',
+            'delivery_zones',
             'technicians',
             'customers',
             'settings',
             'products',
             'categories',
         ] as $table) {
-            Schema::dropIfExists($table);
+            DB::statement('DROP TABLE IF EXISTS "'.$table.'" CASCADE');
         }
     }
 }

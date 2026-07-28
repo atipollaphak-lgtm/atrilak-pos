@@ -18,6 +18,7 @@ use App\Http\Controllers\StockCountController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\SaleController;
+use App\Http\Controllers\SaleV3Controller;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\StockMovementController;
 use App\Http\Controllers\BackupController;
@@ -75,12 +76,20 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/sales-v2', [SaleController::class, 'indexV2'])
             ->name('sales.v2');
 
+        Route::get('/sales-v3', [SaleV3Controller::class, 'index'])
+            ->name('sales.v3');
+
 
 
         Route::post(
             '/sales-v2/store',
             [SaleController::class, 'storeV2']
         )->name('sales.v2.store');
+
+        Route::post(
+            '/sales-v3/store',
+            [SaleV3Controller::class, 'store']
+        )->name('sales.v3.store');
 
         Route::resource('sales', SaleController::class)->except('destroy');
 
@@ -131,6 +140,11 @@ Route::middleware(['auth'])->group(function () {
                 'getByCustomer'
             ]
         )->name('sales.v2.customer-delivery-addresses.json');
+
+        Route::get(
+            '/sales-v3/customers/{customer}/delivery-addresses-json',
+            [CustomerDeliveryAddressController::class, 'getByCustomer']
+        )->name('sales.v3.customer-delivery-addresses.json');
     });
 
 

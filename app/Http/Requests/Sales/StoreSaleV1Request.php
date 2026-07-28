@@ -21,9 +21,15 @@ class StoreSaleV1Request extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge([
+        $normalized = [
             'normalized_items' => $this->normalizeParallelItems(),
-        ]);
+        ];
+
+        if ($this->has('notes')) {
+            $normalized['notes'] = $this->normalizedNotes();
+        }
+
+        $this->merge($normalized);
     }
 
     public function rules(): array
@@ -38,6 +44,7 @@ class StoreSaleV1Request extends FormRequest
             'delivery_zone_id' => ['nullable', 'integer'],
             'discount' => ['nullable', $this->decimalRule(2, 10, false)],
             'delivery_fee' => ['nullable', $this->decimalRule(2, 10, false)],
+            'notes' => ['nullable', 'string', 'max:2000'],
             'payment_method' => ['required', 'string', 'in:cash,promptpay,mixed'],
             'cash_amount' => ['required', $this->decimalRule(2, 13, false)],
             'promptpay_amount' => ['required', $this->decimalRule(2, 13, false)],
@@ -153,5 +160,12 @@ class StoreSaleV1Request extends FormRequest
     {
         return (is_int($value) && $value > 0)
             || (is_string($value) && preg_match('/^[1-9]\d*$/D', $value) === 1);
+    }
+
+    private function normalizedNotes(): ?string
+    {
+        $notes = trim((string) $this->input('notes'));
+
+        return $notes === '' ? null : $notes;
     }
 }

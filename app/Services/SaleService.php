@@ -301,6 +301,7 @@ class SaleService
         $sale->delivery_fee = $deliveryFee;
         $sale->delivery_type = $deliveryType;
         $sale->discount = $discount;
+        $sale->notes = $data['notes'] ?? null;
 
         if ($payment !== null) {
             $sale->fill($payment);

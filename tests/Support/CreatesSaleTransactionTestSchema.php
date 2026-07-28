@@ -102,6 +102,7 @@ trait CreatesSaleTransactionTestSchema
             $table->decimal('delivery_fee', 12, 2)->default(0);
             $table->string('delivery_type')->default('delivery');
             $table->decimal('discount', 12, 2)->default(0);
+            $table->text('notes')->nullable();
             $table->bigInteger('revision')->default(1);
             $table->string('status', 20)->default('active');
             $table->timestamp('voided_at')->nullable();

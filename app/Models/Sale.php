@@ -24,6 +24,7 @@ class Sale extends Model
         'delivery_fee',
         'delivery_type',
         'discount',
+        'notes',
         'status',
         'voided_at',
         'voided_by',
