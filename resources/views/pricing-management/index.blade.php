@@ -68,5 +68,6 @@
 @stop
 
 @section('js')
+    <script src="{{ asset('js/modules/pricing-rounding.js') }}"></script>
     <script src="{{ asset('js/modules/pricing-management.js') }}"></script>
 @stop

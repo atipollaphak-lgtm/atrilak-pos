@@ -7,21 +7,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const money = value => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(2);
     const statusLabel = { pending_review: 'รอทบทวน', unpriced: 'ยังไม่ตั้งราคา', normal: 'ปกติ', inactive: 'ไม่ใช้งาน' };
 
-    function roundPrice(value, direction, unit) {
-        const factor = Number(unit);
-        if (!factor) return value;
-        const quotient = value / factor;
-        const rounded = direction === 'up' ? Math.ceil(quotient) : direction === 'down' ? Math.floor(quotient) : Math.round(quotient);
-        return rounded * factor;
-    }
-
     function calculatePreview() {
         const cost = Number(product?.average_cost);
         const value = Number(document.getElementById('pricingValue').value);
         const method = document.getElementById('pricingMethod').value;
         if (!Number.isFinite(cost) || !Number.isFinite(value)) return null;
         const before = method === 'percentage' ? cost + (cost * value / 100) : method === 'fixed' ? cost + value : value;
-        const final = method === 'manual' ? before : roundPrice(before, document.getElementById('roundingDirection').value, document.getElementById('roundingUnit').value);
+        const final = method === 'manual' ? before : window.PricingRounding.roundPrice(before, document.getElementById('roundingDirection').value, document.getElementById('roundingUnit').value);
         const profit = final - cost;
         return { before, final, profit, percent: cost ? profit / cost * 100 : null };
     }
@@ -56,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('pricingMethod').value = product.pricing_method || 'percentage';
         document.getElementById('pricingValue').value = product.pricing_value || '';
         document.getElementById('roundingDirection').value = product.rounding_direction || 'up';
-        document.getElementById('roundingUnit').value = product.rounding_unit || '5';
+        window.PricingRounding.selectOption(document.getElementById('roundingUnit'), product.rounding_unit || '5');
         document.getElementById('drawerSave').disabled = product.status === 'inactive';
         updateMethodFields();
         drawer.classList.add('open');
