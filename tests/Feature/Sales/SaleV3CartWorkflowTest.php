@@ -16,6 +16,9 @@ class SaleV3CartWorkflowTest extends TestCase
         $this->assertStringContainsString('createSubmissionGuard', $script);
         $this->assertStringContainsString('ZonePricingMath', file_get_contents(base_path('public/js/modules/zone-pricing.js')));
         $this->assertStringContainsString('rounding_increment', $script);
+        $this->assertStringContainsString('category_rounding_override', $script);
+        $this->assertStringContainsString('state.zone?.rounding_increment', $script);
+        $this->assertStringContainsString('category?->rounding_override', file_get_contents(base_path('resources/views/sales-v3/partials/product-grid.blade.php')));
         $this->assertStringContainsString('sales.v3.store', file_get_contents(base_path('routes/web.php')));
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services\Sales;
 
+use App\Models\Category;
 use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Models\ProductPriceTier;
@@ -76,6 +77,62 @@ class ZonePricingServiceTest extends TestCase
         $this->assertSame('0.00', $result['zone_markup_percent']);
         $this->assertSame('6.30', $result['zone_unit_price']);
         $this->assertSame('0.00', $result['rounding_increment']);
+    }
+
+    public function test_delivery_uses_category_rounding_override_after_zone_markup(): void
+    {
+        $product = new Product([
+            'selling_price' => '6.30',
+            'rounding_direction' => 'up',
+            'rounding_unit' => '0.01',
+        ]);
+        $product->setRelation('category', new Category(['rounding_override' => '0.25']));
+        $zone = new DeliveryZone([
+            'price_markup_percent' => '3.00',
+            'rounding_increment' => '5.00',
+            'minimum_profit' => '300.00',
+            'active' => true,
+        ]);
+
+        $result = app(ZonePricingService::class)->priceLine(
+            ['qty' => '1.00'],
+            $product,
+            null,
+            $zone,
+            false
+        );
+
+        $this->assertSame('6.48900000', $result['zone_unit_price_before_rounding']);
+        $this->assertSame('6.50', $result['zone_unit_price']);
+        $this->assertSame('0.25', $result['rounding_increment']);
+    }
+
+    public function test_delivery_falls_back_to_zone_rounding_when_category_override_is_null(): void
+    {
+        $product = new Product([
+            'selling_price' => '162.00',
+            'rounding_direction' => 'up',
+            'rounding_unit' => '0.01',
+        ]);
+        $product->setRelation('category', new Category(['rounding_override' => null]));
+        $zone = new DeliveryZone([
+            'price_markup_percent' => '3.00',
+            'rounding_increment' => '5.00',
+            'minimum_profit' => '300.00',
+            'active' => true,
+        ]);
+
+        $result = app(ZonePricingService::class)->priceLine(
+            ['qty' => '1.00'],
+            $product,
+            null,
+            $zone,
+            false
+        );
+
+        $this->assertSame('166.86000000', $result['zone_unit_price_before_rounding']);
+        $this->assertSame('170.00', $result['zone_unit_price']);
+        $this->assertSame('5.00', $result['rounding_increment']);
     }
 
     public function test_zone_markup_is_applied_after_tier_price_and_rounded_with_decimal_arithmetic(): void

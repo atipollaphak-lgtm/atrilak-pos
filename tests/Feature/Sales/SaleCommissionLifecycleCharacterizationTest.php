@@ -246,6 +246,79 @@ class SaleCommissionLifecycleCharacterizationTest extends TestCase
         $this->assertGreaterThan($beforeRevision, $updated->revision);
     }
 
+    public function test_category_rounding_snapshot_is_preserved_when_sale_is_edited(): void
+    {
+        $category = Category::query()->create([
+            'name' => 'Snapshot rounding category',
+            'rounding_override' => '0.25',
+            'active' => true,
+        ]);
+        $product = Product::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Snapshot rounding product',
+            'unit' => 'piece',
+            'cost_price' => '4.00',
+            'selling_price' => '6.30',
+            'stock_qty' => '100.0000',
+            'minimum_stock' => '0.0000',
+            'active' => true,
+        ]);
+        $customer = Customer::query()->create(['name' => 'Snapshot rounding customer', 'active' => true]);
+        $zone = DeliveryZone::query()->create([
+            'name' => 'Snapshot rounding zone',
+            'price_markup_percent' => '3.00',
+            'rounding_increment' => '5.00',
+            'minimum_profit' => '300.00',
+            'active' => true,
+        ]);
+        $address = CustomerDeliveryAddress::query()->create([
+            'customer_id' => $customer->id,
+            'delivery_zone_id' => $zone->id,
+            'name' => 'Snapshot rounding address',
+        ]);
+        $this->assertSame('0.25', $product->fresh()->category->rounding_override);
+        $payload = [
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'sale_date' => '2026-07-15',
+            'delivery_type' => 'delivery',
+            'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '304.00',
+            'received_amount' => '0.00',
+            'items' => [[
+                'product_id' => $product->id,
+                'product_unit_id' => null,
+                'qty' => '1.00',
+                'selling_price' => '6.50',
+            ]],
+        ];
+        $sale = app(SaleService::class)->createSale($payload);
+
+        $this->assertSame('0.25', $sale->delivery_zone_rounding_increment_snapshot);
+        $category->update(['rounding_override' => '10.00']);
+        $zone->update(['rounding_increment' => '10.00', 'price_markup_percent' => '8.00']);
+
+        $item = $sale->items()->sole();
+        $updated = app(SaleService::class)->updateSale($sale, [
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'sale_date' => '2026-07-15',
+            'delivery_fee' => $sale->delivery_fee,
+            'discount' => $sale->discount,
+            'items' => [[
+                'sale_item_id' => $item->id,
+                'product_id' => $product->id,
+                'product_unit_id' => null,
+                'qty' => '1.00',
+                'selling_price' => '6.50',
+            ]],
+        ], (int) $sale->fresh()->revision);
+
+        $this->assertSame('0.25', $updated->fresh()->delivery_zone_rounding_increment_snapshot);
+    }
+
     public function test_failure_during_pending_commission_refresh_rolls_back_sale_stock_and_items(): void
     {
         [$sale, , $commission] = $this->createCommissionedSale();

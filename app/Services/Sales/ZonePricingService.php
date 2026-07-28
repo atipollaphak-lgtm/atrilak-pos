@@ -48,9 +48,14 @@ class ZonePricingService
         $beforeRound = $basePrice->multipliedBy(
             BigDecimal::one()->plus($markup->dividedBy('100', 8, RoundingMode::HALF_UP))
         );
+        if (! $product->relationLoaded('category') && $product->category_id !== null) {
+            $product->load('category');
+        }
+
+        $categoryIncrement = $product->category?->rounding_override;
         $zoneIncrement = $pickup || $zone === null
             ? BigDecimal::zero()
-            : BigDecimal::of((string) ($zone->rounding_increment ?: '0.25'));
+            : BigDecimal::of((string) ($categoryIncrement ?: $zone->rounding_increment ?: '0.25'));
         $rounded = $zoneIncrement->isZero()
             ? $this->roundPrice(
                 $beforeRound,

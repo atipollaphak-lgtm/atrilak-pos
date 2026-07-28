@@ -124,6 +124,7 @@ class SaleService
                     array_column($items, 'product_id')
                 );
                 $lockedProducts->load('productUnits');
+                $lockedProducts->load('category');
                 if (Schema::hasTable('product_price_tiers')) {
                     $lockedProducts->load('productUnits.priceTiers');
                 }
@@ -253,14 +254,17 @@ class SaleService
             ->all();
         [$zone, $address] = $this->resolveZoneContext($data);
         $pickup = ($data['delivery_type'] ?? 'delivery') === 'pickup';
-        $items = collect($items)->map(function (array $item) use ($lockedProducts, $zone, $pickup): array {
+        $effectiveRoundingIncrement = null;
+        $items = collect($items)->map(function (array $item) use (&$effectiveRoundingIncrement, $lockedProducts, $zone, $pickup): array {
             if ($pickup) {
                 return $item;
             }
 
             $product = $lockedProducts->get((int) $item['product_id']);
+            $product?->loadMissing('category');
             $unit = $product?->productUnits?->firstWhere('id', $item['product_unit_id'] ?? null);
             $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $zone, $pickup);
+            $effectiveRoundingIncrement ??= $pricing['rounding_increment'];
 
             return [
                 ...$item,
@@ -341,7 +345,9 @@ class SaleService
         $sale->delivery_zone_id = $deliveryZoneId;
         $sale->delivery_zone_name_snapshot = $zone?->name;
         $sale->delivery_zone_markup_percent_snapshot = $zone?->price_markup_percent;
-        $sale->delivery_zone_rounding_increment_snapshot = $pickup ? null : $zone?->rounding_increment;
+        $sale->delivery_zone_rounding_increment_snapshot = $pickup
+            ? null
+            : ($effectiveRoundingIncrement ?? $zone?->rounding_increment);
         $sale->delivery_zone_minimum_profit_snapshot = $zone?->minimum_profit;
         $sale->notes = $data['notes'] ?? null;
 
@@ -712,10 +718,14 @@ class SaleService
         ]);
         $updates['delivery_type'] = $deliveryType;
         $updates['delivery_zone_id'] = $zone?->id;
-        $updates['delivery_zone_name_snapshot'] = $zone?->name;
-        $updates['delivery_zone_markup_percent_snapshot'] = $zone?->price_markup_percent;
-        $updates['delivery_zone_rounding_increment_snapshot'] = $zone?->rounding_increment;
-        $updates['delivery_zone_minimum_profit_snapshot'] = $zone?->minimum_profit;
+        $updates['delivery_zone_name_snapshot'] = $sale->delivery_zone_name_snapshot ?? $zone?->name;
+        $updates['delivery_zone_markup_percent_snapshot'] = $sale->delivery_zone_markup_percent_snapshot
+            ?? $zone?->price_markup_percent;
+        $updates['delivery_zone_rounding_increment_snapshot'] = $deliveryType === 'pickup'
+            ? null
+            : ($sale->delivery_zone_rounding_increment_snapshot ?? $zone?->rounding_increment);
+        $updates['delivery_zone_minimum_profit_snapshot'] = $sale->delivery_zone_minimum_profit_snapshot
+            ?? $zone?->minimum_profit;
 
         if ($payment !== null) {
             $updates = array_merge($updates, $payment);
