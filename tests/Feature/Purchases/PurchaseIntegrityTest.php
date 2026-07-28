@@ -36,6 +36,8 @@ class PurchaseIntegrityTest extends TestCase
         $this->assertSame('75.00', $item->total);
         $this->assertSame('12.5000', $product->fresh()->stock_qty);
         $this->assertSame('22.00', $product->fresh()->cost_price);
+        $this->assertSame('50.00', $product->fresh()->selling_price);
+        $this->assertSame('20.00', $product->fresh()->pricing_reviewed_cost);
         $this->assertSame('2.5000', $movement->qty);
         $this->assertSame('10.0000', $movement->stock_before);
         $this->assertSame('12.5000', $movement->stock_after);

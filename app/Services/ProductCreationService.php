@@ -21,6 +21,9 @@ class ProductCreationService
 
             $product = Product::query()->create([
                 ...$data,
+                'pricing_reviewed_cost' => ! empty($data['selling_price'])
+                    ? ($data['cost_price'] ?? null)
+                    : null,
                 ...$numbers,
             ]);
 

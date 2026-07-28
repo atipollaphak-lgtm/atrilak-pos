@@ -2,11 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\ProductPriceHistory;
 use App\Models\Purchase;
 use App\Models\StockMovement;
 use App\Services\Pricing\AverageCostService;
-use App\Services\Pricing\PricingService;
 use App\Services\Purchases\PurchaseValidationService;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
@@ -17,14 +15,13 @@ class PurchaseService
 {
     public function __construct(
         private AverageCostService $averageCostService,
-        private PricingService $pricingService,
         private StockLockService $stockLockService,
         private PurchaseValidationService $purchaseValidationService
     ) {}
 
     public function create(array $data, ?int $userId = null): Purchase
     {
-        return DB::transaction(function () use ($data, $userId) {
+        return DB::transaction(function () use ($data) {
             $items = $this->purchaseValidationService->normalizeItems($data['items'] ?? []);
             $purchaseDate = $this->purchaseValidationService->purchaseDate($data['purchase_date'] ?? null);
             $lockedProducts = $this->stockLockService->lockProducts(
@@ -60,6 +57,7 @@ class PurchaseService
                 ]);
 
                 $stockBefore = $this->stockQuantity($product->stock_qty);
+                $oldAverageCost = $product->cost_price;
                 $averageCost = $this->averageCostService->calculate(
                     (float) (string) $stockBefore,
                     (float) $product->cost_price,
@@ -71,24 +69,10 @@ class PurchaseService
                 $product->stock_qty = (string) $stockAfter;
                 $product->cost_price = $averageCost;
 
-                $pricing = $this->pricingService->calculate($product, $averageCost);
-
-                if ($pricing['auto_price_enabled'] && ! $pricing['price_lock'] && $pricing['changed']) {
-                    $product->selling_price = $pricing['final_price'];
-
-                    ProductPriceHistory::query()->create([
-                        'product_id' => $product->id,
-                        'old_price' => $pricing['old_price'],
-                        'new_price' => $pricing['final_price'],
-                        'average_cost' => $pricing['average_cost'],
-                        'profit_percent' => $pricing['profit_percent'],
-                        'price_before_round' => $pricing['price_before_round'],
-                        'satang_rounded_price' => $pricing['satang_rounded_price'],
-                        'final_price' => $pricing['final_price'],
-                        'created_from' => 'auto_pricing',
-                        'user_id' => $userId,
-                        'remark' => 'Auto pricing after purchase',
-                    ]);
+                if ((string) $oldAverageCost !== (string) $averageCost) {
+                    if ($product->pricing_reviewed_cost === null && $product->selling_price !== null) {
+                        $product->pricing_reviewed_cost = $oldAverageCost;
+                    }
                 }
 
                 $product->save();

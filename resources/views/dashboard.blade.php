@@ -64,6 +64,20 @@
 
     </div>
     <div class="row">
+        <div class="col-md-6">
+            <div class="small-box bg-warning">
+                <div class="inner"><h3>{{ $pricingPendingReviewCount }}</h3><p>สินค้ารอทบทวนราคา</p></div>
+                <a href="{{ route('pricing-management.index') }}" class="small-box-footer">ตรวจสอบราคา <i class="fas fa-arrow-circle-right"></i></a>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="small-box bg-danger">
+                <div class="inner"><h3>{{ $pricingUnpricedCount }}</h3><p>สินค้ายังไม่ตั้งราคา</p></div>
+                <a href="{{ route('pricing-management.index') }}" class="small-box-footer">ตั้งราคา <i class="fas fa-arrow-circle-right"></i></a>
+            </div>
+        </div>
+    </div>
+    <div class="row">
 
         <div class="col-md-3">
             <div class="small-box bg-secondary">

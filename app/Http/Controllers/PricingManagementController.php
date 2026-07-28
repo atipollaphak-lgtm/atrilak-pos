@@ -11,190 +11,58 @@ class PricingManagementController extends Controller
 {
     public function index(PricingService $pricingService)
     {
-        $products = Product::with('category')
-            ->orderBy('name')
-            ->get();
-
-        $pricingPreviews = [];
+        $products = Product::query()->with('category')->get()
+            ->map(fn (Product $product): array => $pricingService->calculate($product))
+            ->sortBy(fn (array $product): array => [
+                ['pending_review' => 0, 'unpriced' => 1, 'normal' => 2, 'inactive' => 3][$product['status']] ?? 4,
+                strtolower((string) $product['product_name']),
+            ])->values();
 
         $summary = [
-            'total' => $products->count(),
-            'auto_pricing' => 0,
-            'price_lock' => 0,
-            'override' => 0,
-            'changed' => 0,
+            'pending_review' => $products->where('status', 'pending_review')->count(),
+            'unpriced' => $products->where('status', 'unpriced')->count(),
+            'normal' => $products->where('status', 'normal')->count(),
         ];
 
-        foreach ($products as $product) {
-
-            $preview = $pricingService->calculate($product);
-
-            $pricingPreviews[$product->id] = $preview;
-
-            if ($product->auto_price_enabled) {
-                $summary['auto_pricing']++;
-            }
-
-            if ($product->price_lock) {
-                $summary['price_lock']++;
-            }
-
-            if (
-                !is_null($product->profit_percent)
-                || !is_null($product->satang_rounding_mode)
-                || !is_null($product->baht_rounding_mode)
-            ) {
-                $summary['override']++;
-            }
-
-            if ($preview['changed']) {
-                $summary['changed']++;
-            }
-        }
-
-        return view('pricing-management.index', compact(
-            'products',
-            'pricingPreviews',
-            'summary'
-        ));
+        return view('pricing-management.index', compact('products', 'summary'));
     }
 
-    public function update(
-        Request $request,
-        Product $product,
-        PricingService $pricingService
-    ) {
-        $validated = $request->validate([
-            'auto_price_enabled' => ['nullable', 'boolean'],
-            'price_lock' => ['nullable', 'boolean'],
-            'profit_percent' => ['nullable', 'numeric', 'min:0', 'max:999'],
-            'satang_rounding_mode' => ['nullable', 'string'],
-            'baht_rounding_mode' => ['nullable', 'string'],
-        ]);
-
-        $pricingService->updateProductPricingSettings($product, $validated);
-
-        return redirect()
-            ->route('pricing-management.index')
-            ->with('success', 'บันทึกการตั้งค่าราคาสินค้าเรียบร้อยแล้ว');
-    }
-
-    public function apply(
-        Product $product,
-        PricingService $pricingService
-    ) {
-        $pricingService->applyProductPrice($product);
-
-        return redirect()
-            ->route('pricing-management.index')
-            ->with('success', 'ปรับราคาขายเรียบร้อยแล้ว');
-    }
-
-    public function recalculateAll(PricingService $pricingService)
+    public function show(Product $product, PricingService $pricingService)
     {
-        $pricingService->recalculateAllProducts();
-
-        return redirect()
-            ->route('pricing-management.index')
-            ->with('success', 'คำนวณราคาสินค้าทั้งหมดใหม่เรียบร้อยแล้ว');
+        return response()->json($pricingService->calculate($product->load('category')));
     }
 
-    public function previewAll(PricingService $pricingService)
+    public function update(Request $request, Product $product, PricingService $pricingService)
     {
-        return response()->json(
-            $pricingService->previewAllChanges()
-        );
-    }
-
-    public function previewCategory(
-        Request $request,
-        PricingService $pricingService
-    ) {
         $validated = $request->validate([
-            'category_id' => ['required', 'integer', 'exists:categories,id'],
+            'pricing_method' => ['required', 'in:percentage,fixed,manual'],
+            'pricing_value' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+            'rounding_direction' => ['nullable', 'in:up,down,nearest'],
+            'rounding_unit' => ['nullable', 'in:0.01,0.05,0.10,0.50,1,5,10,100'],
         ]);
 
-        return response()->json([
-            'summary' => $pricingService->previewCategorySummary(
-                $validated['category_id']
-            ),
-            'items' => $pricingService->previewCategory(
-                $validated['category_id']
-            ),
-        ]);
+        $result = $pricingService->review($product, $validated);
+
+        return response()->json($result);
     }
 
-    public function applyAllChanged(PricingService $pricingService)
+    public function history(Request $request, PricingService $pricingService)
     {
-        $count = $pricingService->applyAllChangedPrices();
+        $histories = ProductPriceHistory::query()
+            ->with(['product', 'user'])
+            ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->input('from')))
+            ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->input('to')))
+            ->when($request->filled('product'), fn ($query) => $query->whereHas('product', fn ($product) => $product->where('name', 'like', '%'.$request->input('product').'%')))
+            ->latest()
+            ->paginate(20);
 
-        return redirect()
-            ->route('pricing-management.index')
-            ->with('success', 'ปรับราคาสินค้าที่เปลี่ยนแปลงแล้ว ' . $count . ' รายการ');
+        return view('pricing-management.history', compact('histories'));
     }
 
-    public function applyCategory(
-        Request $request,
-        PricingService $pricingService
-    ) {
-        $validated = $request->validate([
-            'category_id' => ['required', 'integer', 'exists:categories,id'],
-        ]);
+    public function rollback(ProductPriceHistory $history, PricingService $pricingService)
+    {
+        $pricingService->rollbackPriceHistory($history);
 
-        $result = $pricingService->applyCategoryPrices(
-            $validated['category_id']
-        );
-
-        return redirect()
-            ->route('pricing-management.index')
-            ->with(
-                'success',
-                'ปรับราคาทั้งหมวดแล้ว '
-                    . $result['updated']
-                    . ' รายการ | ข้าม Lock: '
-                    . $result['skipped_locked']
-                    . ' | ปิด Auto: '
-                    . $result['skipped_auto_off']
-                    . ' | ราคาไม่เปลี่ยน: '
-                    . $result['skipped_no_change']
-            );
-    }
-
-    public function history(
-        Request $request,
-        PricingService $pricingService
-    ) {
-        $filters = $request->only([
-            'from',
-            'to',
-            'user',
-            'product',
-        ]);
-
-        $histories = $pricingService->getPriceHistories($filters);
-
-        return view(
-            'pricing-management.history',
-            compact('histories')
-        );
-    }
-
-    public function rollback(
-        ProductPriceHistory $history,
-        PricingService $pricingService
-    ) {
-        try {
-
-            $pricingService->rollbackPriceHistory($history);
-
-            return redirect()
-                ->route('pricing-management.history')
-                ->with('success', 'ย้อนราคาสินค้าเรียบร้อยแล้ว');
-        } catch (\Throwable $e) {
-
-            return redirect()
-                ->route('pricing-management.history')
-                ->with('error', $e->getMessage());
-        }
+        return redirect()->route('pricing-management.history')->with('success', 'ย้อนราคาสินค้าเรียบร้อยแล้ว');
     }
 }

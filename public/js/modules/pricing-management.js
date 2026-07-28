@@ -1,238 +1,101 @@
-document.addEventListener('DOMContentLoaded', function () {
-    const searchInput = document.getElementById('pricingSearchInput');
-    const filterSelect = document.getElementById('pricingFilterSelect');
-    const rows = document.querySelectorAll('.pricing-product-row');
-    const summaryCards = document.querySelectorAll('.pricing-summary-card');
-    const bulkPreviewButton = document.getElementById('btnBulkPreview');
+document.addEventListener('DOMContentLoaded', () => {
+    const drawer = document.getElementById('pricingDrawer');
+    const form = document.getElementById('pricingForm');
+    let productId = null;
+    let product = null;
 
-    function filterRows() {
-        const keyword = (searchInput?.value || '').toLowerCase().trim();
-        const filter = filterSelect?.value || '';
+    const money = value => value === null || value === undefined || value === '' ? '-' : Number(value).toFixed(2);
+    const statusLabel = { pending_review: 'รอทบทวน', unpriced: 'ยังไม่ตั้งราคา', normal: 'ปกติ', inactive: 'ไม่ใช้งาน' };
 
-        rows.forEach(function (row) {
-            const productName = row.dataset.productName || '';
-            const productId = row.dataset.productId || '';
-
-            const matchSearch =
-                productName.includes(keyword) ||
-                productId.includes(keyword);
-
-            let matchFilter = true;
-
-            if (filter === 'changed') {
-                matchFilter = row.dataset.changed === '1';
-            }
-
-            if (filter === 'locked') {
-                matchFilter = row.dataset.locked === '1';
-            }
-
-            if (filter === 'auto_off') {
-                matchFilter = row.dataset.autoOff === '1';
-            }
-
-            if (filter === 'override') {
-                matchFilter = row.dataset.override === '1';
-            }
-
-            if (filter === 'auto_pricing') {
-                matchFilter = row.dataset.autoPricing === '1';
-            }
-
-            if (matchSearch && matchFilter) {
-                row.classList.remove('pricing-hidden');
-            } else {
-                row.classList.add('pricing-hidden');
-            }
-        });
+    function roundPrice(value, direction, unit) {
+        const factor = Number(unit);
+        if (!factor) return value;
+        const quotient = value / factor;
+        const rounded = direction === 'up' ? Math.ceil(quotient) : direction === 'down' ? Math.floor(quotient) : Math.round(quotient);
+        return rounded * factor;
     }
 
-    function initSearch() {
-
-        if (searchInput) {
-            searchInput.addEventListener('input', filterRows);
-        }
-
-        if (filterSelect) {
-            filterSelect.addEventListener('change', filterRows);
-        }
-
+    function calculatePreview() {
+        const cost = Number(product?.average_cost);
+        const value = Number(document.getElementById('pricingValue').value);
+        const method = document.getElementById('pricingMethod').value;
+        if (!Number.isFinite(cost) || !Number.isFinite(value)) return null;
+        const before = method === 'percentage' ? cost + (cost * value / 100) : method === 'fixed' ? cost + value : value;
+        const final = method === 'manual' ? before : roundPrice(before, document.getElementById('roundingDirection').value, document.getElementById('roundingUnit').value);
+        const profit = final - cost;
+        return { before, final, profit, percent: cost ? profit / cost * 100 : null };
     }
 
-    initSearch();
-
-    function initSummaryCards() {
-
-        summaryCards.forEach(function (card) {
-
-            card.addEventListener('click', function () {
-
-                const filter = card.dataset.filter || '';
-
-                if (filterSelect) {
-                    filterSelect.value = filter;
-                }
-
-                filterRows();
-
-            });
-
-        });
-
-    }
-
-    initSummaryCards();
-
-    function showPreviewModal(data) {
-
-        document.getElementById('previewTotal').textContent =
-            data.total;
-
-        document.getElementById('previewChanged').textContent =
-            data.changed;
-
-        document.getElementById('previewLocked').textContent =
-            data.locked;
-
-        document.getElementById('previewAutoOff').textContent =
-            data.auto_off;
-
-        document.getElementById('previewReady').textContent =
-            data.ready_to_apply;
-
-        $('#bulkPreviewModal').modal('show');
-
-    }
-
-    function loadPreview() {
-
-        fetch('/pricing-management/preview-all', {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': document
-                    .querySelector('meta[name="csrf-token"]')
-                    .content,
-                'Accept': 'application/json'
-            }
-        })
-            .then(response => response.json())
-            .then(data => {
-
-                showPreviewModal(data);
-
-            });
-
-    }
-
-    function initBulkPreview() {
-
-        if (bulkPreviewButton) {
-
-            bulkPreviewButton.addEventListener('click', function () {
-
-                loadPreview();
-
-            });
-
-        }
-
-    }
-
-        initBulkPreview();
-
-    function initCategoryPricingPreview() {
-        const categorySelect = document.getElementById('categoryPricingCategoryId');
-        const previewButton = document.getElementById('categoryPricingPreviewBtn');
-        const previewBox = document.getElementById('categoryPricingPreviewBox');
-        const summaryBox = document.getElementById('categoryPricingSummary');
-        const rowsBox = document.getElementById('categoryPricingPreviewRows');
-
-        if (!categorySelect || !previewButton || !previewBox || !summaryBox || !rowsBox) {
+    function renderCalculation() {
+        const preview = calculatePreview();
+        if (!preview) {
+            document.getElementById('drawerResult').textContent = 'ยังไม่มีต้นทุนเฉลี่ยเพียงพอสำหรับคำนวณราคา';
+            document.getElementById('calculationDetails').textContent = '';
             return;
         }
-
-        function formatMoney(value) {
-            return Number(value || 0).toLocaleString('th-TH', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        }
-
-        function renderStatus(item) {
-            if (item.price_lock) {
-                return '<span class="badge badge-secondary">Locked</span>';
-            }
-
-            if (!item.auto_price_enabled) {
-                return '<span class="badge badge-warning">Auto Off</span>';
-            }
-
-            if (!item.changed) {
-                return '<span class="badge badge-light">No Change</span>';
-            }
-
-            return '<span class="badge badge-success">Ready</span>';
-        }
-
-        previewButton.addEventListener('click', function () {
-            const categoryId = categorySelect.value;
-
-            if (!categoryId) {
-                alert('กรุณาเลือกหมวดสินค้าก่อน');
-                return;
-            }
-
-            previewBox.classList.remove('d-none');
-            summaryBox.textContent = 'กำลังโหลด Preview...';
-            rowsBox.innerHTML = '';
-
-            const formData = new FormData();
-            formData.append('category_id', categoryId);
-
-            fetch('/pricing-management/preview-category', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': document
-                        .querySelector('meta[name="csrf-token"]')
-                        .content,
-                    'Accept': 'application/json'
-                },
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    const summary = data.summary || {};
-                    const items = data.items || [];
-
-                    summaryBox.textContent =
-                        'ทั้งหมด: ' + (summary.total || 0)
-                        + ' | เปลี่ยนราคา: ' + (summary.changed || 0)
-                        + ' | Lock: ' + (summary.locked || 0)
-                        + ' | Auto Off: ' + (summary.auto_off || 0)
-                        + ' | พร้อม Apply: ' + (summary.ready_to_apply || 0);
-
-                    if (!items.length) {
-                        rowsBox.innerHTML =
-                            '<tr><td colspan="5" class="text-center text-muted">ไม่พบสินค้าในหมวดนี้</td></tr>';
-                        return;
-                    }
-
-                    rowsBox.innerHTML = items.map(function (item) {
-                        return ''
-                            + '<tr>'
-                            + '<td>' + (item.product_name || ('#' + item.product_id)) + '</td>'
-                            + '<td class="text-right">' + formatMoney(item.average_cost) + '</td>'
-                            + '<td class="text-right">' + formatMoney(item.old_price) + '</td>'
-                            + '<td class="text-right">' + formatMoney(item.final_price) + '</td>'
-                            + '<td class="text-center">' + renderStatus(item) + '</td>'
-                            + '</tr>';
-                    }).join('');
-                })
-                .catch(() => {
-                    summaryBox.textContent = 'โหลด Preview ไม่สำเร็จ';
-                });
-        });
+        document.getElementById('drawerResult').innerHTML = `<strong>ราคาแนะนำ</strong><div class="h4">${money(preview.final)} บาท</div><strong>กำไรต่อหน่วย</strong><div>${money(preview.profit)} บาท (${preview.percent === null ? '-' : money(preview.percent)}%)</div>`;
+        document.getElementById('calculationDetails').innerHTML = `ต้นทุนเฉลี่ย ${money(product.average_cost)} บาท<br>กำไรก่อนปัด ${money(preview.before - Number(product.average_cost))} บาท<br>ราคาก่อนปัด ${money(preview.before)} บาท<br>ราคาหลังปัด ${money(preview.final)} บาท<br>กำไรสุดท้าย ${money(preview.profit)} บาท (${preview.percent === null ? '-' : money(preview.percent)}%)`;
     }
 
-    initCategoryPricingPreview();
+    function updateMethodFields() {
+        const manual = document.getElementById('pricingMethod').value === 'manual';
+        document.getElementById('pricingValueLabel').textContent = manual ? 'ราคาขาย' : 'ค่า';
+        document.getElementById('pricingValueSuffix').textContent = document.getElementById('pricingMethod').value === 'percentage' ? '%' : 'บาท';
+        document.getElementById('roundingRow').classList.toggle('d-none', manual);
+        renderCalculation();
+    }
+
+    async function openDrawer(id) {
+        const response = await fetch(`/pricing-management/${id}`, { headers: { Accept: 'application/json' } });
+        product = await response.json();
+        productId = id;
+        document.getElementById('drawerProductName').textContent = product.product_name;
+        document.getElementById('drawerCategory').textContent = `หมวด: ${product.category_name || '-'}`;
+        document.getElementById('drawerStatus').innerHTML = `<span class="badge badge-info">${statusLabel[product.status]}</span>`;
+        document.getElementById('drawerCost').innerHTML = product.status === 'pending_review' ? `ต้นทุนเฉลี่ยเดิม <strong>${money(product.old_average_cost)} บาท</strong> &nbsp; ต้นทุนเฉลี่ยใหม่ <strong>${money(product.average_cost)} บาท</strong>` : product.average_cost === null ? 'ยังไม่มีต้นทุนเฉลี่ย' : `ต้นทุนเฉลี่ยล่าสุด <strong>${money(product.average_cost)} บาท</strong>`;
+        document.getElementById('pricingMethod').value = product.pricing_method || 'percentage';
+        document.getElementById('pricingValue').value = product.pricing_value || '';
+        document.getElementById('roundingDirection').value = product.rounding_direction || 'up';
+        document.getElementById('roundingUnit').value = product.rounding_unit || '5';
+        document.getElementById('drawerSave').disabled = product.status === 'inactive';
+        updateMethodFields();
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeDrawer() { drawer.classList.remove('open'); drawer.setAttribute('aria-hidden', 'true'); }
+
+    document.querySelectorAll('.js-open-pricing').forEach(button => button.addEventListener('click', () => openDrawer(button.dataset.productId)));
+    document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+    document.getElementById('drawerCancel').addEventListener('click', closeDrawer);
+    document.getElementById('pricingMethod').addEventListener('change', updateMethodFields);
+    ['pricingValue', 'roundingDirection', 'roundingUnit'].forEach(id => document.getElementById(id).addEventListener('input', renderCalculation));
+    document.getElementById('roundingDirection').addEventListener('change', renderCalculation);
+    document.getElementById('roundingUnit').addEventListener('change', renderCalculation);
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const save = document.getElementById('drawerSave');
+        const error = document.getElementById('drawerError');
+        save.disabled = true;
+        error.classList.add('d-none');
+        try {
+            const response = await fetch(`/pricing-management/${productId}`, { method: 'PUT', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+            if (!response.ok) throw new Error('บันทึกข้อมูลไม่สำเร็จ กรุณาตรวจสอบข้อมูลอีกครั้ง');
+            window.location.reload();
+        } catch (err) {
+            error.textContent = err.message;
+            error.classList.remove('d-none');
+            save.disabled = false;
+        }
+    });
+
+    const search = document.getElementById('pricingSearchInput');
+    const filter = document.getElementById('pricingFilterSelect');
+    function filterRows() {
+        const keyword = search.value.toLowerCase().trim();
+        document.querySelectorAll('.pricing-product-row').forEach(row => row.classList.toggle('d-none', !(row.dataset.search.includes(keyword) && (!filter.value || row.dataset.status === filter.value))));
+    }
+    search.addEventListener('input', filterRows);
+    filter.addEventListener('change', filterRows);
 });

@@ -393,45 +393,20 @@ Route::middleware(['auth'])->group(function () {
             [PricingManagementController::class, 'index']
         )->name('pricing-management.index');
 
-        Route::put(
-            '/pricing-management/{product}',
-            [PricingManagementController::class, 'update']
-        )->name('pricing-management.update');
-
-        Route::post(
-            '/pricing-management/recalculate-all',
-            [PricingManagementController::class, 'recalculateAll']
-        )->name('pricing-management.recalculate-all');
-
-        Route::post(
-            '/pricing-management/apply-all',
-            [PricingManagementController::class, 'applyAllChanged']
-        )->name('pricing-management.apply-all');
-
-        Route::post(
-            '/pricing-management/preview-all',
-            [PricingManagementController::class, 'previewAll']
-        )->name('pricing-management.preview-all');
-
-        Route::post(
-            '/pricing-management/preview-category',
-            [PricingManagementController::class, 'previewCategory']
-        )->name('pricing-management.preview-category');
-
-        Route::post(
-            '/pricing-management/apply-category',
-            [PricingManagementController::class, 'applyCategory']
-        )->name('pricing-management.apply-category');
-
-        Route::post(
-            '/pricing-management/{product}/apply',
-            [PricingManagementController::class, 'apply']
-        )->name('pricing-management.apply');
-
         Route::get(
             '/pricing-management/history',
             [PricingManagementController::class, 'history']
         )->name('pricing-management.history');
+
+        Route::get(
+            '/pricing-management/{product}',
+            [PricingManagementController::class, 'show']
+        )->name('pricing-management.show');
+
+        Route::put(
+            '/pricing-management/{product}',
+            [PricingManagementController::class, 'update']
+        )->name('pricing-management.update');
 
         Route::post(
             '/pricing-management/history/{history}/rollback',

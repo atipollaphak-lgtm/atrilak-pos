@@ -4,448 +4,276 @@ namespace App\Services\Pricing;
 
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
-use App\Models\PricingSetting;
+use Brick\Math\BigDecimal;
+use Brick\Math\RoundingMode;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class PricingService
 {
-    public function calculate(Product $product, ?float $averageCost = null): array
+    public const METHODS = ['percentage', 'fixed', 'manual'];
+
+    public const ROUNDING_DIRECTIONS = ['up', 'down', 'nearest'];
+
+    public const ROUNDING_UNITS = ['0.01', '0.05', '0.10', '0.50', '1', '5', '10', '100'];
+
+    public function calculate(Product $product, ?string $averageCost = null, ?array $overrides = null): array
     {
-        $averageCost = $averageCost ?? (float) $product->cost_price;
-
-        $rules = $this->resolveRules($product);
-
-        $profitPercent = (float) $rules['profit_percent'];
-        $priceBeforeRound = $averageCost + ($averageCost * ($profitPercent / 100));
-
-        $satangRoundedPrice = $this->roundSatang(
-            $priceBeforeRound,
-            $rules['satang_rounding_mode']
+        $cost = $averageCost ?? ($product->cost_price !== null ? (string) $product->cost_price : null);
+        $config = $this->configuration($product, $overrides);
+        $calculation = $this->calculatePrice(
+            $cost,
+            $config['pricing_method'],
+            $config['pricing_value'],
+            $config['rounding_direction'],
+            $config['rounding_unit']
         );
 
-        $finalPrice = $this->roundBaht(
-            $satangRoundedPrice,
-            $rules['baht_rounding_mode']
-        );
+        $currentPrice = $product->selling_price !== null ? $this->money($product->selling_price) : null;
+        $status = $this->status($product);
+
+        if (in_array($status, ['normal', 'inactive'], true) && $currentPrice !== null && $cost !== null) {
+            [$calculation['profit_amount'], $calculation['profit_percent']] = $this->profitForPrice($cost, $currentPrice);
+        }
 
         return [
             'product_id' => $product->id,
             'product_name' => $product->name,
-            'average_cost' => round($averageCost, 2),
-            'profit_percent' => $profitPercent,
-            'price_before_round' => round($priceBeforeRound, 2),
-            'satang_rounding_mode' => $rules['satang_rounding_mode'],
-            'satang_rounded_price' => round($satangRoundedPrice, 2),
-            'baht_rounding_mode' => $rules['baht_rounding_mode'],
-            'final_price' => round($finalPrice, 2),
-            'old_price' => round((float) $product->selling_price, 2),
-            'changed' => round((float) $product->selling_price, 2) !== round($finalPrice, 2),
-            'price_lock' => (bool) ($product->price_lock ?? false),
-            'auto_price_enabled' => (bool) ($product->auto_price_enabled ?? true),
+            'category_name' => $product->category?->name,
+            'active' => (bool) $product->active,
+            'status' => $status,
+            'average_cost' => $cost === null ? null : $this->money($cost),
+            'old_average_cost' => $product->pricing_reviewed_cost === null ? null : $this->money($product->pricing_reviewed_cost),
+            'pricing_method' => $config['pricing_method'],
+            'pricing_value' => $config['pricing_value'],
+            'rounding_direction' => $config['rounding_direction'],
+            'rounding_unit' => $config['rounding_unit'],
+            'current_price' => $currentPrice,
+            'old_price' => $currentPrice,
+            'auto_price_enabled' => true,
+            'price_lock' => false,
+            'profit_percent' => $calculation['profit_percent'],
+            'satang_rounding_mode' => $config['rounding_unit'],
+            'baht_rounding_mode' => $config['rounding_direction'],
+            'satang_rounded_price' => $calculation['final_price'],
+            'suggested_price' => $calculation['final_price'],
+            'final_price' => $calculation['final_price'],
+            'changed' => $currentPrice !== $calculation['final_price'],
+            ...$calculation,
         ];
     }
 
-    public function updateProductPricingSettings(Product $product, array $validated): void
-    {
-        DB::transaction(function () use ($product, $validated) {
-            $product->update([
-                'auto_price_enabled' => (bool) ($validated['auto_price_enabled'] ?? false),
-                'price_lock' => (bool) ($validated['price_lock'] ?? false),
-                'profit_percent' => $validated['profit_percent'] ?? null,
-                'satang_rounding_mode' => $validated['satang_rounding_mode'] ?? null,
-                'baht_rounding_mode' => $validated['baht_rounding_mode'] ?? null,
-            ]);
-        });
+    public function calculatePrice(
+        ?string $averageCost,
+        string $method,
+        string|float|null $value,
+        ?string $roundingDirection,
+        string|float|null $roundingUnit
+    ): array {
+        if ($value === null || $value === '') {
+            return $this->emptyCalculation($method, $value, $roundingDirection, $roundingUnit);
+        }
+
+        if ($averageCost === null && $method === 'manual') {
+            return [
+                'profit_before_round' => null,
+                'price_before_round' => $this->money($value),
+                'final_price' => $this->money($value),
+                'profit_amount' => null,
+                'profit_percent' => null,
+                'rounding_applied' => false,
+            ];
+        }
+
+        if ($averageCost === null) {
+            return $this->emptyCalculation($method, $value, $roundingDirection, $roundingUnit);
+        }
+
+        $cost = BigDecimal::of((string) $averageCost);
+        $pricingValue = BigDecimal::of((string) $value);
+
+        $profitBeforeRound = match ($method) {
+            'percentage' => $cost->multipliedBy($pricingValue)->dividedBy('100', 8, RoundingMode::HALF_UP),
+            'fixed' => $pricingValue,
+            'manual' => $pricingValue->minus($cost),
+            default => throw new \InvalidArgumentException('ไม่พบรูปแบบการตั้งราคา'),
+        };
+
+        $priceBeforeRound = $cost->plus($profitBeforeRound);
+        $finalPrice = $priceBeforeRound;
+        $roundingApplied = false;
+
+        if ($method !== 'manual' && $roundingUnit !== null && $roundingDirection !== null) {
+            $finalPrice = $this->roundToUnit($priceBeforeRound, (string) $roundingUnit, $roundingDirection);
+            $roundingApplied = $finalPrice->compareTo($priceBeforeRound) !== 0;
+        }
+
+        $profitAmount = $finalPrice->minus($cost)->toScale(2, RoundingMode::HALF_UP);
+        $profitPercent = $cost->isZero()
+            ? null
+            : $profitAmount->dividedBy($cost, 8, RoundingMode::HALF_UP)->multipliedBy('100')->toScale(2, RoundingMode::HALF_UP);
+
+        return [
+            'profit_before_round' => $this->money($profitBeforeRound),
+            'price_before_round' => $this->money($priceBeforeRound),
+            'final_price' => $this->money($finalPrice),
+            'profit_amount' => $this->money($profitAmount),
+            'profit_percent' => $profitPercent?->__toString(),
+            'rounding_applied' => $roundingApplied,
+        ];
     }
 
-    public function applyProductPrice(Product $product): bool
+    public function status(Product $product): string
     {
-        return DB::transaction(function () use ($product) {
-            $preview = $this->calculate($product);
+        if (! $product->active) {
+            return 'inactive';
+        }
 
-            if ($preview['price_lock']) {
-                return false;
+        if ($product->selling_price === null) {
+            return 'unpriced';
+        }
+
+        if ($product->pricing_reviewed_cost !== null
+            && BigDecimal::of((string) $product->pricing_reviewed_cost)
+                ->compareTo(BigDecimal::of((string) ($product->cost_price ?? 0))) !== 0) {
+            return 'pending_review';
+        }
+
+        return 'normal';
+    }
+
+    public function review(Product $product, array $data): array
+    {
+        return DB::transaction(function () use ($product, $data): array {
+            $locked = Product::query()->whereKey($product->getKey())->lockForUpdate()->firstOrFail();
+            if (! $locked->active) {
+                throw new \DomainException('ไม่สามารถแก้ไขราคาสินค้าที่ไม่ใช้งานได้');
+            }
+            $preview = $this->calculate($locked, null, $data);
+
+            if ($preview['final_price'] === null) {
+                throw new \DomainException('ไม่สามารถคำนวณราคาได้ เนื่องจากยังไม่มีต้นทุนเฉลี่ยหรือค่าตั้งราคา');
             }
 
-            if (! $preview['changed']) {
-                return false;
-            }
+            $oldPrice = $locked->selling_price;
+            $oldCost = $locked->pricing_reviewed_cost ?? $locked->cost_price;
 
-            $oldPrice = $product->selling_price;
-
-            $product->update([
+            $locked->update([
+                'pricing_method' => $data['pricing_method'],
+                'pricing_value' => $data['pricing_value'],
+                'rounding_direction' => $data['rounding_direction'] ?? null,
+                'rounding_unit' => $data['rounding_unit'] ?? null,
                 'selling_price' => $preview['final_price'],
+                'pricing_reviewed_cost' => $locked->cost_price,
+                'pricing_reviewed_at' => now(),
+                'pricing_reviewed_by' => Auth::id(),
             ]);
 
-            ProductPriceHistory::create([
-                'product_id' => $product->id,
+            ProductPriceHistory::query()->create([
+                'product_id' => $locked->id,
                 'old_price' => $oldPrice,
                 'new_price' => $preview['final_price'],
+                'old_average_cost' => $oldCost,
                 'average_cost' => $preview['average_cost'],
+                'pricing_method' => $preview['pricing_method'],
+                'pricing_value' => $preview['pricing_value'],
+                'rounding_direction' => $preview['rounding_direction'],
+                'rounding_unit' => $preview['rounding_unit'],
+                'profit_amount' => $preview['profit_amount'],
                 'profit_percent' => $preview['profit_percent'],
                 'price_before_round' => $preview['price_before_round'],
-                'satang_rounded_price' => $preview['satang_rounded_price'],
+                'satang_rounded_price' => $preview['final_price'],
                 'final_price' => $preview['final_price'],
-                'created_from' => 'manual_apply',
+                'created_from' => 'pricing_review',
                 'user_id' => Auth::id(),
-                'remark' => 'Manual Apply from Pricing Dashboard',
+                'remark' => 'Pricing review',
             ]);
 
-            return true;
+            return $this->calculate($locked->fresh('category'));
         });
     }
 
-    public function recalculateAllProducts(): int
+    public function configuration(Product $product, ?array $overrides = null): array
     {
-        return DB::transaction(function () {
-            $count = 0;
+        $method = $overrides['pricing_method'] ?? $product->pricing_method ?? 'percentage';
+        $value = $overrides['pricing_value'] ?? $product->pricing_value;
 
-            Product::query()
-                ->with('category')
-                ->orderBy('id')
-                ->chunkById(100, function ($products) use (&$count) {
-                    foreach ($products as $product) {
-                        $this->calculate($product);
-                        $count++;
-                    }
-                });
+        if ($value === null && $method === 'percentage') {
+            $value = $product->profit_percent ?? 20;
+        }
 
-            return $count;
-        });
-    }
-
-    public function applyAllChangedPrices(): int
-    {
-        return DB::transaction(function () {
-            $count = 0;
-
-            Product::query()
-                ->with('category')
-                ->orderBy('id')
-                ->chunkById(100, function ($products) use (&$count) {
-                    foreach ($products as $product) {
-                        $preview = $this->calculate($product);
-
-                        if ($preview['price_lock']) {
-                            continue;
-                        }
-
-                        if (! $preview['auto_price_enabled']) {
-                            continue;
-                        }
-
-                        if (! $preview['changed']) {
-                            continue;
-                        }
-
-                        $oldPrice = $product->selling_price;
-
-                        $product->update([
-                            'selling_price' => $preview['final_price'],
-                        ]);
-
-                        ProductPriceHistory::create([
-                            'product_id' => $product->id,
-                            'old_price' => $oldPrice,
-                            'new_price' => $preview['final_price'],
-                            'average_cost' => $preview['average_cost'],
-                            'profit_percent' => $preview['profit_percent'],
-                            'price_before_round' => $preview['price_before_round'],
-                            'satang_rounded_price' => $preview['satang_rounded_price'],
-                            'final_price' => $preview['final_price'],
-                            'created_from' => 'bulk_apply',
-                            'user_id' => Auth::id(),
-                            'remark' => 'Bulk Apply from Pricing Dashboard',
-                        ]);
-
-                        $count++;
-                    }
-                });
-
-            return $count;
-        });
-    }
-
-    public function previewAllChanges(): array
-    {
-        $summary = [
-            'total' => 0,
-            'changed' => 0,
-            'locked' => 0,
-            'auto_off' => 0,
-            'ready_to_apply' => 0,
+        return [
+            'pricing_method' => $method,
+            'pricing_value' => $value === null ? null : $this->money($value),
+            'rounding_direction' => $overrides['rounding_direction'] ?? $product->rounding_direction ?? 'up',
+            'rounding_unit' => $overrides['rounding_unit'] ?? $product->rounding_unit ?? '5',
         ];
-
-        Product::query()
-            ->with('category')
-            ->orderBy('id')
-            ->chunkById(100, function ($products) use (&$summary) {
-
-                foreach ($products as $product) {
-
-                    $summary['total']++;
-
-                    $preview = $this->calculate($product);
-
-                    if ($preview['changed']) {
-                        $summary['changed']++;
-                    }
-
-                    if ($preview['price_lock']) {
-                        $summary['locked']++;
-                    }
-
-                    if (! $preview['auto_price_enabled']) {
-                        $summary['auto_off']++;
-                    }
-
-                    if (
-                        $preview['changed']
-                        && ! $preview['price_lock']
-                        && $preview['auto_price_enabled']
-                    ) {
-                        $summary['ready_to_apply']++;
-                    }
-                }
-            });
-
-        return $summary;
-    }
-
-    public function getPriceHistories(array $filters = [])
-    {
-        return ProductPriceHistory::query()
-            ->with([
-                'product',
-                'user',
-            ])
-            ->when(! empty($filters['from']), function ($query) use ($filters) {
-                $query->whereDate('created_at', '>=', $filters['from']);
-            })
-            ->when(! empty($filters['to']), function ($query) use ($filters) {
-                $query->whereDate('created_at', '<=', $filters['to']);
-            })
-            ->when(! empty($filters['user']), function ($query) use ($filters) {
-                $query->whereHas('user', function ($userQuery) use ($filters) {
-                    $userQuery->where('name', 'like', '%' . $filters['user'] . '%');
-                });
-            })
-            ->when(! empty($filters['product']), function ($query) use ($filters) {
-                $query->whereHas('product', function ($productQuery) use ($filters) {
-                    $productQuery->where('name', 'like', '%' . $filters['product'] . '%');
-                });
-            })
-            ->latest()
-            ->paginate(20);
     }
 
     public function rollbackPriceHistory(ProductPriceHistory $history): void
     {
-        DB::transaction(function () use ($history) {
-
-            $product = $history->product;
-
-            if (! $product) {
-                return;
+        DB::transaction(function () use ($history): void {
+            $product = Product::query()->whereKey($history->product_id)->lockForUpdate()->firstOrFail();
+            if ((string) $product->selling_price !== (string) $history->new_price) {
+                throw new \RuntimeException('ไม่สามารถย้อนราคาได้ เนื่องจากมีการเปลี่ยนแปลงราคาหลังจากรายการนี้แล้ว');
             }
-
-            if ((float) $product->selling_price !== (float) $history->new_price) {
-
-                throw new \RuntimeException(
-                    'ไม่สามารถ Rollback ได้ เนื่องจากมีการเปลี่ยนแปลงราคาหลังจากรายการนี้แล้ว'
-                );
-            }
-
-            $currentPrice = $product->selling_price;
-
-            $product->update([
-                'selling_price' => $history->old_price,
-            ]);
-
-            ProductPriceHistory::create([
+            $current = $product->selling_price;
+            $product->update(['selling_price' => $history->old_price]);
+            ProductPriceHistory::query()->create([
                 'product_id' => $product->id,
-                'old_price' => $currentPrice,
+                'old_price' => $current,
                 'new_price' => $history->old_price,
-                'average_cost' => $history->average_cost,
-                'profit_percent' => $history->profit_percent,
-                'price_before_round' => $history->price_before_round,
-                'satang_rounded_price' => $history->satang_rounded_price,
+                'average_cost' => $product->cost_price,
                 'final_price' => $history->old_price,
                 'created_from' => 'rollback',
                 'user_id' => Auth::id(),
-                'remark' => 'Rollback from price history #' . $history->id,
+                'remark' => 'Rollback from price history #'.$history->id,
             ]);
         });
     }
 
-    private function resolveRules(Product $product): array
+    private function emptyCalculation(string $method, mixed $value, ?string $direction, mixed $unit): array
     {
-        $setting = PricingSetting::query()->first();
-
-        $category = $product->category;
-
         return [
-            'profit_percent' =>
-            $product->profit_percent
-                ?? $category?->profit_percent
-                ?? $setting?->default_profit_percent
-                ?? 20,
-
-            'satang_rounding_mode' =>
-            $product->satang_rounding_mode
-                ?? $category?->satang_rounding_mode
-                ?? $setting?->default_satang_rounding_mode
-                ?? 'ceil_satang_50',
-
-            'baht_rounding_mode' =>
-            $product->baht_rounding_mode
-                ?? $category?->baht_rounding_mode
-                ?? $setting?->default_baht_rounding_mode
-                ?? 'ceil_5',
+            'profit_before_round' => null,
+            'price_before_round' => null,
+            'final_price' => null,
+            'profit_amount' => null,
+            'profit_percent' => null,
+            'rounding_applied' => false,
         ];
     }
 
-    public function previewCategory(int $categoryId): array
+    private function profitForPrice(string $cost, string $price): array
     {
-        $items = [];
+        $costDecimal = BigDecimal::of($cost);
+        $profit = BigDecimal::of($price)->minus($costDecimal)->toScale(2, RoundingMode::HALF_UP);
+        $percent = $costDecimal->isZero()
+            ? null
+            : $profit->dividedBy($costDecimal, 8, RoundingMode::HALF_UP)->multipliedBy('100')->toScale(2, RoundingMode::HALF_UP);
 
-        Product::query()
-            ->with('category')
-            ->where('category_id', $categoryId)
-            ->orderBy('name')
-            ->chunkById(100, function ($products) use (&$items) {
-
-                foreach ($products as $product) {
-                    $items[] = $this->calculate($product);
-                }
-            });
-
-        return $items;
+        return [$this->money($profit), $percent?->__toString()];
     }
 
-    public function previewCategorySummary(int $categoryId): array
+    private function roundToUnit(BigDecimal $price, string $unit, string $direction): BigDecimal
     {
-        $summary = [
-            'total' => 0,
-            'changed' => 0,
-            'locked' => 0,
-            'auto_off' => 0,
-            'ready_to_apply' => 0,
-        ];
-
-        foreach ($this->previewCategory($categoryId) as $preview) {
-            $summary['total']++;
-
-            if ($preview['changed']) {
-                $summary['changed']++;
-            }
-
-            if ($preview['price_lock']) {
-                $summary['locked']++;
-            }
-
-            if (! $preview['auto_price_enabled']) {
-                $summary['auto_off']++;
-            }
-
-            if (
-                $preview['changed']
-                && ! $preview['price_lock']
-                && $preview['auto_price_enabled']
-            ) {
-                $summary['ready_to_apply']++;
-            }
-        }
-
-        return $summary;
-    }
-
-    public function applyCategoryPrices(int $categoryId): array
-    {
-        return DB::transaction(function () use ($categoryId) {
-
-            $result = [
-                'updated' => 0,
-                'skipped_locked' => 0,
-                'skipped_auto_off' => 0,
-                'skipped_no_change' => 0,
-                'failed' => 0,
-            ];
-
-            Product::query()
-                ->with('category')
-                ->where('category_id', $categoryId)
-                ->orderBy('id')
-                ->chunkById(100, function ($products) use (&$result) {
-
-                    foreach ($products as $product) {
-                        $preview = $this->calculate($product);
-
-                        if ($preview['price_lock']) {
-                            $result['skipped_locked']++;
-                            continue;
-                        }
-
-                        if (! $preview['auto_price_enabled']) {
-                            $result['skipped_auto_off']++;
-                            continue;
-                        }
-
-                        if (! $preview['changed']) {
-                            $result['skipped_no_change']++;
-                            continue;
-                        }
-
-                        $oldPrice = $product->selling_price;
-
-                        $product->update([
-                            'selling_price' => $preview['final_price'],
-                        ]);
-
-                        ProductPriceHistory::create([
-                            'product_id' => $product->id,
-                            'old_price' => $oldPrice,
-                            'new_price' => $preview['final_price'],
-                            'average_cost' => $preview['average_cost'],
-                            'profit_percent' => $preview['profit_percent'],
-                            'price_before_round' => $preview['price_before_round'],
-                            'satang_rounded_price' => $preview['satang_rounded_price'],
-                            'final_price' => $preview['final_price'],
-                            'created_from' => 'category_bulk',
-                            'user_id' => Auth::id(),
-                            'remark' => 'Category Bulk Apply from Pricing Dashboard',
-                        ]);
-
-                        $result['updated']++;
-                    }
-                });
-
-            return $result;
+        $unitDecimal = BigDecimal::of($unit);
+        $quotient = $price->dividedBy($unitDecimal, 8, match ($direction) {
+            'up' => RoundingMode::CEILING,
+            'down' => RoundingMode::FLOOR,
+            'nearest' => RoundingMode::HALF_UP,
+            default => throw new \InvalidArgumentException('ไม่พบวิธีการปัดราคา'),
         });
+
+        return $quotient->toScale(0, match ($direction) {
+            'up' => RoundingMode::CEILING,
+            'down' => RoundingMode::FLOOR,
+            'nearest' => RoundingMode::HALF_UP,
+        })->multipliedBy($unitDecimal);
     }
 
-    private function roundSatang(float $price, ?string $mode): float
+    private function money(mixed $value): string
     {
-        return match ($mode) {
-            'none' => $price,
-            'ceil_satang_10' => ceil($price * 10) / 10,
-            'ceil_satang_25' => ceil($price * 4) / 4,
-            'ceil_satang_50' => ceil($price * 2) / 2,
-            default => ceil($price * 2) / 2,
-        };
-    }
-
-    private function roundBaht(float $price, ?string $mode): float
-    {
-        return match ($mode) {
-            'none' => $price,
-            'ceil_baht' => ceil($price),
-            'ceil_5' => ceil($price / 5) * 5,
-            'ceil_10' => ceil($price / 10) * 10,
-            'ceil_25' => ceil($price / 25) * 25,
-            'ceil_50' => ceil($price / 50) * 50,
-            default => ceil($price / 5) * 5,
-        };
+        return BigDecimal::of((string) $value)->toScale(2, RoundingMode::HALF_UP)->__toString();
     }
 }

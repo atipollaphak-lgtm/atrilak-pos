@@ -55,3 +55,8 @@
     font-size: 2rem;
     font-weight: 700;
 }
+.pricing-drawer { background:#fff; box-shadow:-4px 0 18px rgba(0,0,0,.15); height:100vh; max-width:520px; overflow-y:auto; position:fixed; right:-540px; top:0; transition:right .2s ease; width:92%; z-index:1050; }
+.pricing-drawer.open { right:0; }
+.pricing-drawer-header { align-items:flex-start; border-bottom:1px solid #dee2e6; display:flex; justify-content:space-between; padding:1.25rem; }
+.pricing-drawer-body { padding:1.25rem; }
+.pricing-result { background:#f8f9fa; border-radius:.25rem; margin-top:1rem; padding:1rem; }

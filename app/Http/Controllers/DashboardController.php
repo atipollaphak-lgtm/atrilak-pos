@@ -22,6 +22,15 @@ class DashboardController extends Controller
 
         $totalSuppliers = Supplier::count();
 
+        $pricingPendingReviewCount = Product::where('active', true)
+            ->whereNotNull('selling_price')
+            ->whereNotNull('pricing_reviewed_cost')
+            ->whereColumn('pricing_reviewed_cost', '<>', 'cost_price')
+            ->count();
+        $pricingUnpricedCount = Product::where('active', true)
+            ->whereNull('selling_price')
+            ->count();
+
         $todaySaleCount = Sale::query()->active()->whereDate(
             'sale_date',
             $today
@@ -152,6 +161,8 @@ class DashboardController extends Controller
                 'monthSales',
                 'monthProfit',
                 'stockValue',
+                'pricingPendingReviewCount',
+                'pricingUnpricedCount',
             )
         );
     }
