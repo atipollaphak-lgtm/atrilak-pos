@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class CategoryController extends Controller
 {
@@ -22,7 +25,11 @@ class CategoryController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate($this->rules());
+        $validated = $this->validated($request);
+        if ($validated instanceof JsonResponse) {
+            return $validated;
+        }
+
         $category = Category::create($validated);
 
         if ($request->expectsJson()) {
@@ -34,7 +41,11 @@ class CategoryController extends Controller
 
     public function update(Request $request, Category $category)
     {
-        $validated = $request->validate($this->rules($category));
+        $validated = $this->validated($request, $category);
+        if ($validated instanceof JsonResponse) {
+            return $validated;
+        }
+
         $category->update($validated);
 
         if ($request->expectsJson()) {
@@ -83,5 +94,23 @@ class CategoryController extends Controller
             'active' => 'nullable|boolean',
             'rounding_override' => ['nullable', 'in:'.implode(',', Category::ROUNDING_OVERRIDES)],
         ];
+    }
+
+    private function validated(Request $request, ?Category $category = null): array|JsonResponse
+    {
+        $validator = Validator::make($request->all(), $this->rules($category));
+
+        if ($validator->fails()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'ข้อมูลไม่ถูกต้อง',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            throw new ValidationException($validator);
+        }
+
+        return $validator->validated();
     }
 }

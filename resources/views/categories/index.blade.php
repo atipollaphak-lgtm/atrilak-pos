@@ -42,6 +42,7 @@
                             <th>Code Prefix</th>
                             <th>Barcode Prefix</th>
                             <th>Product Count</th>
+                            <th>Rounding by Zone</th>
                             <th>Status</th>
                             <th class="text-right">Action</th>
                         </tr>
@@ -58,6 +59,7 @@
                                 <td><span class="badge badge-light">{{ $category->code_prefix ?: '—' }}</span></td>
                                 <td><span class="badge badge-light">{{ $category->barcode_prefix ?: '—' }}</span></td>
                                 <td>{{ number_format($category->products_count) }}</td>
+                                <td>{{ $category->rounding_override ? number_format($category->rounding_override, 2).' บาท' : 'ใช้ค่าของโซน' }}</td>
                                 <td><span class="badge {{ $category->active ? 'badge-success' : 'badge-secondary' }}">{{ $category->active ? 'เปิดใช้งาน' : 'ปิดใช้งาน' }}</span></td>
                                 <td class="text-right text-nowrap">
                                     <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#categoryModal" data-category-mode="edit" data-category='@json($category)'>
@@ -69,7 +71,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr id="category-empty-row"><td colspan="6" class="text-center text-muted py-5">ยังไม่มีหมวดหมู่สินค้า</td></tr>
+                            <tr id="category-empty-row"><td colspan="7" class="text-center text-muted py-5">ยังไม่มีหมวดหมู่สินค้า</td></tr>
                         @endforelse
                     </tbody>
                 </table>

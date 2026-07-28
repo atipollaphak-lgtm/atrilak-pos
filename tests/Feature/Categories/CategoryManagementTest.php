@@ -32,6 +32,7 @@ class CategoryManagementTest extends TestCase
             'code_prefix' => 'HWD',
             'barcode_prefix' => '101',
             'description' => 'Construction hardware',
+            'rounding_override' => '0.50',
             'active' => true,
         ]);
         Product::query()->create([
@@ -44,6 +45,8 @@ class CategoryManagementTest extends TestCase
             ->assertSee('categoryModal', false)
             ->assertSee('category-search', false)
             ->assertSee('Product Count')
+            ->assertSee('Rounding by Zone')
+            ->assertSee('0.50 บาท')
             ->assertSee('Construction hardware')
             ->assertSee('data-product-count="1"', false);
     }
@@ -98,6 +101,23 @@ class CategoryManagementTest extends TestCase
             'code_prefix' => $existing->code_prefix,
             'barcode_prefix' => $existing->barcode_prefix,
         ])->assertSessionHasErrors(['code_prefix', 'barcode_prefix']);
+    }
+
+    public function test_duplicate_prefixes_return_json_validation_errors_for_ajax_requests(): void
+    {
+        Category::query()->create([
+            'name' => 'Existing',
+            'code_prefix' => 'EXT',
+            'barcode_prefix' => '103',
+        ]);
+
+        $this->postJson(route('categories.store'), [
+            'name' => 'Duplicate',
+            'code_prefix' => 'EXT',
+            'barcode_prefix' => '103',
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.code_prefix.0', 'The code prefix has already been taken.')
+            ->assertJsonPath('errors.barcode_prefix.0', 'The barcode prefix has already been taken.');
     }
 
     public function test_category_with_products_cannot_be_deleted(): void
