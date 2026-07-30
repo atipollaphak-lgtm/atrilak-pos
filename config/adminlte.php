@@ -328,6 +328,12 @@ return [
             'url' => 'sales-v2',
             'icon' => 'fas fa-fw fa-cash-register',
         ],
+        [
+            'text' => 'POS V3 Final',
+            'url' => 'sales-v3',
+            'icon' => 'fas fa-fw fa-cash-register',
+            'can' => 'cashier',
+        ],
 
         [
             'text' => 'ประวัติการขาย',

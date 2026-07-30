@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\StaleSaleRevisionException;
 use App\Models\CustomerDeliveryAddress;
 use App\Models\DeliveryZone;
+use App\Models\HoldBill;
 use App\Models\Quotation;
 use App\Models\Sale;
 use App\Models\SaleItem;
@@ -113,6 +114,26 @@ class SaleService
 
         try {
             return DB::transaction(function () use ($data, $idempotencyKey, $payloadHash, $quotationId) {
+                $holdBill = null;
+
+                if (! empty($data['hold_bill_id'])) {
+                    $holdBill = HoldBill::query()
+                        ->whereKey($data['hold_bill_id'])
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($holdBill === null) {
+                        if ($idempotencyKey !== null) {
+                            $replay = $this->saleIdempotencyService->replay($idempotencyKey, $payloadHash);
+
+                            if ($replay !== null) {
+                                return $replay;
+                            }
+                        }
+
+                        throw new DomainException('รายการพักบิลนี้ถูกนำไปชำระเงินหรือถูกลบแล้ว', 409);
+                    }
+                }
 
                 $items = $data['items'] ?? [];
                 $this->saleValidationService->assertValidItems($items);
@@ -140,7 +161,7 @@ class SaleService
                 $resolvedLines = $this->productUnitConversionService
                     ->resolveLines($items, $lockedProducts);
 
-                return $this->persistResolvedSale(
+                $sale = $this->persistResolvedSale(
                     $data,
                     $resolvedLines,
                     $lockedProducts,
@@ -149,6 +170,10 @@ class SaleService
                     $payloadHash,
                     true
                 );
+
+                $holdBill?->delete();
+
+                return $sale;
             });
         } catch (QueryException $exception) {
             if ($idempotencyKey !== null

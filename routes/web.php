@@ -33,6 +33,7 @@ use App\Http\Controllers\DeliveryZoneController;
 use App\Http\Controllers\CustomerDeliveryAddressController;
 use App\Http\Controllers\PricingManagementController;
 use App\Http\Controllers\DailyPaymentClosingController;
+use App\Http\Controllers\HoldBillController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -78,6 +79,15 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('/sales-v3', [SaleV3Controller::class, 'index'])
             ->name('sales.v3');
+
+        Route::get('/sales-v3/hold-bills', [HoldBillController::class, 'index'])
+            ->name('sales.v3.hold-bills.index');
+        Route::get('/sales-v3/hold-bills/{holdBill}', [HoldBillController::class, 'show'])
+            ->name('sales.v3.hold-bills.show');
+        Route::post('/sales-v3/hold-bills', [HoldBillController::class, 'store'])
+            ->name('sales.v3.hold-bills.store');
+        Route::delete('/sales-v3/hold-bills/{holdBill}', [HoldBillController::class, 'destroy'])
+            ->name('sales.v3.hold-bills.destroy');
 
 
 

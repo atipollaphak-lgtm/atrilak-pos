@@ -1,29 +1,20 @@
 <section class="pos-v3-customer card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="fas fa-cash-register mr-2"></i>ขายสินค้า</span>
-        <span class="small"><span id="pos-v3-clock"></span> · <span id="pos-v3-staff">{{ auth()->user()->name ?? 'พนักงานขาย' }}</span></span>
-    </div>
-    <div class="card-body">
-        <div class="pos-v3-customer-grid">
-            <label>ลูกค้า
-                <select id="v3-customer-id" class="form-control">
-                    <option value="">ลูกค้าทั่วไป</option>
-                    @foreach ($customers as $customer)
-                        <option value="{{ $customer->id }}">{{ $customer->name }}{{ $customer->phone ? ' · '.$customer->phone : '' }}</option>
-                    @endforeach
-                </select>
-            </label>
-            <label>ที่อยู่จัดส่ง
-                <select id="v3-address-id" class="form-control" disabled><option value="">เลือกลูกค้าก่อน</option></select>
-            </label>
-            <label>ช่าง
-                <select id="v3-technician-id" class="form-control"><option value="">ไม่ระบุ</option>@foreach ($technicians as $technician)<option value="{{ $technician->id }}">{{ $technician->name }}</option>@endforeach</select>
-            </label>
-            <label>วันที่ขาย
-                <input id="v3-sale-date" class="form-control" type="date" value="{{ now()->toDateString() }}">
-            </label>
-            <label class="pos-v3-pickup"><span>การจัดส่ง</span><span><input id="v3-pickup" type="checkbox"> รับเอง</span></label>
+    <div class="card-body pos-v3-customer-panel">
+        <div class="pos-v3-avatar"><i class="fas fa-user"></i></div>
+        <div class="flex-grow-1">
+            <h4 id="v3-customer-name" class="mb-1">ลูกค้ายังไม่ได้เลือก</h4>
+            <div id="v3-customer-phone" class="pos-v3-customer-line"><i class="fas fa-phone"></i> กรุณาเลือกลูกค้า</div>
+            <div id="v3-customer-address" class="pos-v3-customer-line"><i class="fas fa-map-marker-alt"></i> เลือกที่อยู่จัดส่งเพื่อเริ่มคำนวณโซน</div>
         </div>
-        <div id="v3-address-summary" class="pos-v3-address-summary d-none"><span id="v3-address-text"></span><strong id="v3-address-zone">โซนจัดส่ง: -</strong><strong id="v3-address-fee">ค่าส่งปัจจุบัน 0.00 บาท</strong></div>
+        <div class="pos-v3-customer-actions">
+            <button id="v3-open-customer-search" type="button" class="btn btn-outline-success"><i class="fas fa-search"></i>ค้นหาลูกค้า</button>
+            <button id="v3-clear-customer" type="button" class="btn btn-outline-danger"><i class="fas fa-trash"></i>ล้างลูกค้า</button>
+        </div>
+    </div>
+    <div class="d-none">
+        <select id="v3-customer-id" class="form-control"><option value="">ลูกค้าทั่วไป</option>@foreach ($customers as $customer)<option value="{{ $customer->id }}" data-name="{{ $customer->name }}" data-phone="{{ $customer->phone }}" data-tax-number="{{ $customer->tax_number ?? '' }}">{{ $customer->name }}</option>@endforeach</select>
+        <select id="v3-address-id" class="form-control" disabled><option value="">เลือกลูกค้าก่อน</option></select>
+        <select id="v3-technician-id" class="form-control"><option value="">ไม่ระบุ</option>@foreach ($technicians as $technician)<option value="{{ $technician->id }}">{{ $technician->name }}</option>@endforeach</select>
+        <input id="v3-pickup" type="checkbox"><span id="v3-address-text"></span><span id="v3-address-zone"></span><span id="v3-address-fee"></span>
     </div>
 </section>

@@ -30,6 +30,10 @@ class SaleIdempotencyService
             ], $data['items'] ?? []),
         ];
 
+        if (! empty($data['hold_bill_id'])) {
+            $payload = ['hold_bill_id' => $this->normalizeId($data['hold_bill_id'])] + $payload;
+        }
+
         return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
     }
 

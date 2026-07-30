@@ -32,6 +32,7 @@ class SaleV3Controller extends Controller
         try {
             $validated = $request->validated();
             $sale = $saleService->createSale([
+                'hold_bill_id' => $validated['hold_bill_id'] ?? null,
                 'customer_id' => $validated['customer_id'] ?? null,
                 'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
                 'technician_id' => $validated['technician_id'] ?? null,

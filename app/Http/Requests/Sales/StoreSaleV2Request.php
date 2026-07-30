@@ -45,6 +45,7 @@ class StoreSaleV2Request extends FormRequest
     {
         return [
             'idempotency_key' => ['required', 'uuid'],
+            'hold_bill_id' => ['nullable', 'integer', 'min:1'],
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'customer_delivery_address_id' => ['nullable', 'integer', 'exists:customer_delivery_addresses,id'],
             'technician_id' => ['nullable', 'integer', 'exists:technicians,id'],

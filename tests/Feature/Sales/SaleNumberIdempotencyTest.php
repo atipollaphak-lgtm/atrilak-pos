@@ -174,6 +174,11 @@ class SaleNumberIdempotencyTest extends TestCase
         $first['items'][0]['qty'] = '2.00';
         $first['items'][1]['qty'] = '1.00';
         $this->assertNotSame($service->payloadHash($first), $service->payloadHash($reversed));
+
+        $withAnotherHold = $second;
+        $second['hold_bill_id'] = 10;
+        $withAnotherHold['hold_bill_id'] = 11;
+        $this->assertNotSame($service->payloadHash($second), $service->payloadHash($withAnotherHold));
     }
 
     public function test_counter_rolls_back_with_transaction_and_keeps_minimum_width_over_9999(): void
