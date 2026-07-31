@@ -8,28 +8,28 @@ use Tests\TestCase;
 
 class SaleInvoiceV2FulfillmentTest extends TestCase
 {
-    public function test_invoice_v2_renders_pickup_fulfillment_label(): void
+    public function test_invoice_v2_delivery_note_uses_minimal_customer_region_for_pickup(): void
     {
         $invoice = $this->renderInvoice('pickup');
 
-        $this->assertStringContainsString('🏪 ลูกค้ารับเอง', $invoice);
-        $this->assertStringNotContainsString('🚚 จัดส่ง', $invoice);
+        $this->assertStringContainsString('class="customer-information"', $invoice);
+        $this->assertStringNotContainsString('class="delivery-fulfillment"', $invoice);
     }
 
-    public function test_invoice_v2_renders_delivery_fulfillment_label(): void
+    public function test_invoice_v2_delivery_note_uses_minimal_customer_region_for_delivery(): void
     {
         $invoice = $this->renderInvoice('delivery');
 
-        $this->assertStringContainsString('🚚 จัดส่ง', $invoice);
-        $this->assertStringNotContainsString('🏪 ลูกค้ารับเอง', $invoice);
+        $this->assertStringContainsString('class="customer-information"', $invoice);
+        $this->assertStringNotContainsString('class="delivery-fulfillment"', $invoice);
     }
 
     public function test_invoice_v2_does_not_assume_delivery_for_unknown_fulfillment_type(): void
     {
         $invoice = $this->renderInvoice(null);
 
-        $this->assertStringNotContainsString('🏪 ลูกค้ารับเอง', $invoice);
-        $this->assertStringNotContainsString('🚚 จัดส่ง', $invoice);
+        $this->assertStringContainsString('class="customer-information"', $invoice);
+        $this->assertStringNotContainsString('class="delivery-fulfillment"', $invoice);
     }
 
     private function renderInvoice(?string $deliveryType): string

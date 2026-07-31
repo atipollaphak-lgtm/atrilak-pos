@@ -414,6 +414,15 @@
             }
         }
     </style>
+
+    @if (($document['type'] ?? null) === 'delivery-note')
+        <link rel="stylesheet" href="{{ asset('css/sales-invoice-v2.css') }}">
+        @if (($paper ?? 'a4') === 'a5')
+            <style>
+                @page { size: A5 portrait; margin: 0; }
+            </style>
+        @endif
+    @endif
 </head>
 
 <body>
@@ -422,7 +431,17 @@
         <button onclick="window.print()">พิมพ์อีกครั้ง</button>
     </div>
 
-    <div class="invoice">
+    @php
+        $paper = in_array(request()->query('paper', 'a4'), ['a4', 'a5'], true)
+            ? request()->query('paper', 'a4')
+            : 'a4';
+    @endphp
+
+    <div class="invoice paper-{{ $paper }}">
+
+        @if (($document['type'] ?? null) === 'delivery-note')
+            @include('sales.invoice_v2.delivery-note')
+        @else
 
         @include('sales.partials.void-document-marker', ['sale' => $sale])
 
@@ -459,6 +478,8 @@
         <div class="footer-note">
             ขอบคุณที่ใช้บริการ
         </div>
+
+        @endif
 
 
     </div>

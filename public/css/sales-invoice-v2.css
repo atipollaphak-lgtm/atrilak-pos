@@ -1,0 +1,142 @@
+@page {
+    size: A4 portrait;
+    margin: 0;
+}
+
+:root {
+    --delivery-primary: #111827;
+    --delivery-secondary: #374151;
+    --delivery-border: #d1d5db;
+    --delivery-light-border: #e5e7eb;
+    --delivery-soft: #f8fafc;
+    --delivery-muted: #6b7280;
+}
+
+body {
+    margin: 0;
+    color: var(--delivery-primary);
+    font-family: "Sarabun", "Noto Sans Thai", Arial, sans-serif;
+    font-size: 12px;
+    background: #f3f4f6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+.delivery-note {
+    box-sizing: border-box;
+    width: 210mm;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 7mm 8mm 4mm;
+    background: #fff;
+}
+
+.delivery-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8mm;
+    padding-bottom: 3mm;
+    border-bottom: 1px solid var(--delivery-border);
+}
+
+.company-block { display: flex; flex: 1 1 62%; gap: 4mm; align-items: flex-start; }
+.company-brand { width: 35mm; flex: 0 0 35mm; text-align: center; }
+.delivery-logo { width: 32mm; height: 32mm; object-fit: contain; }
+.delivery-logo-placeholder { font-size: 42px; font-weight: 800; line-height: 32mm; }
+.company-details { padding-top: 1mm; }
+.company-name { font-size: 22px; font-weight: 800; line-height: 1.15; }
+.company-tagline { margin: 1mm 0 3mm; font-size: 14px; color: var(--delivery-secondary); }
+.company-line { margin-top: 1mm; line-height: 1.3; color: var(--delivery-secondary); }
+.document-block { flex: 0 0 36%; text-align: right; }
+.document-block h1 { margin: 0; font-size: 28px; line-height: 1; }
+.document-subtitle { margin: 2mm 0 5mm; font-size: 15px; letter-spacing: .4px; }
+.document-meta { border: 1px solid #aeb7c5; border-radius: 2mm; text-align: left; }
+.document-meta div { display: flex; justify-content: space-between; gap: 4mm; padding: 3mm 4mm; }
+.document-meta div + div { border-top: 1px dashed var(--delivery-border); }
+.document-meta strong { white-space: nowrap; }
+
+.customer-information { padding: 3mm 1mm 2.5mm; }
+.customer-line { display: flex; gap: 4mm; min-height: 5.5mm; line-height: 1.35; }
+.customer-line strong { white-space: nowrap; }
+.customer-line strong:nth-of-type(2) { margin-left: auto; }
+.customer-address { max-width: 150mm; }
+
+.items-table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid var(--delivery-border); border-radius: 2mm; table-layout: fixed; }
+.items-table thead { display: table-header-group; }
+.items-table tr { break-inside: avoid; page-break-inside: avoid; }
+.items-table th { padding: 2mm 2mm; color: #fff; background: var(--delivery-primary); font-size: 12px; }
+.items-table td { height: 6mm; padding: 1mm 2mm; border-top: 1px solid var(--delivery-light-border); border-right: 1px solid var(--delivery-light-border); vertical-align: middle; font-size: 12px; }
+.items-table th + th { border-left: 1px solid #4b5563; }
+.items-table td:last-child, .items-table th:last-child { border-right: 0; }
+.item-name { overflow-wrap: anywhere; }
+.text-center { text-align: center; }
+.text-end { text-align: right; white-space: nowrap; }
+
+.payment-summary-section { display: table; width: 100%; table-layout: fixed; margin-top: 2mm; border: 1px solid var(--delivery-border); border-radius: 2mm; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
+.qr-payment { display: flex; min-height: 0; flex-direction: column; align-items: center; justify-content: center; gap: 1mm; padding: 2mm; border-right: 1px solid var(--delivery-border); text-align: center; }
+.qr-payment { display: table-cell; box-sizing: border-box; width: 42%; vertical-align: middle; }
+.promptpay-label { padding: 0 2mm; color: #fff; background: var(--delivery-primary); border-radius: 1mm; font-size: 10px; }
+.delivery-qr { width: 30mm; height: 30mm; object-fit: contain; }
+.qr-payment small { font-size: 10px; }
+.summary { display: table-cell; width: 58%; vertical-align: top; }
+.summary div { display: flex; justify-content: space-between; padding: 2.5mm 4mm; border-bottom: 1px solid var(--delivery-light-border); font-size: 14px; }
+.summary div:last-child { border-bottom: 0; }
+.summary .grand-total { align-items: center; background: var(--delivery-soft); font-size: 19px; font-weight: 800; }
+.summary .grand-total strong { font-size: 24px; }
+
+.receiver-section { display: grid; grid-template-columns: 55% 45%; margin-top: 3mm; border: 1px solid var(--delivery-border); border-radius: 2mm; page-break-inside: avoid; }
+.notes-block, .receiver-block { min-height: 20mm; padding: 2.5mm 4mm; }
+.notes-block { border-right: 1px solid var(--delivery-border); }
+.notes-block div { min-height: 3.5mm; border-bottom: 1px dashed #aeb7c5; }
+.receiver-block { text-align: center; }
+.signature-line { width: 75%; margin: 5mm auto 2mm; border-bottom: 1px solid var(--delivery-secondary); }
+.delivery-footer { display: flex; flex-direction: column; align-items: center; gap: 1mm; margin-top: 1mm; color: var(--delivery-secondary); }
+.delivery-footer strong { letter-spacing: 1.5px; font-size: 11px; }
+
+.print-button { text-align: right; margin: 10px; }
+
+@media print {
+    @page { size: A4 portrait; margin: 0; }
+    body { background: #fff; }
+    .print-button, .no-print { display: none !important; }
+    .delivery-note { margin: 0; }
+}
+
+.paper-a5 .delivery-note {
+    width: 148mm;
+    min-height: 0;
+    padding: 5mm 5mm 4mm;
+    font-size: 10px;
+}
+
+.paper-a5 .delivery-header { gap: 3mm; padding-bottom: 3mm; }
+.paper-a5 .company-block { gap: 2mm; }
+.paper-a5 .company-brand { width: 22mm; flex-basis: 22mm; }
+.paper-a5 .delivery-logo { width: 20mm; height: 20mm; }
+.paper-a5 .delivery-logo-placeholder { font-size: 28px; line-height: 20mm; }
+.paper-a5 .company-name { font-size: 16px; }
+.paper-a5 .company-tagline { margin: 1mm 0 1.5mm; font-size: 10px; }
+.paper-a5 .company-line { margin-top: .8mm; font-size: 9px; }
+.paper-a5 .document-block h1 { font-size: 20px; }
+.paper-a5 .document-subtitle { margin: 1mm 0 2mm; font-size: 10px; }
+.paper-a5 .document-meta div { padding: 1.8mm 2mm; font-size: 9px; }
+.paper-a5 .customer-information { padding: 2.5mm 1mm 2mm; }
+.paper-a5 .customer-line { gap: 2mm; min-height: 5mm; font-size: 9px; }
+.paper-a5 .items-table th { padding: 1.5mm 1mm; font-size: 9px; }
+.paper-a5 .items-table td { height: 6mm; padding: 1mm; font-size: 9px; }
+.paper-a5 .payment-summary-section { margin-top: 2mm; }
+.paper-a5 .qr-payment { min-height: 29mm; padding: 2mm; font-size: 9px; }
+.paper-a5 .delivery-qr { width: 25mm; height: 25mm; }
+.paper-a5 .qr-payment small { font-size: 7px; }
+.paper-a5 .summary div { padding: 2mm; font-size: 10px; }
+.paper-a5 .summary .grand-total { font-size: 13px; }
+.paper-a5 .summary .grand-total strong { font-size: 16px; }
+.paper-a5 .receiver-section { margin-top: 2mm; }
+.paper-a5 .notes-block, .paper-a5 .receiver-block { min-height: 16mm; padding: 2mm; font-size: 9px; }
+.paper-a5 .signature-line { margin-top: 6mm; }
+.paper-a5 .delivery-footer { margin-top: 2mm; font-size: 8px; }
+
+@media print {
+    @page { size: A4 portrait; }
+    .paper-a5 .delivery-note { width: 148mm; min-height: 0; }
+}

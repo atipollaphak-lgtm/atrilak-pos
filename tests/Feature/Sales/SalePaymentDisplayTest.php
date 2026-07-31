@@ -7,6 +7,7 @@ use App\Models\Sale;
 use App\Services\CommercialDocumentService;
 use App\Services\Sales\SaleFinancialSnapshotService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 class SalePaymentDisplayTest extends TestCase
@@ -90,6 +91,48 @@ class SalePaymentDisplayTest extends TestCase
         $this->assertStringNotContainsString('วิธีชำระเงิน', $deliveryNote);
         $this->assertStringNotContainsString('วิธีชำระเงิน', $quotation);
         $this->assertStringNotContainsString('วิธีชำระเงิน', $legacyTaxInvoice);
+    }
+
+    public function test_delivery_note_uses_minimal_print_regions_and_preserves_sale_values(): void
+    {
+        $sale = $this->sale('cash', '100.00', '0.00', '100.00', '0.00');
+        $html = view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => null,
+            'document' => app(CommercialDocumentService::class)
+                ->buildSaleDocument($sale, 'delivery-note'),
+        ])->render();
+
+        $this->assertStringContainsString('class="delivery-note"', $html);
+        $this->assertStringContainsString('class="receiver-section"', $html);
+        $this->assertStringContainsString('class="items-table delivery-note-items"', $html);
+        $this->assertSame(5, preg_match_all('/<th\b/', $html));
+        $this->assertStringContainsString($sale->sale_no, $html);
+        $this->assertStringContainsString('100', $html);
+    }
+
+    public function test_delivery_note_uses_a4_by_default_and_accepts_a5_paper_query(): void
+    {
+        $sale = $this->sale('cash', '100.00', '0.00', '100.00', '0.00');
+        $document = app(CommercialDocumentService::class)
+            ->buildSaleDocument($sale, 'delivery-note');
+
+        $a4 = view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => null,
+            'document' => $document,
+        ])->render();
+
+        $this->assertStringContainsString('class="invoice paper-a4"', $a4);
+
+        $this->app->instance('request', Request::create('/sales/1/invoice-v2?paper=a5'));
+        $a5 = view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => null,
+            'document' => $document,
+        ])->render();
+
+        $this->assertStringContainsString('class="invoice paper-a5"', $a5);
     }
 
     public function test_combined_delivery_receipt_renderers_show_payment_and_legacy_sales_omit_it(): void
