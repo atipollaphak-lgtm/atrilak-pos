@@ -129,11 +129,8 @@
     <section class="payment-summary-section">
         <div class="qr-payment">
             @if (!empty($setting?->qr_image))
-                <strong>สแกนเพื่อชำระเงิน</strong>
-                <span class="promptpay-label">PromptPay</span>
                 <img src="{{ asset('storage/' . $setting->qr_image) }}" class="delivery-qr" alt="QR Payment">
-                <small>ชื่อบัญชี : {{ $storeName }}</small>
-                <small>เลขที่บัญชี : -</small>
+                <strong>สแกนเพื่อชำระเงิน</strong>
             @else
                 <span>ช่องทางการชำระเงิน</span>
             @endif

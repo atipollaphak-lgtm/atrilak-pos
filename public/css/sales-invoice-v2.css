@@ -73,11 +73,9 @@ body {
 .text-end { text-align: right; white-space: nowrap; }
 
 .payment-summary-section { display: table; width: 100%; table-layout: fixed; margin-top: 2mm; border: 1px solid var(--delivery-border); border-radius: 2mm; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
-.qr-payment { display: flex; min-height: 0; flex-direction: column; align-items: center; justify-content: center; gap: 1mm; padding: 2mm; border-right: 1px solid var(--delivery-border); text-align: center; }
-.qr-payment { display: table-cell; box-sizing: border-box; width: 42%; vertical-align: middle; }
-.promptpay-label { padding: 0 2mm; color: #fff; background: var(--delivery-primary); border-radius: 1mm; font-size: 10px; }
-.delivery-qr { width: 30mm; height: 30mm; object-fit: contain; }
-.qr-payment small { font-size: 10px; }
+.qr-payment { display: table-cell; box-sizing: border-box; width: 42%; padding: 3mm; border-right: 1px solid var(--delivery-border); text-align: center; vertical-align: middle; }
+.delivery-qr { display: block; width: 32mm; height: 32mm; margin: 0 auto; object-fit: contain; }
+.qr-payment strong { display: block; margin-top: 2mm; font-size: 10px; line-height: 1.2; white-space: nowrap; }
 .summary { display: table-cell; width: 58%; vertical-align: top; }
 .summary div { display: flex; justify-content: space-between; padding: 2.5mm 4mm; border-bottom: 1px solid var(--delivery-light-border); font-size: 14px; }
 .summary div:last-child { border-bottom: 0; }
@@ -125,9 +123,9 @@ body {
 .paper-a5 .items-table th { padding: 1.5mm 1mm; font-size: 9px; }
 .paper-a5 .items-table td { height: 6mm; padding: 1mm; font-size: 9px; }
 .paper-a5 .payment-summary-section { margin-top: 2mm; }
-.paper-a5 .qr-payment { min-height: 29mm; padding: 2mm; font-size: 9px; }
-.paper-a5 .delivery-qr { width: 25mm; height: 25mm; }
-.paper-a5 .qr-payment small { font-size: 7px; }
+.paper-a5 .qr-payment { padding: 2.5mm; }
+.paper-a5 .delivery-qr { width: 26mm; height: 26mm; }
+.paper-a5 .qr-payment strong { margin-top: 1.5mm; font-size: 9px; }
 .paper-a5 .summary div { padding: 2mm; font-size: 10px; }
 .paper-a5 .summary .grand-total { font-size: 13px; }
 .paper-a5 .summary .grand-total strong { font-size: 16px; }
