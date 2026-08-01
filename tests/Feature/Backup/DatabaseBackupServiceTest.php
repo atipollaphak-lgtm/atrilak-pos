@@ -64,6 +64,43 @@ class DatabaseBackupServiceTest extends TestCase
         $this->assertSame([], File::files($this->backupDirectory.DIRECTORY_SEPARATOR.'.partial'));
     }
 
+    public function test_it_writes_a_manifest_with_database_checksum_and_business_file_coverage(): void
+    {
+        $businessDirectory = storage_path('app/public/settings');
+        File::ensureDirectoryExists($businessDirectory);
+        File::put($businessDirectory.'/logo.png', 'logo-test');
+        File::put($businessDirectory.'/qr.png', 'qr-test');
+        File::ensureDirectoryExists(storage_path('app/public/products'));
+        File::put(storage_path('app/public/products/product.png'), 'product-test');
+
+        Process::fake(function (PendingProcess $process) {
+            File::put($process->command[array_key_last($process->command)], '-- PostgreSQL database dump');
+
+            return Process::result();
+        });
+
+        try {
+            $result = app(DatabaseBackupService::class)->create();
+            $manifestPath = $this->backupDirectory.DIRECTORY_SEPARATOR.$result->fileName().'.manifest.json';
+
+            $this->assertTrue($result->successful());
+            $this->assertFileExists($manifestPath);
+            $manifest = json_decode(File::get($manifestPath), true, flags: JSON_THROW_ON_ERROR);
+            $this->assertSame('atrilak_pos_test', $manifest['database']['database']);
+            $this->assertSame(
+                hash_file('sha256', $this->backupDirectory.DIRECTORY_SEPARATOR.$result->fileName()),
+                $manifest['database']['sha256']
+            );
+            $this->assertSame(
+                ['products/product.png', 'settings/logo.png', 'settings/qr.png'],
+                array_column($manifest['business_files'], 'path')
+            );
+        } finally {
+            File::deleteDirectory(storage_path('app/public/products'));
+            File::deleteDirectory(storage_path('app/public/settings'));
+        }
+    }
+
     public function test_it_rejects_a_missing_executable_without_running_a_process(): void
     {
         config()->set('backup.pg_dump_path', $this->backupDirectory.DIRECTORY_SEPARATOR.'missing.exe');

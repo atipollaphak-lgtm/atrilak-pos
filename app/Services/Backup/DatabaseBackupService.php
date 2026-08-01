@@ -74,6 +74,10 @@ class DatabaseBackupService
                 return $this->failure('finalization_failed');
             }
 
+            if (! $this->writeManifest($directory, $fileName, $finalPath)) {
+                return $this->failure('manifest_write_failed');
+            }
+
             $warningCode = $this->retainBackups($directory, $fileName);
 
             Log::info('database_backup.completed', [
@@ -129,6 +133,44 @@ class DatabaseBackupService
         }
 
         return null;
+    }
+
+    private function writeManifest(string $directory, string $fileName, string $backupPath): bool
+    {
+        $publicRoot = storage_path('app/public');
+        $businessFiles = [];
+
+        if (File::isDirectory($publicRoot)) {
+            foreach (File::allFiles($publicRoot) as $file) {
+                $relativePath = str_replace('\\', '/', ltrim(str_replace($publicRoot, '', $file->getPathname()), '\\/'));
+                $businessFiles[] = [
+                    'path' => $relativePath,
+                    'size' => $file->getSize(),
+                    'sha256' => hash_file('sha256', $file->getPathname()),
+                ];
+            }
+        }
+
+        usort($businessFiles, fn (array $left, array $right): int => strcmp($left['path'], $right['path']));
+
+        $connection = config('database.connections.'.config('database.default'));
+        $manifest = [
+            'created_at' => now()->toIso8601String(),
+            'database' => [
+                'connection' => config('database.default'),
+                'host' => (string) ($connection['host'] ?? ''),
+                'port' => (string) ($connection['port'] ?? ''),
+                'database' => (string) ($connection['database'] ?? ''),
+                'sha256' => hash_file('sha256', $backupPath),
+            ],
+            'backup_file' => $fileName,
+            'business_files' => $businessFiles,
+        ];
+
+        return File::put(
+            $directory.DIRECTORY_SEPARATOR.$fileName.'.manifest.json',
+            json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)
+        ) !== false;
     }
 
     private function fileName(): string
