@@ -108,6 +108,8 @@ Quality checks:
 
 Migration verification on the isolated Test Database: fresh migration exit code `0`; immediate upgrade migration exit code `0` with `Nothing to migrate`; migration status showed all migrations `Ran`. No migration file was added by this Sprint, so the upgrade path is a no-op relative to the baseline schema.
 
+Follow-up combined automation attempt after Browser verification: `138 tests`, `574 assertions`, `91 passed`, `4 failures`, `43 errors`, `5 risky`, exit code `1`. It was not accepted as a regression gate because the same shared-schema lifecycle defect removed migrated tables during the combined process; representative errors were missing `products`, `users`, `settings`, and `daily_payment_closing_sales`. Backup coverage also saw leftover `TEST-GOLIVE-*` storage files from the Browser fixture, confirming fixture cleanup must be isolated between suites. Existing isolated targeted results remain the valid evidence.
+
 ## 5. Browser verification
 
 Isolated Test Server: `http://127.0.0.1:8000`  
@@ -134,6 +136,15 @@ The previous paragraph records the pre-fix reproduction. After the minimal state
 
 The POS V3 blocker is resolved. Browser Edit/Void, Daily Closing from the newly created sales, real Logo replacement, Print Preview A4/A5, and Backup/Restore with the post-sale business-file fixture were not rerun in this follow-up; their automated targeted coverage remains passing, but these manual acceptance items remain documented limitations.
 
+### Follow-up Browser verification
+
+- Sale Edit: `SAL-20260801-0001` edited in Browser from quantity `2` to `3`; total changed `315.00 -> 472.50`, revision `1 -> 2`, received cash `500.00`, change `27.50`, stock `100 -> 97`, and one sale movement remained authoritative.
+- Sale Void: the same sale was voided with reason `TEST-GOLIVE Browser verification`; Browser showed the voided state and removed Edit/Void actions. Database showed `status=voided`, actor/time populated, stock restored to `100`, one void movement, and zero commission rows.
+- Daily Closing: Browser showed one active sale and Expected Cash `157.50`; actual cash `157.50` was saved as Draft and remained `157.50` after reload. Native confirmation interrupted the Browser control session before Finalize could be evidenced.
+- Browser console had no new errors during Edit/Void/Draft flows. No HTTP 500 or unexpected Laravel error was observed in the successful requests.
+
+Logo replacement/HTTP asset checks, Print Preview A4/A5, post-transaction Backup/Restore, and Daily Closing Finalize remain unverified in Browser in this follow-up.
+
 ## 6. Backup/Restore verification
 
 - Database dump atomic finalization: passed
@@ -154,6 +165,7 @@ Implementation commits:
 - `98ce7b3` feat: add backup manifest coverage
 - `16fd8ba` test: add integrated go-live regression
 - `aed009a` fix: preserve POS V3 fulfillment state
+- `de2571a` docs: record POS V3 verification
 
 Design/plan commits:
 
@@ -164,6 +176,7 @@ Design/plan commits:
 
 - Full PHPUnit suite still has a pre-existing shared-schema isolation problem; targeted suites are the reliable proof for this sprint until test infrastructure is separately isolated.
 - POS V3 customer/fulfillment/payment state is fixed and verified in Browser for Pickup, Delivery and Hold Bill. Remaining manual evidence is Browser Edit/Void, Browser Daily Closing, Logo replacement/Print Preview, and Backup/Restore after the final seeded transaction/file set.
+- Follow-up Browser Edit/Void passed; Daily Closing Draft passed and persisted, but Finalize was not evidenced because native confirmation interrupted the Browser session.
 - Real file upload and A4 print preview require a seeded Test fixture and manual browser session; they were not claimed as passed in this follow-up.
 - Production deployment, Production backup, merge and push were not performed.
 
