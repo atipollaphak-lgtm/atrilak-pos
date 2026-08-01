@@ -79,13 +79,27 @@ Passing targeted results:
 - Backup/Restore: 38 tests, 37 passed, 161 assertions, 1 Windows symlink skip
 - Integrated Go-Live routes: 2 tests, 16 assertions
 
-Full suite result: 671 tests, 241 passed, 16 baseline schema-isolation failures/errors, 1 skip and 6 risky tests. The baseline failures come from existing tests that drop/recreate the shared PostgreSQL schema during one PHPUnit process; targeted module suites pass when run serially with the required schema lifecycle.
+Full Suite raw result from PHPUnit/JUnit: `671 tests`, `1,283 assertions`, `241 passed`, `413 errors`, `16 failures`, `1 skipped`, `0 incomplete` observed, `6 risky`, exit code `2`. PHPUnit completed the run; it did not stop early. The arithmetic is `671 - 413 - 16 - 1 = 241`.
+
+The first missing-schema failure was `Tests\Feature\Categories\CategoryManagementTest::test_category_index_contains_single_page_management_controls_and_product_count`, after the Business Rules custom-schema tests. Dominant error groups were missing `categories` (221), `users` (38), `sales` (29), `daily_payment_closings` (22), `suppliers` (15), `customers` (15), `settings` (9), `technicians` (8), `daily_payment_closing_sales` (5), `quotations` (5), `delivery_zones` (4), `stock_count_number_counters` (3), and `quotation_items` (2), with remaining errors/failures from other missing tables and assertions.
+
+The root cause is pre-existing test infrastructure: `tests/Support/CreatesBusinessRuleTestSchema.php`, `tests/Support/CreatesSaleTransactionTestSchema.php`, `tests/Support/CreatesCompetingStockWriterTestSchema.php`, and database migration tests intentionally drop/recreate shared PostgreSQL tables inside one PHPUnit process. The next `RefreshDatabase` test can see the static migrated state while tables are absent. This is not a migration or production-code change in this Sprint.
+
+Baseline comparison, run in separate worktree/database (`4bed81a` / `atrilak_pos_baseline_20260801`) versus latest (`f2c23fd` / `atrilak_pos_final_test_20260729`):
+
+- Baseline: 662 tests, 1,261 assertions, 237 passed, 409 errors, 15 failures, 1 skipped, exit code 2.
+- Latest: 671 tests, 1,283 assertions, 241 passed, 413 errors, 16 failures, 1 skipped, exit code 2.
+- Common tests: no Pass-to-Fail status change was observed.
+- Latest added 9 tests; 4 passed and 5 were affected by the same shared-schema isolation behavior when the whole suite was combined.
+- Therefore the Full Suite is evidence that the isolation defect persists, not evidence that all 671 workflows are verified.
 
 Quality checks:
 
 - PHP syntax: passed for `app`, `config`, `routes`, `database` and `tests`
 - Pint: changed files pass; full-project Pint reports pre-existing formatting violations outside this scope
 - `git diff --check`: passed
+
+Migration verification on the isolated Test Database: fresh migration exit code `0`; immediate upgrade migration exit code `0` with `Nothing to migrate`; migration status showed all migrations `Ran`. No migration file was added by this Sprint, so the upgrade path is a no-op relative to the baseline schema.
 
 ## 5. Browser verification
 
@@ -103,7 +117,9 @@ Passed read-only pages:
 - Settings
 - Backup
 
-Observed: no Server Error page, no horizontal overflow, and no browser console error/warning on the verified Stock Adjustment page. Transaction creation, upload and print preview were not performed in Browser because the Test Database had no seeded business fixture at the time of smoke testing; corresponding service/document behavior is covered by automated tests.
+Observed: no Server Error page, no horizontal overflow, and no browser console error/warning on the verified pages. A seeded `TEST-GOLIVE-` fixture was then used. Browser evidence: `/purchases` recorded purchase ID `1` with `TEST-GOLIVE-Supplier`, quantity `10`, total `1,000.00`, and the POS V3 page displayed stock `10.00` and selling price `150.00`. `/sales-v3` created hold bill `HLD-20260801-0001`, displayed the recall dialog, and opened the payment modal with change `50.00` for received cash `350.00` against `300.00`.
+
+The Browser transaction did not complete: the selected fulfillment/customer state was not retained consistently after modal interaction, and the attempted double submit returned the visible validation alert `ข้อมูลการขายไม่ถูกต้อง` with no confirmed Sale record. Therefore sale payment, edit/void, delivery-zone sale, daily closing from the Browser, real upload, print preview, and post-transaction DB assertions are not claimed as passed. Console errors were empty during the observed POS interaction; no new Laravel error was observed in the browser session.
 
 ## 6. Backup/Restore verification
 
@@ -113,6 +129,7 @@ Observed: no Server Error page, no horizontal overflow, and no browser console e
 - Logo/QR/Product image coverage: passed
 - Restore safety and CLI-only workflow: passed
 - Windows symbolic-link source test: skipped because the environment does not permit symbolic links
+- Skipped test: `Tests\\Feature\\Backup\\DatabaseRestoreServiceTest::test_it_rejects_a_symbolic_link_source`; it proves restore rejects a symbolic-link dump source. The Windows limitation was explicit. Replacement checks passed for missing/wrong-extension/empty/staging-path restore rejection, and the manifest test verified storage file existence, relative paths, sizes and SHA-256 values for business files.
 
 ## 7. Git
 
