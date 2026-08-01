@@ -7,9 +7,9 @@
 
         $storageLogoPath = $normalizedLogoPath ? preg_replace('#^storage/#', '', $normalizedLogoPath) : null;
 
-        $logoUrl = $storageLogoPath ? asset('storage/' . $storageLogoPath) : null;
-
         $logoExists = $storageLogoPath ? file_exists(public_path('storage/' . $storageLogoPath)) : false;
+
+        $logoUrl = $logoExists ? asset('storage/' . $storageLogoPath) : null;
 
         $storeName = \App\Support\DocumentSnapshotValue::resolve(
             $sale->store_name_snapshot,

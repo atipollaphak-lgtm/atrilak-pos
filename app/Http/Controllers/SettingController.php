@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateSettingRequest;
 use App\Models\Setting;
+use Illuminate\Support\Facades\Storage;
 
 class SettingController extends Controller
 {
@@ -24,6 +25,7 @@ class SettingController extends Controller
     public function update(UpdateSettingRequest $request)
     {
         $setting = Setting::firstOrCreate([], ['branch_type' => 'head_office']);
+        $oldLogoPath = $setting->logo_image;
 
         $data = $request->safe()->only([
             'store_name',
@@ -45,6 +47,15 @@ class SettingController extends Controller
         }
 
         $setting->update($data);
+
+        if (
+            array_key_exists('logo_image', $data)
+            && $oldLogoPath
+            && $oldLogoPath !== $data['logo_image']
+            && $oldLogoPath !== $setting->qr_image
+        ) {
+            Storage::disk('public')->delete($oldLogoPath);
+        }
 
         return back()->with(
             'success',

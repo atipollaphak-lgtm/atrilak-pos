@@ -204,6 +204,25 @@ class TransactionDocumentSnapshotTest extends TestCase
         }
     }
 
+    public function test_documents_do_not_render_a_broken_logo_when_setting_file_is_missing(): void
+    {
+        $context = $this->context();
+        $sale = $this->createSale($context);
+        $context['setting']->update(['logo_image' => 'settings/missing-logo.png']);
+        $setting = $context['setting']->fresh();
+
+        $document = app(CommercialDocumentService::class)
+            ->buildSaleDocument($sale, 'delivery-note');
+        $documents = [
+            view('sales.invoice_v2', compact('sale', 'setting', 'document'))->render(),
+            view('sales.print', compact('sale', 'setting'))->render(),
+        ];
+
+        foreach ($documents as $html) {
+            $this->assertStringNotContainsString('storage/settings/missing-logo.png', $html);
+        }
+    }
+
     public function test_sale_update_recaptures_customer_and_preserves_same_identity_item_snapshots(): void
     {
         $context = $this->context();

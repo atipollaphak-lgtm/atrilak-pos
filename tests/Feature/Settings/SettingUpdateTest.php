@@ -3,6 +3,7 @@
 namespace Tests\Feature\Settings;
 
 use App\Models\User;
+use App\Models\Setting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -61,5 +62,33 @@ class SettingUpdateTest extends TestCase
         ]);
         Storage::disk('public')->assertExists('settings/'.$logo->hashName());
         Storage::disk('public')->assertExists('settings/'.$qr->hashName());
+    }
+
+    public function test_replacing_logo_removes_only_the_previous_logo_file(): void
+    {
+        Storage::fake('public');
+        $owner = User::factory()->create(['role' => 'owner']);
+        $oldLogo = 'settings/old-logo.png';
+        $qr = 'settings/qr.png';
+        Storage::disk('public')->put($oldLogo, 'old-logo');
+        Storage::disk('public')->put($qr, 'qr');
+        Setting::query()->create([
+            'branch_type' => 'head_office',
+            'logo_image' => $oldLogo,
+            'qr_image' => $qr,
+        ]);
+
+        $newLogo = UploadedFile::fake()->image('new-logo.png', 200, 200);
+
+        $this->actingAs($owner)
+            ->post(route('settings.update'), [
+                'branch_type' => 'head_office',
+                'logo_image' => $newLogo,
+            ])
+            ->assertSessionHasNoErrors();
+
+        Storage::disk('public')->assertMissing($oldLogo);
+        Storage::disk('public')->assertExists('settings/'.$newLogo->hashName());
+        Storage::disk('public')->assertExists($qr);
     }
 }
