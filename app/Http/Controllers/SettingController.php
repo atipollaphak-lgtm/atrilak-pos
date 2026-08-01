@@ -12,7 +12,7 @@ class SettingController extends Controller
     {
         $setting = Setting::first();
 
-        if (!$setting) {
+        if (! $setting) {
             $setting = Setting::create([]);
         }
 
