@@ -6,7 +6,13 @@
     const money = (value) => Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const jsonHeaders = () => ({ 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content });
 
-    function configure(next) { context = next; bind(); syncCustomerDisplay(); }
+    function configure(next) {
+        context = next;
+        context.setCustomer = context.setCustomer || (async (customerId, preferredAddressId = null) => { context.customerSelect.value = customerId ? String(customerId) : ''; await context.loadAddresses(customerId, preferredAddressId); });
+        context.setAddress = context.setAddress || ((addressId) => { context.addressSelect.value = addressId ? String(addressId) : ''; context.addressSelect.dispatchEvent(new Event('change')); });
+        context.setDeliveryType = context.setDeliveryType || ((deliveryType) => { context.state.deliveryType = deliveryType === 'pickup' ? 'pickup' : 'delivery'; $('#v3-pickup').checked = context.state.deliveryType === 'pickup'; $('#v3-pickup').dispatchEvent(new Event('change')); });
+        bind(); syncCustomerDisplay();
+    }
     function bind() {
         $('#v3-open-customer-search')?.addEventListener('click', () => window.jQuery('#customer-search-modal').modal('show'));
         $('#v3-clear-customer')?.addEventListener('click', clearCustomer);
@@ -38,6 +44,9 @@
     function clearCustomer() { context.customerSelect.value = ''; context.customerSelect.dispatchEvent(new Event('change')); syncCustomerDisplay(); }
     function resetSale() {
         context.state.cart = [];
+        context.state.customerId = '';
+        context.state.addressId = '';
+        context.state.deliveryType = 'delivery';
         context.state.address = null;
         context.state.zone = null;
         context.state.deliveryFee = 0;
@@ -55,7 +64,7 @@
         syncCustomerDisplay();
     }
     function filterCustomers() { const keyword = ($('#v3-customer-search').value || '').toLowerCase(); let visible = 0; document.querySelectorAll('[data-customer-row]').forEach((row) => { const show = row.dataset.search.includes(keyword); row.hidden = !show; if (show) visible += 1; }); $('#v3-customer-empty')?.classList.toggle('d-none', visible !== 0); }
-    function selectCustomer(row) { context.customerSelect.value = row.dataset.customerId; context.customerSelect.dispatchEvent(new Event('change')); }
+    async function selectCustomer(row) { await context.setCustomer(row.dataset.customerId); window.jQuery('#customer-search-modal').modal('hide'); }
     async function expandCustomer(row) {
         const panel = row?.nextElementSibling; const list = panel?.querySelector('[data-customer-address-list]');
         if (!panel || !list) return;
@@ -65,7 +74,7 @@
         const addresses = response.ok ? await response.json() : [];
         panel.dataset.loaded = '1';
         list.innerHTML = addresses.length ? addresses.map((address) => `<button type="button" class="btn btn-light btn-block text-left mb-1" data-address-choice="${address.id}">${escapeHtml(address.label || address.address || '-')} · ${escapeHtml(address.delivery_zone?.name || 'ไม่ระบุโซน')}</button>`).join('') : 'ยังไม่มีที่อยู่จัดส่ง';
-        list.querySelectorAll('[data-address-choice]').forEach((button) => button.addEventListener('click', async () => { context.customerSelect.value = row.dataset.customerId; await context.loadAddresses(); context.addressSelect.value = button.dataset.addressChoice; context.addressSelect.dispatchEvent(new Event('change')); window.jQuery('#customer-search-modal').modal('hide'); }));
+        list.querySelectorAll('[data-address-choice]').forEach((button) => button.addEventListener('click', async () => { await context.setCustomer(row.dataset.customerId, button.dataset.addressChoice); context.setAddress(button.dataset.addressChoice); window.jQuery('#customer-search-modal').modal('hide'); }));
     }
     async function holdBill() {
         if (!context.state.cart.length) return alert('กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ');
@@ -88,12 +97,10 @@
         const hold = data.data;
         if ((hold.items || []).some((item) => !item.product || (item.product_unit_id_snapshot && (!item.product_unit || item.product_unit.active === false)))) return alert('ไม่สามารถโหลดพักบิลได้ เนื่องจากมีสินค้าหรือหน่วยสินค้าที่ถูกลบหรือปิดใช้งาน');
 
-        context.customerSelect.value = hold.customer_id ? String(hold.customer_id) : '';
-        if (hold.customer_id) await context.loadAddresses();
-        context.addressSelect.value = hold.customer_delivery_address_id ? String(hold.customer_delivery_address_id) : '';
-        context.addressSelect.dispatchEvent(new Event('change'));
+        context.setDeliveryType(hold.delivery_type);
+        await context.setCustomer(hold.customer_id ? String(hold.customer_id) : '', hold.customer_delivery_address_id ? String(hold.customer_delivery_address_id) : null);
+        if (hold.customer_delivery_address_id) context.setAddress(hold.customer_delivery_address_id);
         $('#v3-sale-date').value = hold.sale_date || $('#v3-sale-date').value;
-        $('#v3-pickup').checked = hold.delivery_type === 'pickup';
         context.state.cart = (hold.items || []).map((item) => ({ key: `${item.product.id}:${item.product_unit_id || 'base'}`, productId: item.product.id, productUnitId: item.product_unit_id, product: item.product, unit: item.product_unit, unitName: item.unit_name_snapshot || item.product.unit, name: item.product_name_snapshot, qty: Number(item.qty), price: Number(item.selling_price) }));
         context.state.zone = hold.delivery_zone_id ? { id: hold.delivery_zone_id, name: hold.delivery_zone_name_snapshot, price_markup_percent: hold.delivery_zone_markup_percent_snapshot, rounding_increment: hold.delivery_zone_rounding_increment_snapshot, minimum_profit: hold.delivery_zone_minimum_profit_snapshot, active: true } : null;
         context.state.discount = Number(hold.discount || 0);

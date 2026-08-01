@@ -2,7 +2,7 @@
     const root = document.getElementById("pos-v3");
     if (!root) return;
 
-    const state = { cart: [], address: null, zone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, editIndex: -1, filter: "all", category: "" };
+    const state = { cart: [], customerId: "", addressId: "", deliveryType: "delivery", address: null, zone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, editIndex: -1, filter: "all", category: "" };
     const $ = (selector) => document.querySelector(selector);
     const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -95,17 +95,23 @@
         item.productUnitId = unit.id; item.unit = unit; item.unitName = unit.unit?.name || item.product.unit || "หน่วย"; item.qty = qty; item.price = unitPrice(unit, qty, item.product); item.key = `${item.productId}:${unit.id || "base"}`; render(); window.jQuery($("#v3-edit-modal")).modal("hide");
     }
 
-    async function loadAddresses() {
-        const id = $("#v3-customer-id").value; const select = $("#v3-address-id"); select.innerHTML = id ? '<option>กำลังโหลด...</option>' : '<option value="">เลือกลูกค้าก่อน</option>'; select.disabled = !id; state.address = null; state.zone = null; state.deliveryFee = 0;
+    async function loadAddresses(customerId = null, preferredAddressId = null) {
+        if (customerId?.target) customerId = null;
+        const id = customerId === null ? $("#v3-customer-id").value : String(customerId || ""); const select = $("#v3-address-id"); state.customerId = id; $("#v3-customer-id").value = id; select.innerHTML = id ? '<option>กำลังโหลด...</option>' : '<option value="">เลือกลูกค้าก่อน</option>'; select.disabled = !id; state.addressId = ""; state.address = null; state.zone = null; state.deliveryFee = 0;
         if (!id) { render(); return; }
         const response = await fetch(root.dataset.addressUrlTemplate.replace("__CUSTOMER__", id), { headers: { Accept: "application/json" } }); const addresses = await response.json(); select.innerHTML = '<option value="">เลือกที่อยู่จัดส่ง</option>' + addresses.map((a) => `<option value="${a.id}" data-zone='${escapeHtml(JSON.stringify(a.delivery_zone || {}))}'>${escapeHtml(a.label || a.address || a.name || "ที่อยู่ "+a.id)}</option>`).join("");
-        const primary = addresses.find((a) => a.is_default) || addresses[0]; if (primary) { select.value = primary.id; select.dispatchEvent(new Event("change")); }
+        const primary = (preferredAddressId && addresses.find((a) => String(a.id) === String(preferredAddressId))) || addresses.find((a) => a.is_default) || addresses[0]; if (primary) { select.value = primary.id; select.dispatchEvent(new Event("change")); }
     }
 
-    function buildPayload(payment) { return { hold_bill_id: state.holdBillId, customer_id: $("#v3-customer-id").value || null, customer_delivery_address_id: $("#v3-address-id").value || null, technician_id: $("#v3-technician-id").value || null, sale_date: $("#v3-sale-date").value, delivery_type: $("#v3-pickup").checked ? "pickup" : "delivery", delivery_fee: state.deliveryFee.toFixed(2), discount: state.discount.toFixed(2), notes: state.note || null, items: state.cart.map((item) => ({ product_id: item.productId, product_unit_id: item.productUnitId, qty: item.qty, selling_price: Number(item.price).toFixed(2) })), ...payment }; }
+    async function setCustomer(customerId, preferredAddressId = null) { await loadAddresses(customerId, preferredAddressId); }
+    function setAddress(addressId) { $("#v3-address-id").value = addressId ? String(addressId) : ""; $("#v3-address-id").dispatchEvent(new Event("change")); }
+    function setDeliveryType(deliveryType) { state.deliveryType = deliveryType === "pickup" ? "pickup" : "delivery"; $("#v3-pickup").checked = state.deliveryType === "pickup"; $("#v3-pickup").dispatchEvent(new Event("change")); }
+    function buildPayload(payment) { return { hold_bill_id: state.holdBillId, customer_id: state.customerId || null, customer_delivery_address_id: state.addressId || null, technician_id: $("#v3-technician-id").value || null, sale_date: $("#v3-sale-date").value, delivery_type: state.deliveryType, delivery_fee: state.deliveryFee.toFixed(2), discount: state.discount.toFixed(2), notes: state.note || null, items: state.cart.map((item) => ({ product_id: item.productId, product_unit_id: item.productUnitId, qty: item.qty, selling_price: Number(item.price).toFixed(2) })), ...payment }; }
 
     function init() {
         render(); filterProducts();
+        $("#v3-address-id").addEventListener("change", (event) => { state.addressId = event.target.value || ""; });
+        $("#v3-pickup").addEventListener("change", () => { state.deliveryType = $("#v3-pickup").checked ? "pickup" : "delivery"; });
         $("#v3-product-search").addEventListener("input", filterProducts); $("#v3-stock-only").addEventListener("change", filterProducts); $("#v3-customer-id").addEventListener("change", loadAddresses);
         $("#v3-address-id").addEventListener("change", (e) => { const option = e.target.selectedOptions[0]; state.address = option; try { state.zone = JSON.parse(option?.dataset.zone || "{}"); } catch (_) { state.zone = null; } state.deliveryFee = 0; state.deliveryFeeEdited = false; refreshPricingContext(); render(); }); $("#v3-pickup").addEventListener("change", () => { state.deliveryFee = 0; state.deliveryFeeEdited = false; refreshPricingContext(); render(); }); $("#v3-discount").addEventListener("input", (e) => { state.discount = Math.max(0, Number(e.target.value) || 0); render(); }); $("#v3-delivery-fee").addEventListener("input", (e) => { if ($("#v3-pickup").checked) { state.deliveryFee = 0; e.target.value = "0.00"; } else { state.deliveryFee = Math.max(0, Number(e.target.value) || 0); state.deliveryFeeEdited = true; } $("#v3-total").textContent = money(total()); });
         $("#v3-delivery").addEventListener("click", () => { $("#v3-pickup").checked = false; $("#v3-pickup").dispatchEvent(new Event("change")); }); $("#v3-pickup-button").addEventListener("click", () => { $("#v3-pickup").checked = true; $("#v3-pickup").dispatchEvent(new Event("change")); });

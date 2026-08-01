@@ -47,6 +47,8 @@ Added a manifest beside each successful SQL dump containing database identity, d
 
 Added integrated route-entry regression coverage. Browser smoke ran against an isolated Laravel Test Server on `127.0.0.1:8000` with `--env=testing`; the Apache vhost `atrilak-pos.test` was not used because it loads the default `.env` database.
 
+POS V3 Browser blocker follow-up: the sale draft now keeps `customerId`, `addressId` and `deliveryType` in one state, builds the payment payload from that state, waits for customer/address loading before closing the search modal, and restores fulfillment before address state for Hold Bill. Backend validation and payment/pricing rules were unchanged.
+
 ## 3. Files changed
 
 - `app/Http/Controllers/SettingController.php`
@@ -59,6 +61,9 @@ Added integrated route-entry regression coverage. Browser smoke ran against an i
 - `tests/Feature/Backup/DatabaseBackupServiceTest.php`
 - `tests/Feature/GoLive/GoLivePreflightTest.php`
 - `tests/Feature/GoLive/GoLiveRegressionTest.php`
+- `public/js/modules/sale-v3.js`
+- `public/js/modules/final-pos.js`
+- `tests/Unit/Sales/SaleV3BrowserStateContractTest.php`
 - `docs/superpowers/reports/2026-08-01-go-live-preflight.md`
 - `docs/superpowers/reports/2026-08-01-production-go-live-final-report.md`
 
@@ -78,6 +83,8 @@ Passing targeted results:
 - Purchase/Pricing: 37 tests, 177 assertions
 - Backup/Restore: 38 tests, 37 passed, 161 assertions, 1 Windows symlink skip
 - Integrated Go-Live routes: 2 tests, 16 assertions
+- POS V3 state regression: 2 tests, 20 assertions
+- POS V3/Sale/Hold Bill/Daily Closing related regression run: 75 tests, 473 assertions, passed, exit code `0`
 
 Full Suite raw result from PHPUnit/JUnit: `671 tests`, `1,283 assertions`, `241 passed`, `413 errors`, `16 failures`, `1 skipped`, `0 incomplete` observed, `6 risky`, exit code `2`. PHPUnit completed the run; it did not stop early. The arithmetic is `671 - 413 - 16 - 1 = 241`.
 
@@ -121,6 +128,12 @@ Observed: no Server Error page, no horizontal overflow, and no browser console e
 
 The Browser transaction did not complete: the selected fulfillment/customer state was not retained consistently after modal interaction, and the attempted double submit returned the visible validation alert `ข้อมูลการขายไม่ถูกต้อง` with no confirmed Sale record. Therefore sale payment, edit/void, delivery-zone sale, daily closing from the Browser, real upload, print preview, and post-transaction DB assertions are not claimed as passed. Console errors were empty during the observed POS interaction; no new Laravel error was observed in the browser session.
 
+### POS V3 blocker follow-up
+
+The previous paragraph records the pre-fix reproduction. After the minimal state fix, seeded Browser verification at `1280x720` passed: Pickup payment created `SAL-20260801-0001`; Delivery with `TEST-GOLIVE Address` and `TEST-GOLIVE-Zone` plus PromptPay created `SAL-20260801-0002`; Hold Bill `HLD-20260801-0001` resumed with customer/address/delivery/zone/cart retained and created `SAL-20260801-0003`. Database assertions were `sales=3`, `stock_movements=3`, `holds=0`, product stock `50 -> 47`, with unique sequential sale numbers. Browser console errors were empty during the successful flows.
+
+The POS V3 blocker is resolved. Browser Edit/Void, Daily Closing from the newly created sales, real Logo replacement, Print Preview A4/A5, and Backup/Restore with the post-sale business-file fixture were not rerun in this follow-up; their automated targeted coverage remains passing, but these manual acceptance items remain documented limitations.
+
 ## 6. Backup/Restore verification
 
 - Database dump atomic finalization: passed
@@ -149,7 +162,8 @@ Design/plan commits:
 ## 8. Remaining limitations
 
 - Full PHPUnit suite still has a pre-existing shared-schema isolation problem; targeted suites are the reliable proof for this sprint until test infrastructure is separately isolated.
-- Browser transaction creation, real file upload and A4 print preview require a seeded Test fixture and manual browser session; they were not claimed as passed.
+- POS V3 customer/fulfillment/payment state is fixed and verified in Browser for Pickup, Delivery and Hold Bill. Remaining manual evidence is Browser Edit/Void, Browser Daily Closing, Logo replacement/Print Preview, and Backup/Restore after the final seeded transaction/file set.
+- Real file upload and A4 print preview require a seeded Test fixture and manual browser session; they were not claimed as passed in this follow-up.
 - Production deployment, Production backup, merge and push were not performed.
 
 ## 9. Final verdict
