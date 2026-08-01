@@ -153,6 +153,7 @@ Implementation commits:
 - `9b2d1ab` test: cover stock adjustment permissions
 - `98ce7b3` feat: add backup manifest coverage
 - `16fd8ba` test: add integrated go-live regression
+- `aed009a` fix: preserve POS V3 fulfillment state
 
 Design/plan commits:
 
