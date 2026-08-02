@@ -69,7 +69,7 @@ class QuotationOriginSaleConsistencyCharacterizationTest extends TestCase
         $this->assertSame($oldItemId, $updatedItem->id);
         $this->assertSame('1.0000', $updatedItem->conversion_rate_used);
         $this->assertSame('3.0000', $updatedItem->base_qty);
-        $this->assertSame('36', (string) $updated->total_amount);
+        $this->assertSame('36.00', (string) $updated->total_amount);
         $this->assertSame('17.0000', (string) $product->fresh()->stock_qty);
         $this->assertDatabaseCount('stock_movements', 3);
         $this->assertDatabaseHas('quotation_items', [

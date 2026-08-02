@@ -305,11 +305,15 @@ class SaleValidationTest extends TestCase
             'selling_price' => ['15.00', ''],
             'delivery_fee' => '0.00',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '30.00',
+            'received_amount' => '0.00',
         ])->assertRedirect(route('sales.show', $sale));
 
         $sale->refresh();
-        $this->assertCount(1, $sale->items);
-        $this->assertSame('2.00', $sale->items->sole()->qty);
+        $this->assertSame(1, $sale->items()->count());
+        $this->assertSame('2.00', $sale->items()->sole()->qty);
         $this->assertSame('8.0000', $product->fresh()->stock_qty);
     }
 
@@ -434,6 +438,10 @@ class SaleValidationTest extends TestCase
             'selling_price' => ['10.00'],
             'delivery_fee' => '0.00',
             'discount' => '0.00',
+            'payment_method' => 'promptpay',
+            'cash_amount' => '0.00',
+            'promptpay_amount' => '10.00',
+            'received_amount' => '0.00',
         ]);
 
         $response->assertRedirect(route('sales.edit', $sale))

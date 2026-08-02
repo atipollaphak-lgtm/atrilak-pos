@@ -30,6 +30,11 @@ class ProductManagementTest extends TestCase
         ]);
     }
 
+    public function test_product_routes_do_not_expose_an_unused_show_action(): void
+    {
+        $this->assertNull(app('router')->getRoutes()->getByName('products.show'));
+    }
+
     public function test_product_index_supports_search_filters_sort_and_pagination_state(): void
     {
         $hardware = $this->category('Hardware');

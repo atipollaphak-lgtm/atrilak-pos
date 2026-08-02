@@ -62,8 +62,8 @@ class DashboardController extends Controller
             ->whereDate('sale_date', $today)
             ->get());
 
-        $month = date('m');
-        $year = date('Y');
+        $month = $today->format('m');
+        $year = $today->format('Y');
 
         $items = SaleItem::with('product.unitRelation', 'sale')
             ->whereHas('sale', function ($query) use ($month, $year) {
@@ -126,15 +126,15 @@ class DashboardController extends Controller
 
         $monthSales = Sale::query()->active()->whereMonth(
             'sale_date',
-            date('m')
+            $month
         )->whereYear(
             'sale_date',
-            date('Y')
+            $year
         )->sum('total_amount');
 
         $monthProfit = $financialSnapshots->sumProfit(Sale::with('items')->active()
-            ->whereMonth('sale_date', date('m'))
-            ->whereYear('sale_date', date('Y'))
+            ->whereMonth('sale_date', $month)
+            ->whereYear('sale_date', $year)
             ->get());
         $stockValue = Product::where('active', true)
             ->get()

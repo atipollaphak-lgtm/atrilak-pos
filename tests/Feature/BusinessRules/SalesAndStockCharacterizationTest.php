@@ -134,7 +134,7 @@ class SalesAndStockCharacterizationTest extends TestCase
         $this->assertEquals(0.00, $sale->delivery_fee);
     }
 
-    public function test_delivery_sale_total_adds_the_zone_fee_then_subtracts_discount(): void
+    public function test_delivery_sale_total_adds_the_zone_profit_shortfall_then_subtracts_discount(): void
     {
         $product = Product::create([
             'name' => 'Delivery total product',
@@ -145,7 +145,7 @@ class SalesAndStockCharacterizationTest extends TestCase
         $zone = DeliveryZone::create([
             'name' => 'Test zone',
             'base_delivery_fee' => 80,
-            'minimum_profit' => 0,
+            'minimum_profit' => 580,
         ]);
         $address = CustomerDeliveryAddress::create([
             'name' => 'Test address',
@@ -161,7 +161,7 @@ class SalesAndStockCharacterizationTest extends TestCase
             'customer_delivery_address_id' => $address->id,
             'payment_method' => 'promptpay',
             'cash_amount' => '0.00',
-            'promptpay_amount' => '1030.00',
+            'promptpay_amount' => '1080.00',
             'received_amount' => '0.00',
             'items' => [[
                 'product_id' => $product->id,
@@ -170,8 +170,8 @@ class SalesAndStockCharacterizationTest extends TestCase
             ]],
         ]);
 
-        $this->assertEquals(1030.00, $sale->total_amount);
-        $this->assertEquals(80.00, $sale->delivery_fee);
+        $this->assertEquals(1080.00, $sale->total_amount);
+        $this->assertEquals(130.00, $sale->delivery_fee);
     }
 
     private function makeSaleService(): SaleService

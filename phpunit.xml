@@ -10,6 +10,38 @@
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+            <exclude>tests/Feature/BusinessRules</exclude>
+            <exclude>tests/Feature/Database/DecimalStockMigrationTest.php</exclude>
+            <exclude>tests/Feature/Database/PurchaseItemQuantityMigrationTest.php</exclude>
+            <exclude>tests/Feature/Database/QuotationRelationMigrationTest.php</exclude>
+            <exclude>tests/Feature/Database/SaleNumberMigrationTest.php</exclude>
+            <exclude>tests/Feature/Database/StockCountDecimalMigrationTest.php</exclude>
+            <exclude>tests/Feature/Database/StockCountNumberMigrationTest.php</exclude>
+            <exclude>tests/Feature/Sales/ProductUnitConversionTest.php</exclude>
+            <exclude>tests/Feature/Sales/SaleConcurrencyTest.php</exclude>
+            <exclude>tests/Feature/Sales/SaleDecimalIntegrityTest.php</exclude>
+            <exclude>tests/Feature/Sales/SaleDeleteTest.php</exclude>
+            <exclude>tests/Feature/Sales/SaleSnapshotPreservingUpdateTest.php</exclude>
+            <exclude>tests/Feature/Sales/SaleStockLockingTest.php</exclude>
+            <exclude>tests/Feature/Sales/SaleUpdateTest.php</exclude>
+            <exclude>tests/Feature/Stock/CompetingStockWriterConcurrencyTest.php</exclude>
+        </testsuite>
+        <testsuite name="Isolated Feature">
+            <directory>tests/Feature/BusinessRules</directory>
+            <file>tests/Feature/Sales/ProductUnitConversionTest.php</file>
+            <file>tests/Feature/Sales/SaleConcurrencyTest.php</file>
+            <file>tests/Feature/Sales/SaleDecimalIntegrityTest.php</file>
+            <file>tests/Feature/Sales/SaleDeleteTest.php</file>
+            <file>tests/Feature/Sales/SaleSnapshotPreservingUpdateTest.php</file>
+            <file>tests/Feature/Sales/SaleStockLockingTest.php</file>
+            <file>tests/Feature/Sales/SaleUpdateTest.php</file>
+            <file>tests/Feature/Stock/CompetingStockWriterConcurrencyTest.php</file>
+            <file>tests/Feature/Database/DecimalStockMigrationTest.php</file>
+            <file>tests/Feature/Database/PurchaseItemQuantityMigrationTest.php</file>
+            <file>tests/Feature/Database/QuotationRelationMigrationTest.php</file>
+            <file>tests/Feature/Database/SaleNumberMigrationTest.php</file>
+            <file>tests/Feature/Database/StockCountDecimalMigrationTest.php</file>
+            <file>tests/Feature/Database/StockCountNumberMigrationTest.php</file>
         </testsuite>
     </testsuites>
     <source>

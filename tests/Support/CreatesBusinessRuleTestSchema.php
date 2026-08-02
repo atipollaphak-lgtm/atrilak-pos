@@ -30,6 +30,29 @@ trait CreatesBusinessRuleTestSchema
             $table->timestamps();
         });
 
+        Schema::create('units', function (Blueprint $table) {
+            $table->id();
+            $table->string('code')->nullable();
+            $table->string('name');
+            $table->timestamps();
+        });
+
+        Schema::create('product_units', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('product_id');
+            $table->unsignedBigInteger('unit_id')->nullable();
+            $table->decimal('conversion_rate', 15, 4)->default(1);
+            $table->boolean('is_base_unit')->default(false);
+            $table->boolean('is_purchase_unit')->default(true);
+            $table->boolean('is_sale_unit')->default(true);
+            $table->decimal('purchase_price', 15, 2)->nullable();
+            $table->decimal('selling_price', 15, 2)->nullable();
+            $table->boolean('active')->default(true);
+            $table->integer('sort_order')->default(0);
+            $table->timestamp('conversion_confirmed_at')->nullable();
+            $table->timestamps();
+        });
+
         Schema::create('settings', function (Blueprint $table) {
             $table->id();
             $table->string('store_name')->nullable();
@@ -200,6 +223,8 @@ trait CreatesBusinessRuleTestSchema
             'technicians',
             'customers',
             'settings',
+            'product_units',
+            'units',
             'products',
             'categories',
         ] as $table) {

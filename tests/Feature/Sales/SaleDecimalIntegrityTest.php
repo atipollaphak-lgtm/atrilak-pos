@@ -149,7 +149,8 @@ class SaleDecimalIntegrityTest extends TestCase
 
         $updated = $sale->fresh('items');
         $this->assertSame(['0.01', '0.02'], $updated->items->pluck('total')->all());
-        $this->assertSame('0.04', (string) $updated->total_amount);
+        $this->assertSame('0.00', (string) $updated->delivery_fee);
+        $this->assertSame('0.02', (string) $updated->total_amount);
         $this->assertSame('0.9600', $product->fresh()->stock_qty);
 
         $service->deleteSale($updated);

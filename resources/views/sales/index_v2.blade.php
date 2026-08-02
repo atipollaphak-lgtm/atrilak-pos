@@ -3,7 +3,7 @@
 @section('title', 'POS V2')
 
 @section('content_header')
-    <h1>POS V2 (กำลังพัฒนา)</h1>
+    <h1>POS V2</h1>
 @stop
 
 @section('css')

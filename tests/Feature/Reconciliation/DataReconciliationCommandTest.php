@@ -4,7 +4,7 @@ namespace Tests\Feature\Reconciliation;
 
 use App\Services\Reconciliation\DataReconciliationService;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 class DataReconciliationCommandTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTruncation;
 
     public function test_consistent_data_has_no_confirmed_anomalies(): void
     {
@@ -54,18 +54,37 @@ class DataReconciliationCommandTest extends TestCase
             $table->decimal('delivery_fee', 12, 2)->nullable()->change();
             $table->decimal('discount', 12, 2)->nullable()->change();
         });
-        $saleId = $this->createSale(total: 0, deliveryFee: null, discount: null);
+        $saleId = null;
 
-        $report = app(DataReconciliationService::class)->reconcile(saleId: $saleId);
+        try {
+            $saleId = $this->createSale(total: 0, deliveryFee: null, discount: null);
 
-        $this->assertContains(
-            'SALE_WITHOUT_ITEMS',
-            collect($report['confirmed_anomalies'])->pluck('code')->all()
-        );
-        $this->assertContains(
-            'SALE_NULL_FINANCIAL_COMPONENT',
-            collect($report['warnings'])->pluck('code')->all()
-        );
+            $report = app(DataReconciliationService::class)->reconcile(saleId: $saleId);
+
+            $this->assertContains(
+                'SALE_WITHOUT_ITEMS',
+                collect($report['confirmed_anomalies'])->pluck('code')->all()
+            );
+            $this->assertContains(
+                'SALE_NULL_FINANCIAL_COMPONENT',
+                collect($report['warnings'])->pluck('code')->all()
+            );
+        } finally {
+            if ($saleId !== null) {
+                DB::table('sales')->where('id', $saleId)->update([
+                    'delivery_fee' => 0,
+                    'discount' => 0,
+                ]);
+            }
+
+            Schema::table('sales', function (Blueprint $table) {
+                $table->decimal('delivery_fee', 12, 2)->default(0)->nullable(false)->change();
+                $table->decimal('discount', 12, 2)->default(0)->nullable(false)->change();
+            });
+        }
+
+        $this->assertRequiredZeroMoneyColumn('delivery_fee');
+        $this->assertRequiredZeroMoneyColumn('discount');
     }
 
     public function test_stock_chain_decimal_mismatch_latest_stock_and_timestamp_tie_are_reported(): void
@@ -154,17 +173,28 @@ class DataReconciliationCommandTest extends TestCase
         $productId = $this->createProduct();
         $saleId = $this->createSale(total: 100, technicianId: $technicianId);
         $this->createSaleItem($saleId, $productId, qty: 1, price: 100, total: 100);
-        $this->createCommission($saleId, $technicianId, amount: 10, saleTotal: 100, detail: '{bad json');
 
-        $exitCode = Artisan::call('atrilak:reconcile-data', [
-            '--json' => true,
-            '--sale-id' => $saleId,
-        ]);
-        $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        // PostgreSQL validates JSON before the reconciliation service can inspect
+        // legacy malformed payloads. Keep this corruption simulation isolated to
+        // the test database and restore the production-equivalent type afterward.
+        DB::statement('ALTER TABLE technician_commissions ALTER COLUMN calculation_detail TYPE TEXT USING calculation_detail::text');
 
-        $this->assertSame(0, $exitCode);
-        $this->assertSame('UNSUPPORTED_CALCULATION_DETAIL_FORMAT', $report['warnings'][0]['code']);
-        $this->assertSame('malformed JSON', $report['warnings'][0]['actual']);
+        try {
+            $this->createCommission($saleId, $technicianId, amount: 10, saleTotal: 100, detail: '{bad json');
+
+            $exitCode = Artisan::call('atrilak:reconcile-data', [
+                '--json' => true,
+                '--sale-id' => $saleId,
+            ]);
+            $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+
+            $this->assertSame(0, $exitCode);
+            $this->assertSame('UNSUPPORTED_CALCULATION_DETAIL_FORMAT', $report['warnings'][0]['code']);
+            $this->assertSame('malformed JSON', $report['warnings'][0]['actual']);
+        } finally {
+            DB::table('technician_commissions')->delete();
+            DB::statement('ALTER TABLE technician_commissions ALTER COLUMN calculation_detail TYPE JSON USING calculation_detail::json');
+        }
     }
 
     public function test_commission_relationship_and_calculation_detail_mismatches_are_confirmed(): void
@@ -398,5 +428,20 @@ class DataReconciliationCommandTest extends TestCase
                 'checksum' => hash('sha256', json_encode($rows, JSON_THROW_ON_ERROR)),
             ]];
         })->all();
+    }
+
+    private function assertRequiredZeroMoneyColumn(string $column): void
+    {
+        $metadata = DB::table('information_schema.columns')
+            ->where('table_schema', 'public')
+            ->where('table_name', 'sales')
+            ->where('column_name', $column)
+            ->sole();
+
+        $this->assertSame('numeric', $metadata->data_type);
+        $this->assertSame(12, $metadata->numeric_precision);
+        $this->assertSame(2, $metadata->numeric_scale);
+        $this->assertSame('NO', $metadata->is_nullable);
+        $this->assertStringContainsString('0', (string) $metadata->column_default);
     }
 }

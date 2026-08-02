@@ -1,49 +1,47 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\PosController;
-use App\Http\Controllers\ProductController;
+use App\Http\Controllers\BackupController;
+use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerController;
-use App\Http\Controllers\TechnicianController;
+use App\Http\Controllers\CustomerDeliveryAddressController;
+use App\Http\Controllers\DailyPaymentClosingController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DeliveryZoneController;
+use App\Http\Controllers\HoldBillController;
+use App\Http\Controllers\PriceController;
+use App\Http\Controllers\PricingManagementController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductPriceTierController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
-use App\Http\Controllers\StockController;
-use App\Http\Controllers\ReportController;
-use App\Http\Controllers\SettingController;
 use App\Http\Controllers\QuotationController;
-use App\Http\Controllers\ReservationController;
-use App\Http\Controllers\BarcodeController;
-use App\Http\Controllers\StockCountController;
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\SupplierController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SaleV3Controller;
-use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SettingController;
+use App\Http\Controllers\StockCountController;
 use App\Http\Controllers\StockMovementController;
-use App\Http\Controllers\BackupController;
-use App\Http\Controllers\UnitController;
-use App\Http\Controllers\ProductPriceTierController;
-use App\Http\Controllers\PriceController;
-use App\Http\Controllers\TechnicianPaymentController;
+use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\TechnicianCommissionController;
 use App\Http\Controllers\TechnicianCommissionRuleController;
+use App\Http\Controllers\TechnicianController;
 use App\Http\Controllers\TechnicianPaymentBatchController;
-use App\Http\Controllers\DeliveryZoneController;
-use App\Http\Controllers\CustomerDeliveryAddressController;
-use App\Http\Controllers\PricingManagementController;
-use App\Http\Controllers\DailyPaymentClosingController;
-use App\Http\Controllers\HoldBillController;
+use App\Http\Controllers\TechnicianPaymentController;
+use App\Http\Controllers\UnitController;
+use App\Http\Controllers\UserController;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    return auth()->check()
+        ? redirect()->route('dashboard')
+        : redirect()->route('login');
 });
 
 Route::get(
     '/dashboard',
     [DashboardController::class, 'index']
 )->middleware(['auth', 'verified'])->name('dashboard');
-
 
 Route::middleware(['auth'])->group(function () {
 
@@ -89,8 +87,6 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/sales-v3/hold-bills/{holdBill}', [HoldBillController::class, 'destroy'])
             ->name('sales.v3.hold-bills.destroy');
 
-
-
         Route::post(
             '/sales-v2/store',
             [SaleController::class, 'storeV2']
@@ -114,7 +110,6 @@ Route::middleware(['auth'])->group(function () {
 
         Route::resource('customers', CustomerController::class);
 
-
         Route::post(
             '/customers/{customer}/restore',
             [CustomerController::class, 'restore']
@@ -132,7 +127,7 @@ Route::middleware(['auth'])->group(function () {
             'index',
             'store',
             'update',
-            'destroy'
+            'destroy',
         ]);
 
         Route::get('/technician-commissions', [TechnicianCommissionController::class, 'index'])
@@ -147,7 +142,7 @@ Route::middleware(['auth'])->group(function () {
             '/sales-v2/customers/{customer}/delivery-addresses-json',
             [
                 CustomerDeliveryAddressController::class,
-                'getByCustomer'
+                'getByCustomer',
             ]
         )->name('sales.v2.customer-delivery-addresses.json');
 
@@ -156,8 +151,6 @@ Route::middleware(['auth'])->group(function () {
             [CustomerDeliveryAddressController::class, 'getByCustomer']
         )->name('sales.v3.customer-delivery-addresses.json');
     });
-
-
 
     // Manager ขึ้นไป
     Route::middleware(['role:manager'])->group(function () {
@@ -180,7 +173,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/sales/{sale}/void', [SaleController::class, 'void'])
             ->name('sales.void');
 
-        Route::resource('products', ProductController::class);
+        Route::resource('products', ProductController::class)->except('show');
         Route::post(
             '/products/{product}/restore',
             [ProductController::class, 'restore']
@@ -224,7 +217,7 @@ Route::middleware(['auth'])->group(function () {
             '/products/{product}/units/{productUnit}/price-tiers/{productPriceTier}',
             [
                 ProductPriceTierController::class,
-                'destroy'
+                'destroy',
             ]
         )->name('products.price-tiers.destroy');
 
@@ -325,7 +318,6 @@ Route::middleware(['auth'])->group(function () {
             return redirect()->route('technician-payment-batches.create');
         });
 
-
         Route::get('/technician-payment-batches/{batch}', [TechnicianPaymentBatchController::class, 'show'])
             ->name('technician-payment-batches.show');
 
@@ -396,7 +388,6 @@ Route::middleware(['auth'])->group(function () {
             [ReportController::class, 'exportYearlyProfit']
         )->name('reports.yearly-profit.export');
 
-
         Route::get('/reports/product-sales', [ReportController::class, 'productSales'])
             ->name('reports.product-sales');
         Route::get(
@@ -459,4 +450,4 @@ Route::middleware(['auth'])->group(function () {
     });
 });
 
-require __DIR__ . '/auth.php';
+require __DIR__.'/auth.php';

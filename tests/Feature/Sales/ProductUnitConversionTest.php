@@ -13,9 +13,7 @@ use App\ValueObjects\Sales\ResolvedSaleLine;
 use Brick\Math\BigDecimal;
 use Brick\Math\RoundingMode;
 use DomainException;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Tests\Support\CreatesSaleTransactionTestSchema;
 use Tests\TestCase;
 
@@ -27,20 +25,10 @@ class ProductUnitConversionTest extends TestCase
     {
         parent::setUp();
         $this->createSaleTransactionTestSchema();
-        Schema::create('delivery_zones', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->decimal('price_markup_percent', 5, 2)->default(0);
-            $table->decimal('base_delivery_fee', 12, 2)->default(0);
-            $table->decimal('minimum_profit', 12, 2)->default(0);
-            $table->boolean('active')->default(true);
-            $table->timestamps();
-        });
     }
 
     protected function tearDown(): void
     {
-        Schema::dropIfExists('delivery_zones');
         $this->dropSaleTransactionTestSchema();
         parent::tearDown();
     }
