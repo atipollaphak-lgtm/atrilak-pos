@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>ใบส่งของ {{ $sale->sale_no ?? $sale->id }}</title>
+    <title>{{ $document['title'] ?? 'ใบส่งของ' }} {{ $sale->sale_no ?? $sale->id }}</title>
 
     <style>
         @page {
@@ -415,7 +415,7 @@
         }
     </style>
 
-    @if (($document['type'] ?? null) === 'delivery-note')
+    @if (in_array(($document['type'] ?? null), ['delivery-note', 'tax-invoice'], true))
         <link rel="stylesheet" href="{{ asset('css/sales-invoice-v2.css') }}">
         @if (($paper ?? 'a4') === 'a5')
             <style>
@@ -439,7 +439,7 @@
 
     <div class="invoice paper-{{ $paper }}">
 
-        @if (($document['type'] ?? null) === 'delivery-note')
+        @if (in_array(($document['type'] ?? null), ['delivery-note', 'tax-invoice'], true))
             @include('sales.invoice_v2.delivery-note')
         @else
 

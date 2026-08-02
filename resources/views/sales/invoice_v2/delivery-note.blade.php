@@ -32,6 +32,16 @@
         $setting?->tax_number,
         null
     );
+    $storeBranchType = \App\Support\DocumentSnapshotValue::resolve(
+        $sale->store_branch_type_snapshot,
+        $setting?->branch_type,
+        'head_office'
+    );
+    $storeBranchNumber = \App\Support\DocumentSnapshotValue::resolve(
+        $sale->store_branch_number_snapshot,
+        $setting?->branch_number,
+        null
+    );
     $customerName = \App\Support\DocumentSnapshotValue::resolve(
         $sale->customer_name_snapshot,
         $sale->customer?->name,
@@ -47,6 +57,13 @@
         $sale->customer?->address,
         '-'
     );
+    $customerTaxNumber = \App\Support\DocumentSnapshotValue::resolve(
+        $sale->customer_tax_number_snapshot,
+        $sale->customer?->tax_number,
+        null
+    );
+    $showTaxInformation = ($document['type'] ?? null) === 'tax-invoice'
+        && filled($customerTaxNumber);
     $subTotal = $sale->items->sum('total');
     $deliveryFee = $sale->delivery_fee ?? 0;
     $discount = $sale->discount ?? 0;
@@ -71,15 +88,24 @@
                 <div class="company-tagline">จำหน่ายวัสดุก่อสร้างทุกชนิด</div>
                 <div class="company-line">{{ $storeAddress }}</div>
                 <div class="company-line">โทร {{ $storePhone }}</div>
-                @if ($storeTaxNumber)
+                @if ($showTaxInformation && $storeTaxNumber)
                     <div class="company-line">เลขประจำตัวผู้เสียภาษี {{ $storeTaxNumber }}</div>
+                    <div class="company-line">
+                        @if ($storeBranchType === 'branch')
+                            สาขาที่ {{ $storeBranchNumber ?? '-' }}
+                        @else
+                            สำนักงานใหญ่
+                        @endif
+                    </div>
                 @endif
             </div>
         </div>
 
         <div class="document-block">
-            <h1>ใบส่งของ</h1>
-            <div class="document-subtitle">DELIVERY NOTE</div>
+            <h1>{{ $document['title'] ?? 'ใบส่งของ' }}</h1>
+            <div class="document-subtitle">
+                {{ ($document['type'] ?? null) === 'tax-invoice' ? 'TAX INVOICE' : 'DELIVERY NOTE' }}
+            </div>
             <div class="document-meta">
                 <div><span>เลขที่เอกสาร</span><strong>{{ $resolvedDocumentNo }}</strong></div>
                 <div><span>วันที่</span><strong>{{ \Carbon\Carbon::parse($resolvedDocumentDate)->format('d/m/Y') }}</strong></div>
@@ -90,6 +116,11 @@
     <section class="customer-information">
         <div class="customer-line"><strong>ชื่อลูกค้า :</strong><span>{{ $customerName }}</span><strong>เบอร์โทร :</strong><span>{{ $customerPhone }}</span></div>
         <div class="customer-line"><strong>ที่อยู่ :</strong><span class="customer-address">{{ $customerAddress }}</span></div>
+        @if ($showTaxInformation)
+            <div class="customer-line tax-information-row"><strong>เลขประจำตัวผู้เสียภาษี :</strong><span>{{ $customerTaxNumber }}</span></div>
+            <div class="customer-line tax-information-row"><strong>ชื่อบริษัท/นิติบุคคล :</strong><span>{{ $customerName }}</span></div>
+            <div class="customer-line tax-information-row"><strong>ที่อยู่ออกใบกำกับภาษี :</strong><span class="customer-address">{{ $customerAddress }}</span></div>
+        @endif
     </section>
 
     <table class="items-table delivery-note-items">

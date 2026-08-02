@@ -39,7 +39,7 @@ class SalePaymentDisplayTest extends TestCase
         $this->assertStringContainsString('ไม่ระบุ', $history);
     }
 
-    public function test_only_tax_invoice_in_v2_renders_stored_payment_details(): void
+    public function test_tax_invoice_in_v2_uses_the_delivery_note_payment_region(): void
     {
         $cashSale = $this->sale('cash', '100.00', '0.00', '150.00', '50.00');
         $promptpaySale = $this->sale('promptpay', '0.00', '100.00', '0.00', '0.00');
@@ -78,19 +78,13 @@ class SalePaymentDisplayTest extends TestCase
             'document' => $service->buildSaleDocument($legacySale, 'tax-invoice'),
         ])->render();
 
-        $this->assertStringContainsString('วิธีชำระเงิน', $taxInvoice);
-        $this->assertStringContainsString('รับเงินสด', $taxInvoice);
-        $this->assertStringContainsString('เงินทอน', $taxInvoice);
-        $this->assertStringNotContainsString('ยอดชำระพร้อมเพย์', $taxInvoice);
-        $this->assertStringContainsString('พร้อมเพย์', $promptpayTaxInvoice);
-        $this->assertStringContainsString('ยอดชำระพร้อมเพย์', $promptpayTaxInvoice);
-        $this->assertStringNotContainsString('รับเงินสด', $promptpayTaxInvoice);
-        $this->assertStringContainsString('เงินสด + พร้อมเพย์', $mixedTaxInvoice);
-        $this->assertStringContainsString('ยอดชำระเงินสด', $mixedTaxInvoice);
-        $this->assertStringContainsString('ยอดชำระพร้อมเพย์', $mixedTaxInvoice);
-        $this->assertStringNotContainsString('วิธีชำระเงิน', $deliveryNote);
-        $this->assertStringNotContainsString('วิธีชำระเงิน', $quotation);
-        $this->assertStringNotContainsString('วิธีชำระเงิน', $legacyTaxInvoice);
+        foreach ([$taxInvoice, $promptpayTaxInvoice, $mixedTaxInvoice] as $invoice) {
+            $this->assertStringContainsString('class="delivery-note"', $invoice);
+            $this->assertStringContainsString('class="payment-summary-section"', $invoice);
+            $this->assertStringContainsString('class="qr-payment"', $invoice);
+        }
+        $this->assertStringNotContainsString('class="delivery-note"', $quotation);
+        $this->assertStringContainsString('class="delivery-note"', $legacyTaxInvoice);
     }
 
     public function test_delivery_note_uses_minimal_print_regions_and_preserves_sale_values(): void
