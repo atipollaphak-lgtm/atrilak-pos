@@ -86,6 +86,27 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
         $this->assertSame($beforeMovements, StockMovement::count());
     }
 
+    public function test_edit_update_preserves_delivery_context_when_form_omits_it(): void
+    {
+        [$sale] = $this->existingSale();
+        $data = $this->updateData($sale, [
+            'customer_delivery_address_id' => null,
+            'delivery_type' => null,
+            'delivery_zone_id' => null,
+        ]);
+
+        $updated = app(SaleService::class)->updateSale(
+            $sale,
+            $data,
+            (int) $sale->fresh()->revision
+        );
+        $fresh = $updated->fresh();
+
+        $this->assertSame('delivery', $fresh->delivery_type);
+        $this->assertSame($sale->customer_delivery_address_id, $fresh->customer_delivery_address_id);
+        $this->assertSame($sale->delivery_zone_id, $fresh->delivery_zone_id);
+    }
+
     public function test_changed_qty_uses_existing_update_flow(): void
     {
         [$sale, $product, , $item] = $this->existingSale();

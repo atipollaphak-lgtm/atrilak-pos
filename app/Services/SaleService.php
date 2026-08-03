@@ -554,6 +554,11 @@ class SaleService
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            // Edit Sale does not expose fulfillment controls. Preserve the
+            // existing fulfillment snapshot when the form omits those fields.
+            $data['delivery_type'] ??= $lockedSale->delivery_type;
+            $data['customer_delivery_address_id'] ??= $lockedSale->customer_delivery_address_id;
+
             if ((int) $lockedSale->revision !== $expectedRevision) {
                 throw new StaleSaleRevisionException;
             }

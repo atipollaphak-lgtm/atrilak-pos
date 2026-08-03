@@ -50,6 +50,19 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('restore.dataset.action = "restore"', $sale);
     }
 
+    public function test_unit_price_is_inline_editable_without_opening_a_price_popup(): void
+    {
+        $sale = $this->source('public/js/modules/sale-v3.js');
+
+        $this->assertStringContainsString('input.className = "v3-cart-unit-price"', $sale);
+        $this->assertStringContainsString('input.inputMode = "decimal"', $sale);
+        $this->assertStringContainsString('function commitUnitPrice', $sale);
+        $this->assertStringContainsString('event.target.matches(".v3-cart-unit-price")', $sale);
+        $this->assertStringContainsString('priceCell.value = Number(item.price).toFixed(2)', $sale);
+        $this->assertStringContainsString('restore.dataset.action = "restore"', $sale);
+        $this->assertStringNotContainsString('action === "edit"', $sale);
+    }
+
     public function test_final_payment_uses_direct_cash_confirmation_and_shows_documents_after_success(): void
     {
         $final = $this->source('public/js/modules/final-pos.js');
@@ -58,6 +71,18 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString("$('#final-document-panel')?.classList.remove('d-none')", $final);
         $this->assertStringContainsString("$('#final-print-documents').disabled = false", $final);
         $this->assertStringContainsString('ensurePaymentMethodSummary', $final);
+    }
+
+    public function test_payment_summary_shows_the_actual_selling_price_on_the_left(): void
+    {
+        $final = $this->source('public/js/modules/final-pos.js');
+        $css = $this->source('public/css/sale-v3.css');
+
+        $this->assertStringContainsString('<td>${item.qty}</td><td>${money(item.price)}</td>', $final);
+        $this->assertStringNotContainsString(
+            '.final-items-table th:nth-child(3),.final-items-table td:nth-child(3),.final-items-table th:nth-child(5),.final-items-table td:nth-child(5) { display:none; }',
+            $css
+        );
     }
 
     private function source(string $path): string
