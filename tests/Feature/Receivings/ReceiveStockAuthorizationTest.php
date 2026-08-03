@@ -25,4 +25,11 @@ class ReceiveStockAuthorizationTest extends TestCase
             ->get(route('receivings.create'))
             ->assertForbidden();
     }
+
+    public function test_cashier_cannot_post_receive_stock_v2_confirm_endpoint(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'cashier']))
+            ->post(route('receivings.confirm'))
+            ->assertForbidden();
+    }
 }
