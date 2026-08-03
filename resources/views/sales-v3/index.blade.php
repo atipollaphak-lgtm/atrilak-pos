@@ -7,7 +7,7 @@
 @stop
 
 @section('css')
-    <link rel="stylesheet" href="{{ asset('css/sale-v3.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/sale-v3.css') }}?v={{ filemtime(public_path('css/sale-v3.css')) }}">
 @stop
 
 @section('content')
@@ -47,5 +47,5 @@
     <script src="{{ asset('js/modules/pos-payment.js') }}"></script>
     <script src="{{ asset('js/modules/zone-pricing.js') }}"></script>
     <script src="{{ asset('js/modules/final-pos.js') }}?v={{ filemtime(public_path('js/modules/final-pos.js')) }}"></script>
-    <script src="{{ asset('js/modules/sale-v3.js') }}"></script>
+    <script src="{{ asset('js/modules/sale-v3.js') }}?v={{ filemtime(public_path('js/modules/sale-v3.js')) }}"></script>
 @stop
