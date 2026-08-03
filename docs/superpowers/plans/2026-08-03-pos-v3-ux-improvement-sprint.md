@@ -508,4 +508,3 @@ After confirming Laragon/Apache/PostgreSQL is using a non-production test databa
 - [ ] **Step 6: Review final diff and prepare delivery checkpoint**
 
 Review migration safety, protected pricing files, request contracts, transaction rollback, sensitive data, and generated artifacts. Stage only approved files, commit implementation, push \`codex/pos-v3-ux-improvement-sprint\`, report tests and remaining risks, and wait for approval before merge/deploy.
-
