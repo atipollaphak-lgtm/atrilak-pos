@@ -382,7 +382,9 @@ class SaleController extends Controller
     ) {
         $sale->load([
             'customer',
+            'customer.deliveryAddresses',
             'technician',
+            'customerDeliveryAddress',
             'items.product.unitRelation',
             'items.productUnit.unit',
         ]);

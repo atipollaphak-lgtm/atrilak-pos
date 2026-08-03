@@ -55,6 +55,13 @@ class SaleV3Controller extends Controller
                 'sale_no' => $sale->sale_no,
                 'invoice_url' => route('sales.invoice-v2', $sale->id),
                 'idempotent_replay' => $sale->idempotentReplay,
+                'payment' => [
+                    'payment_method' => $sale->payment_method,
+                    'cash_amount' => $sale->cash_amount,
+                    'promptpay_amount' => $sale->promptpay_amount,
+                    'received_amount' => $sale->received_amount,
+                    'change_amount' => $sale->change_amount,
+                ],
             ]);
         } catch (DomainException $exception) {
             return response()->json([

@@ -91,6 +91,9 @@ function createHarness(hold) {
         ["#final-print-delivery", new FakeElement({ checked: true })],
         ["#final-print-tax", new FakeElement({ checked: false })],
         ["#final-payment-close", new FakeElement()],
+        ["#final-payment-method-summary", new FakeElement()],
+        ["#final-payment-method-label", new FakeElement()],
+        ["#final-payment-amounts", new FakeElement()],
     ]);
     const requests = [];
     const alerts = [];
@@ -454,4 +457,79 @@ test("success printing uses the created sale id and configured document route", 
         harness.openedUrls,
         ["/sales/55/invoice-v2?document_type=delivery-note"],
     );
+});
+
+test("success modal uses the server payment snapshot for cash, PromptPay, and mixed payments", () => {
+    const expected = {
+        cash: {
+            label: "วิธีชำระเงิน: เงินสด",
+            amounts: "เงินสด 100.00 · พร้อมเพย์ 0.00 · รับเงิน 150.00 · เงินทอน 50.00",
+        },
+        promptpay: {
+            label: "วิธีชำระเงิน: พร้อมเพย์",
+            amounts: "เงินสด 0.00 · พร้อมเพย์ 100.00 · รับเงิน 0.00 · เงินทอน 0.00",
+        },
+        mixed: {
+            label: "วิธีชำระเงิน: เงินสด + พร้อมเพย์",
+            amounts: "เงินสด 40.00 · พร้อมเพย์ 60.00 · รับเงิน 50.00 · เงินทอน 10.00",
+        },
+    };
+
+    for (const [method, assertion] of Object.entries(expected)) {
+        const harness = createHarness({
+            id: 20,
+            customer_id: null,
+            customer_delivery_address_id: null,
+            items: [],
+        });
+
+        harness.finalPos.showSuccess({
+            sale_id: 120,
+            sale_no: "SAL-TEST-120",
+            payment: {
+                payment_method: method,
+                cash_amount: method === "cash" ? "100.00" : method === "mixed" ? "40.00" : "0.00",
+                promptpay_amount: method === "promptpay" ? "100.00" : method === "mixed" ? "60.00" : "0.00",
+                received_amount: method === "cash" ? "150.00" : method === "mixed" ? "50.00" : "0.00",
+                change_amount: method === "cash" ? "50.00" : method === "mixed" ? "10.00" : "0.00",
+            },
+        });
+
+        assert.equal(
+            harness.elements.get("#final-payment-method-label").textContent,
+            assertion.label,
+        );
+        assert.equal(
+            harness.elements.get("#final-payment-amounts").textContent,
+            assertion.amounts,
+        );
+    }
+});
+
+test("success payment snapshot stays visible after the sale form is reset", async () => {
+    const harness = createHarness({
+        id: 21,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        items: [],
+    });
+
+    harness.finalPos.showSuccess({
+        sale_id: 121,
+        sale_no: "SAL-TEST-121",
+        payment: {
+            payment_method: "promptpay",
+            cash_amount: "0.00",
+            promptpay_amount: "100.00",
+            received_amount: "0.00",
+            change_amount: "0.00",
+        },
+    });
+    const labelBeforeReset = harness.elements.get("#final-payment-method-label").textContent;
+    const amountsBeforeReset = harness.elements.get("#final-payment-amounts").textContent;
+
+    await harness.elements.get("#final-finish-payment").dispatch("click");
+
+    assert.equal(harness.elements.get("#final-payment-method-label").textContent, labelBeforeReset);
+    assert.equal(harness.elements.get("#final-payment-amounts").textContent, amountsBeforeReset);
 });

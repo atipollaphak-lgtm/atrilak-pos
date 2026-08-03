@@ -20,6 +20,7 @@
                         <div id="final-preview-zone" class="final-preview-zone">-</div>
                         <div id="final-payment-status" class="final-payment-status d-none">ชำระเงินเรียบร้อยแล้ว</div>
                         <div class="final-payable-label">ยอดที่ต้องชำระ</div><div id="final-payable-total" class="final-payable-total">0.00</div><div class="final-baht-label">บาท</div>
+                        <div id="final-payment-method-summary" class="final-payment-method-summary"><strong id="final-payment-method-label">วิธีชำระเงิน: ยังไม่ได้ยืนยัน</strong><small id="final-payment-amounts"></small><button id="final-change-payment" type="button" class="btn btn-link btn-sm">เปลี่ยนวิธีชำระเงิน</button></div>
                         <div class="final-payment-notice"><i class="fas fa-info-circle"></i><span>กรุณาตรวจสอบรายการสินค้าและยอดรวมให้ถูกต้อง<br>ก่อนยืนยันการชำระเงิน</span></div>
                         <div class="final-payment-buttons"><button id="final-edit-items" type="button" class="btn btn-outline-success"><i class="fas fa-pen mr-2"></i>แก้ไขรายการ</button><button id="final-confirm-payment" type="button" class="btn btn-success"><i class="fas fa-check mr-2"></i>ยืนยันการชำระเงิน</button></div>
                     </section>

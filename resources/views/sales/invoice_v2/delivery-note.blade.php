@@ -53,8 +53,8 @@
         '-'
     );
     $customerAddress = \App\Support\DocumentSnapshotValue::resolve(
-        $sale->customer_address_snapshot,
-        $sale->customer?->address,
+        $document['customer_address'] ?? null,
+        null,
         '-'
     );
     $customerTaxNumber = \App\Support\DocumentSnapshotValue::resolve(
@@ -68,10 +68,14 @@
     $deliveryFee = $sale->delivery_fee ?? 0;
     $discount = $sale->discount ?? 0;
     $grandTotal = $subTotal + $deliveryFee - $discount;
-    $minimumRows = ($paper ?? 'a4') === 'a5' ? $sale->items->count() : 15;
+    $minimumRows = ($paper ?? 'a4') === 'a5'
+        ? $sale->items->count()
+        : (($document['type'] ?? null) === 'tax-invoice'
+            ? max($sale->items->count(), 12)
+            : 15);
 @endphp
 
-<div class="delivery-note">
+<div class="delivery-note" data-document-type="{{ $document['type'] ?? 'delivery-note' }}">
     @include('sales.partials.void-document-marker', ['sale' => $sale])
 
     <header class="delivery-header">

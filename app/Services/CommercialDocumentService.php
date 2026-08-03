@@ -20,7 +20,7 @@ class CommercialDocumentService
             'title' => $definition['title'],
             'short_title' => $definition['short_title'],
             'number' => $sale->sale_no
-                ?? 'SALE-' . str_pad(
+                ?? 'SALE-'.str_pad(
                     (string) $sale->id,
                     5,
                     '0',
@@ -31,7 +31,57 @@ class CommercialDocumentService
             'current_page' => 1,
             'total_pages' => 1,
             'show_tax_information' => $definition['show_tax_information'],
+            'customer_address' => $this->resolveCustomerAddress($sale),
         ];
+    }
+
+    private function resolveCustomerAddress(Sale $sale): string
+    {
+        $customer = $sale->relationLoaded('customer')
+            ? $sale->getRelation('customer')
+            : null;
+        $selectedDeliveryAddress = $sale->relationLoaded('customerDeliveryAddress')
+            ? $sale->getRelation('customerDeliveryAddress')
+            : null;
+        $deliveryAddresses = $customer?->relationLoaded('deliveryAddresses')
+            ? $customer->getRelation('deliveryAddresses')
+            : collect();
+
+        if ($selectedDeliveryAddress === null
+            && $sale->customer_delivery_address_id !== null) {
+            $selectedDeliveryAddress = $deliveryAddresses->firstWhere(
+                'id',
+                $sale->customer_delivery_address_id
+            );
+        }
+
+        $defaultDeliveryAddress = $customer?->relationLoaded('defaultDeliveryAddress')
+            ? $customer->getRelation('defaultDeliveryAddress')
+            : $deliveryAddresses->first(
+                fn ($address): bool => (bool) $address->is_default
+            );
+
+        $deliverySources = $sale->delivery_type === 'pickup'
+            ? []
+            : [
+                $sale->delivery_full_address_snapshot,
+                $selectedDeliveryAddress?->address,
+            ];
+
+        foreach (array_merge(
+            $deliverySources,
+            [
+                $defaultDeliveryAddress?->address,
+                $sale->customer_address_snapshot,
+                $customer?->address,
+            ]
+        ) as $address) {
+            if (is_string($address) && trim($address) !== '') {
+                return $address;
+            }
+        }
+
+        return '-';
     }
 
     /**
@@ -61,6 +111,7 @@ class CommercialDocumentService
                 'show_tax_information' => false,
             ],
         ];
+
         return $definitions[$documentType]
             ?? $definitions['delivery-note'];
     }
