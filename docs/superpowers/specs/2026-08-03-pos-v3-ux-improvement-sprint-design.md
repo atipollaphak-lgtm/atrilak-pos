@@ -24,16 +24,20 @@ Add a forward-safe migration to `sale_items`:
 
 Existing rows are not rewritten. PostgreSQL supplies `NULL` for the new nullable column and `false` for the boolean default. The Eloquent model casts and fillable attributes will be updated.
 
+Add the same two snapshot columns to `hold_bill_items` in a separate forward-safe migration. Existing held rows retain `original_price = NULL` and `price_override_flag = false`; no historical hold is backfilled.
+
 For new Sale Items:
 
 - No override: `original_price = NULL`, `price_override_flag = false`, `selling_price = system price`.
 - Override: `original_price = system price`, `price_override_flag = true`, `selling_price = submitted sale price`.
 
-Hold Bill Items continue to persist the sale price already present in the hold. Resume restores that price exactly; when the Sale is finally created, the authoritative Sale flow determines whether the restored price differs from the current system-calculated price and stores the Sale Item metadata.
+The V3 create contract sends `items.*.selling_price` and `items.*.price_was_edited` only. `price_was_edited` is intent, not trusted metadata. The backend computes the system price and persists the two snapshot columns.
+
+Hold Bill Items persist all three price values: `selling_price`, `original_price`, and `price_override_flag`. The Hold create contract also receives only `selling_price` and `price_was_edited`; `HoldBillService` calculates and stores the snapshots. Resume restores all three values and an internal `price_was_edited` state exactly. When a Sale is created from a Hold Bill, an untouched line copies the held metadata and does not compare the held price with the current pricing context. If the cashier edits the price after Resume, that line is processed as a fresh override decision while untouched lines retain their held metadata.
 
 ## Price Override Boundary
 
-The browser may propose a unit price, but the backend decides whether it is an override. The existing pricing pipeline remains the source of the system price. A V3-specific price context is carried through the Sale request so delivery-zone pricing is resolved first, then the submitted price is compared with the resolved system price. The submitted price is used only as the bill's sale price and never writes to Product, Product Unit, Category, scheduled pricing, or price history.
+The browser sends only the desired `selling_price` and an explicit price intent/edited marker; it never sends or controls `original_price` or `price_override_flag`. The backend validates the desired price as positive with at most two decimal places and decides the persisted metadata. The existing pricing pipeline remains the source of the system price. For a non-edited line, the backend uses the freshly resolved system price. For an explicit override, the backend accepts the validated desired sale price, stores the freshly resolved system price in `original_price`, and sets `price_override_flag = true`. Metadata is never inferred solely from a numeric comparison and never writes to Product, Product Unit, Category, scheduled pricing, or price history.
 
 Totals, delivery-fee calculation, Profit Guard, commission, and profit use the final `selling_price` persisted on the Sale Item. Invoice, delivery note, and tax invoice continue to render that persisted price.
 
@@ -42,6 +46,7 @@ Totals, delivery-fee calculation, Profit Guard, commission, and profit use the f
 - The canonical draft state starts with `deliveryType: "pickup"`.
 - Pickup and delivery controls visibly expose the active state. Switching to pickup clears the address/zone context and forces delivery fee to `0.00`; switching to delivery reveals the existing address, zone, and fee controls.
 - Cart unit price is editable inline or through the existing edit affordance. Enter/Save validates a positive two-decimal price, recalculates line total and all dependent totals immediately, and marks the item as overridden in draft state. A per-line restore action returns to the system price.
+- When fulfillment context changes (`pickup ↔ delivery`, address change, or zone change), non-overridden lines reprice to the latest system price. Overridden lines retain the user's sale price, update their draft reference system price for the latest context, and remain visibly marked as overridden. Restore uses the latest system price for the current context and clears the override marker. The backend repeats the same context-aware calculation at save time.
 - The confirmation view shows concise item rows (quantity, product, line total) and a right-side summary containing net total, fulfillment, and payment method. Unit-price detail is omitted from this pre-payment summary.
 
 ## Payment Flow
@@ -50,6 +55,7 @@ Totals, delivery-fee calculation, Profit Guard, commission, and profit use the f
 - The primary confirmation action submits the default cash payment directly through the existing Sale request. It does not open a second data-entry popup.
 - A secondary “change payment method” action opens the existing payment controller for PromptPay or Mixed Payment.
 - Existing payment validation and persistence remain authoritative for non-cash payments.
+- The success state is shown only after the Sale transaction has committed successfully, including payment creation, stock deduction, commission, and idempotency persistence. Validation or transaction failure keeps the summary and draft intact; it must not clear the cart or show success.
 
 ## Success and Documents
 
@@ -59,7 +65,7 @@ After a successful Sale response, the confirmation modal remains open and change
 
 - Hold Bill creation stores the current bill's actual unit prices.
 - Resume restores delivery type, address context, quantities, and actual held prices without repricing those lines in the browser.
-- Edit Sale keeps the persisted `selling_price` visible and unchanged when the item is not changed. If an edit changes the unit price, the authoritative update flow recalculates the item snapshot metadata from the system price while preserving existing Sale transaction, stock, commission, and revision safeguards.
+- Edit Sale uses an explicit per-line `price_action` contract: `preserve` for an existing line the user did not edit, `override` when the user entered a new price, and `system` when the user chose “restore normal price.” `preserve` copies the existing `selling_price`, `original_price`, and `price_override_flag` without comparing them to current pricing. `override` recalculates the current system reference price and stores new override metadata. `system` stores the current system price with `original_price = NULL` and `price_override_flag = false`. Existing Sale transaction, stock, commission, and revision safeguards remain unchanged.
 
 ## Validation and Compatibility
 
