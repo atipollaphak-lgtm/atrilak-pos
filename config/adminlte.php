@@ -388,7 +388,7 @@ return [
 
         [
             'text' => 'รับสินค้าเข้า',
-            'url' => 'purchases',
+            'url' => 'receivings',
             'icon' => 'fas fa-truck-loading',
             'can' => 'manager',
         ],

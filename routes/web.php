@@ -16,6 +16,7 @@ use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\ProductPriceTierController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\ReceiveStockController;
 use App\Http\Controllers\QuotationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
@@ -264,6 +265,15 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('categories', CategoryController::class);
         Route::resource('suppliers', SupplierController::class);
         Route::resource('purchases', PurchaseController::class);
+        Route::prefix('receivings')->name('receivings.')->controller(ReceiveStockController::class)->group(function () {
+            Route::get('/', 'index')->name('index');
+            Route::get('/create', 'create')->name('create');
+            Route::get('/products/search', 'search')->name('products.search');
+            Route::post('/preview', 'preview')->name('preview.store');
+            Route::get('/preview/{token}', 'previewPage')->name('preview');
+            Route::post('/confirm', 'confirm')->name('confirm');
+            Route::get('/{receiving}', 'show')->name('show');
+        });
         Route::get(
             '/purchases/{purchase}/print',
             [PurchaseController::class, 'print']
