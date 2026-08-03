@@ -136,7 +136,7 @@
             elements.cashAmount.value = total;
             elements.mixedCash.value = "";
             elements.promptpayAmount.value = "0.00";
-            elements.received.value = "";
+            elements.received.value = total;
             elements.change.textContent = "0.00";
             setError();
             updateVisibility();
@@ -199,7 +199,7 @@
                 elements.cashAmount.value = openedTotal;
                 elements.mixedCash.value = "";
                 elements.promptpayAmount.value = "0.00";
-                elements.received.value = "";
+                elements.received.value = openedTotal;
             } else if (method === "promptpay") {
                 elements.mixedCash.value = "";
                 elements.promptpayAmount.value = openedTotal;
@@ -306,6 +306,22 @@
             $(elements.modal).modal("show");
         }
 
+        async function confirmDefaultCash() {
+            if (confirming) {
+                return;
+            }
+
+            reset(canonicalTotal());
+            const payment = resolve("cash", openedTotal, "", openedTotal);
+            confirming = true;
+
+            try {
+                await options.onConfirm(payment);
+            } finally {
+                confirming = false;
+            }
+        }
+
         elements.method.addEventListener("change", updateVisibility);
         elements.mixedCash.addEventListener("input", updatePreview);
         elements.received.addEventListener("input", updatePreview);
@@ -317,7 +333,7 @@
             }
         });
 
-        return Object.freeze({ open });
+        return Object.freeze({ open, confirmDefaultCash });
     }
 
     global.PosPayment = Object.freeze({

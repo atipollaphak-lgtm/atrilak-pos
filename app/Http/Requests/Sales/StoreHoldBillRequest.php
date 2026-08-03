@@ -37,6 +37,9 @@ class StoreHoldBillRequest extends FormRequest
             'items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'items.*.qty' => ['required', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999999.99'],
             'items.*.selling_price' => ['required', 'numeric', 'decimal:0,2', 'gt:0', 'max:9999999999999.99'],
+            'items.*.price_was_edited' => ['nullable', 'boolean'],
+            'items.*.original_price' => ['prohibited'],
+            'items.*.price_override_flag' => ['prohibited'],
         ];
     }
 

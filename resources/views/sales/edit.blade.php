@@ -30,6 +30,9 @@
         $oldProductIds = is_array(old('product_id')) ? old('product_id') : $defaultProductIds;
         $oldQuantities = is_array(old('qty')) ? old('qty') : $defaultQuantities;
         $oldSellingPrices = is_array(old('selling_price')) ? old('selling_price') : $defaultSellingPrices;
+        $oldPriceActions = is_array(old('price_action'))
+            ? old('price_action')
+            : array_fill(0, count($defaultSaleItemIds), 'preserve');
         $rowCount = max(
             count($oldSaleItemIds),
             count($oldProductUnitIds),
@@ -120,6 +123,8 @@
                                         value="{{ $oldSaleItemIds[$index] ?? '' }}">
                                     <input type="hidden" name="product_unit_id[]" class="product-unit-id"
                                         value="{{ $oldProductUnitIds[$index] ?? '' }}">
+                                    <input type="hidden" name="price_action[]" class="price-action"
+                                        value="{{ $oldPriceActions[$index] ?? 'preserve' }}">
                                     <select name="product_id[]" class="form-control product-select">
                                         <option value="">-- เลือกสินค้า --</option>
                                         @unless ($productIsAvailable)
@@ -147,6 +152,9 @@
                                 <td>
                                     <input type="number" step="0.01" name="selling_price[]" class="form-control price"
                                         value="{{ $oldSellingPrices[$index] ?? '' }}">
+                                    <button type="button" class="btn btn-link btn-sm restore-system-price">
+                                        คืนราคาปกติ
+                                    </button>
                                 </td>
 
                                 <td class="line-total">0.00</td>

@@ -166,6 +166,8 @@ trait CreatesSaleTransactionTestSchema
             $table->decimal('conversion_rate_used', 15, 4)->nullable();
             $table->decimal('base_qty', 19, 4)->nullable();
             $table->decimal('selling_price', 15, 2);
+            $table->decimal('original_price', 15, 2)->nullable();
+            $table->boolean('price_override_flag')->default(false);
             $table->decimal('cost_price', 12, 2)->default(0);
             $table->decimal('total', 15, 2);
             $table->decimal('profit', 12, 2)->default(0);

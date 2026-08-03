@@ -8,6 +8,7 @@ use App\Models\CustomerDeliveryAddress;
 use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\Sale;
 use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -204,6 +205,53 @@ class HoldBillWorkflowTest extends TestCase
             ->assertJsonPath('data.items.0.product_unit_id', null)
             ->assertJsonPath('data.items.0.product_unit_id_snapshot', $productUnitId)
             ->assertJsonPath('data.items.0.product_unit', null);
+    }
+
+    public function test_hold_preserves_override_metadata_when_current_price_changes_before_sale(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        [$product, $productUnit] = $this->productWithUnit();
+
+        $created = $this->actingAs($cashier)->postJson('/sales-v3/hold-bills', [
+            'sale_date' => '2026-07-29',
+            'delivery_type' => 'pickup',
+            'total_amount' => '99.50',
+            'items' => [[
+                'product_id' => $product->id,
+                'product_unit_id' => $productUnit->id,
+                'qty' => '1.00',
+                'selling_price' => '99.50',
+                'price_was_edited' => true,
+            ]],
+        ])->assertCreated();
+
+        $holdId = $created->json('hold_bill.id');
+
+        $this->assertDatabaseHas('hold_bill_items', [
+            'hold_bill_id' => $holdId,
+            'selling_price' => '99.50',
+            'original_price' => '100.00',
+            'price_override_flag' => true,
+        ]);
+
+        $product->update(['selling_price' => '110.00']);
+        $productUnit->update(['selling_price' => '110.00']);
+
+        $payload = $this->salePayload($product, $productUnit, $holdId);
+        $payload['items'][0]['selling_price'] = '99.50';
+        $payload['items'][0]['price_was_edited'] = true;
+        $payload['cash_amount'] = '99.50';
+        $payload['received_amount'] = '99.50';
+
+        $this->actingAs($cashier)
+            ->postJson('/sales-v3/store', $payload)
+            ->assertOk();
+
+        $item = Sale::query()->sole()->items()->sole();
+
+        $this->assertSame('99.50', $item->selling_price);
+        $this->assertSame('100.00', $item->original_price);
+        $this->assertTrue($item->price_override_flag);
     }
 
     private function customerWithAddress(): array

@@ -2,18 +2,32 @@
 
 namespace App\Services;
 
+use App\Models\CustomerDeliveryAddress;
 use App\Models\HoldBill;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\User;
+use App\Services\Sales\SalePriceSnapshotService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class HoldBillService
 {
+    public function __construct(
+        private readonly ?SalePriceSnapshotService $salePriceSnapshotService = null
+    ) {}
+
     public function create(array $data, User $user): HoldBill
     {
         return DB::transaction(function () use ($data, $user): HoldBill {
+            $priceSnapshotService = $this->salePriceSnapshotService
+                ?? app(SalePriceSnapshotService::class);
+            $zone = ($data['delivery_type'] ?? 'pickup') === 'delivery'
+                ? CustomerDeliveryAddress::query()
+                    ->with('deliveryZone')
+                    ->find($data['customer_delivery_address_id'] ?? null)
+                    ?->deliveryZone
+                : null;
             $holdBill = HoldBill::query()->create([
                 'hold_no' => null,
                 'user_id' => $user->getKey(),
@@ -33,23 +47,40 @@ class HoldBillService
             ]);
 
             foreach ($data['items'] as $item) {
-                $product = Product::query()->with('unitRelation')->findOrFail($item['product_id']);
+                $product = Product::query()
+                    ->with(['unitRelation', 'category'])
+                    ->findOrFail($item['product_id']);
                 $productUnit = null;
 
                 if (! empty($item['product_unit_id'])) {
                     $productUnit = ProductUnit::query()
-                        ->with('unit')
+                        ->with(['unit', 'priceTiers'])
                         ->whereKey($item['product_unit_id'])
                         ->where('product_id', $product->getKey())
                         ->firstOrFail();
                 }
+
+                $priceSnapshot = $priceSnapshotService->snapshot(
+                    $priceSnapshotService->systemPrice(
+                        $item,
+                        $product,
+                        $productUnit,
+                        $zone,
+                        ($data['delivery_type'] ?? 'pickup') === 'pickup'
+                    ),
+                    (string) $item['selling_price'],
+                    filter_var(
+                        $item['price_was_edited'] ?? false,
+                        FILTER_VALIDATE_BOOLEAN
+                    )
+                );
 
                 $holdBill->items()->create([
                     'product_id' => $product->getKey(),
                     'product_unit_id' => $productUnit?->getKey(),
                     'product_unit_id_snapshot' => $productUnit?->getKey(),
                     'qty' => $item['qty'],
-                    'selling_price' => $item['selling_price'],
+                    ...$priceSnapshot,
                     'product_name_snapshot' => $product->name,
                     'product_sku_snapshot' => $product->sku,
                     'product_code_snapshot' => $product->product_code,

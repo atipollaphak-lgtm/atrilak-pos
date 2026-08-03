@@ -263,8 +263,11 @@ class SaleController extends Controller
         $validated = $request->validated();
         $updateData = [
             'customer_id' => $validated['customer_id'] ?? null,
+            'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
+            'technician_id' => $validated['technician_id'] ?? null,
             'sale_date' => $validated['sale_date'],
             'items' => $request->normalizedItems(),
+            'delivery_type' => $validated['delivery_type'] ?? null,
             'delivery_fee' => $validated['delivery_fee'] ?? 0,
             'discount' => $validated['discount'] ?? 0,
         ];

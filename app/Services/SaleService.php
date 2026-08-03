@@ -19,6 +19,7 @@ use App\Services\Sales\SaleItemQuantityService;
 use App\Services\Sales\SaleItemService;
 use App\Services\Sales\SaleNumberService;
 use App\Services\Sales\SalePaymentResolver;
+use App\Services\Sales\SalePriceSnapshotService;
 use App\Services\Sales\SaleValidationService;
 use App\Services\Sales\StockService;
 use App\Services\Sales\ZonePricingService;
@@ -61,6 +62,8 @@ class SaleService
 
     protected ZonePricingService $zonePricingService;
 
+    protected SalePriceSnapshotService $salePriceSnapshotService;
+
     public function __construct(
         SaleNumberService $saleNumberService,
         SaleItemService $saleItemService,
@@ -75,7 +78,8 @@ class SaleService
         ?SaleDecimalService $saleDecimalService = null,
         ?SaleItemQuantityService $saleItemQuantityService = null,
         ?SalePaymentResolver $salePaymentResolver = null,
-        ?ZonePricingService $zonePricingService = null
+        ?ZonePricingService $zonePricingService = null,
+        ?SalePriceSnapshotService $salePriceSnapshotService = null
     ) {
         $this->saleNumberService = $saleNumberService;
         $this->saleItemService = $saleItemService;
@@ -95,6 +99,11 @@ class SaleService
             ?? new SalePaymentResolver($this->saleDecimalService);
         $this->zonePricingService = $zonePricingService
             ?? new ZonePricingService($this->saleDecimalService);
+        $this->salePriceSnapshotService = $salePriceSnapshotService
+            ?? new SalePriceSnapshotService(
+                $this->saleDecimalService,
+                $this->zonePricingService
+            );
     }
 
     public function createSale(array $data, ?int $quotationId = null)
@@ -133,6 +142,10 @@ class SaleService
 
                         throw new DomainException('รายการพักบิลนี้ถูกนำไปชำระเงินหรือถูกลบแล้ว', 409);
                     }
+
+                    $holdBill->load([
+                        'items' => fn ($query) => $query->orderBy('id'),
+                    ]);
                 }
 
                 $items = $data['items'] ?? [];
@@ -160,6 +173,17 @@ class SaleService
 
                 $resolvedLines = $this->productUnitConversionService
                     ->resolveLines($items, $lockedProducts);
+
+                if ($holdBill !== null) {
+                    $data['hold_price_snapshots'] = $holdBill->items
+                        ->map(fn ($item): array => [
+                            'selling_price' => $item->selling_price,
+                            'original_price' => $item->original_price,
+                            'price_override_flag' => (bool) $item->price_override_flag,
+                        ])
+                        ->values()
+                        ->all();
+                }
 
                 $sale = $this->persistResolvedSale(
                     $data,
@@ -280,9 +304,35 @@ class SaleService
         [$zone, $address] = $this->resolveZoneContext($data);
         $pickup = ($data['delivery_type'] ?? 'delivery') === 'pickup';
         $effectiveRoundingIncrement = null;
-        $items = collect($items)->map(function (array $item) use (&$effectiveRoundingIncrement, $lockedProducts, $zone, $pickup): array {
-            if ($pickup) {
-                return $item;
+        $items = collect($items)->map(function (array $item, int $index) use (&$effectiveRoundingIncrement, $data, $lockedProducts, $zone, $pickup): array {
+            $holdSnapshot = $data['hold_price_snapshots'][$index] ?? null;
+            $priceChangedSinceHold = filter_var(
+                $item['price_changed_since_hold'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            );
+
+            if ($holdSnapshot !== null && ! $priceChangedSinceHold) {
+                return [
+                    ...$item,
+                    ...$holdSnapshot,
+                ];
+            }
+
+            if (! array_key_exists('price_was_edited', $item)) {
+                if ($pickup) {
+                    return $item;
+                }
+
+                $product = $lockedProducts->get((int) $item['product_id']);
+                $product?->loadMissing('category');
+                $unit = $product?->productUnits?->firstWhere('id', $item['product_unit_id'] ?? null);
+                $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $zone, $pickup);
+                $effectiveRoundingIncrement ??= $pricing['rounding_increment'];
+
+                return [
+                    ...$item,
+                    'selling_price' => $pricing['zone_unit_price'],
+                ];
             }
 
             $product = $lockedProducts->get((int) $item['product_id']);
@@ -290,10 +340,19 @@ class SaleService
             $unit = $product?->productUnits?->firstWhere('id', $item['product_unit_id'] ?? null);
             $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $zone, $pickup);
             $effectiveRoundingIncrement ??= $pricing['rounding_increment'];
+            $priceWasEdited = filter_var(
+                $item['price_was_edited'],
+                FILTER_VALIDATE_BOOLEAN
+            );
+            $priceSnapshot = $this->salePriceSnapshotService->snapshot(
+                $pricing['zone_unit_price'],
+                (string) $item['selling_price'],
+                $priceWasEdited
+            );
 
             return [
                 ...$item,
-                'selling_price' => $pricing['zone_unit_price'],
+                ...$priceSnapshot,
             ];
         })->all();
         $this->stockLockService->assertSufficientBaseQuantities(
@@ -594,6 +653,16 @@ class SaleService
                 ->all();
 
             $lockedProducts = $this->stockLockService->lockProducts($productIds);
+            $lockedProducts->load('productUnits');
+            $lockedProducts->load('category');
+            if (Schema::hasTable('product_price_tiers')) {
+                $lockedProducts->load('productUnits.priceTiers');
+            }
+            [$priceZone] = $this->resolveZoneContext([
+                'delivery_type' => $data['delivery_type'] ?? $lockedSale->delivery_type,
+                'customer_delivery_address_id' => $data['customer_delivery_address_id']
+                    ?? $lockedSale->customer_delivery_address_id,
+            ]);
             $resolvedItems = collect(
                 $this->productUnitConversionService->resolveLines(
                     $newItemsForStock,
@@ -603,7 +672,10 @@ class SaleService
             $updatePlan = $this->buildUpdatePlan(
                 $lockedItems,
                 $resolvedItems,
-                $lockedProducts
+                $lockedProducts,
+                $lockedSale,
+                $data,
+                $priceZone
             );
             $plannedAttributes = collect($updatePlan['lines'])->pluck('attributes');
             $grandTotal = $this->saleDecimalService->sumMoney(
@@ -692,7 +764,8 @@ class SaleService
             $submittedItem = $submittedItems[$index] ?? null;
 
             if (! is_array($submittedItem)
-                || ! $this->saleItemMatches($existingItem, $submittedItem)) {
+                || ! $this->saleItemMatches($existingItem, $submittedItem)
+                || in_array($submittedItem['price_action'] ?? null, ['override', 'system'], true)) {
                 return true;
             }
         }
@@ -818,7 +891,10 @@ class SaleService
     private function buildUpdatePlan(
         Collection $existingItems,
         array $submittedItems,
-        Collection $lockedProducts
+        Collection $lockedProducts,
+        Sale $sale,
+        array $data,
+        ?DeliveryZone $priceZone
     ): array {
         $freshSnapshots = $this->documentSnapshotService
             ->saleItemSnapshots($submittedItems, $lockedProducts, true);
@@ -833,6 +909,8 @@ class SaleService
             'unit_code_snapshot',
         ];
 
+        $pickup = ($data['delivery_type'] ?? $sale->delivery_type) === 'pickup';
+
         $lines = collect($submittedItems)->map(function (
             array $submittedItem,
             int $index
@@ -841,6 +919,8 @@ class SaleService
             $freshSnapshots,
             $snapshotColumns,
             $lockedProducts,
+            $priceZone,
+            $pickup,
             &$retainedIds,
             &$commissionAffected
         ): array {
@@ -878,7 +958,46 @@ class SaleService
                 throw new DomainException('ไม่พบสินค้า');
             }
 
-            $exactMatch = $existingItem !== null
+            $priceAction = $this->priceActionForUpdate(
+                $submittedItem,
+                $existingItem,
+                $sameIdentity
+            );
+            $product = $lockedProducts->get((int) $submittedItem['product_id']);
+            $productUnit = $product?->productUnits
+                ?->firstWhere('id', $submittedItem['product_unit_id'] ?? null);
+            $resolvedItem = $submittedItem;
+            $priceSnapshot = [];
+
+            if (in_array($priceAction, ['preserve', 'legacy'], true) && $sameIdentity) {
+                $resolvedItem['selling_price'] = $existingItem->selling_price;
+                $priceSnapshot = [
+                    'original_price' => $existingItem->original_price,
+                    'price_override_flag' => (bool) $existingItem->price_override_flag,
+                ];
+            } elseif ($priceAction === 'legacy') {
+                $priceSnapshot = [
+                    'original_price' => null,
+                    'price_override_flag' => false,
+                ];
+            } else {
+                $systemPrice = $this->salePriceSnapshotService->systemPrice(
+                    $resolvedItem,
+                    $product,
+                    $productUnit,
+                    $priceZone,
+                    $pickup
+                );
+                $priceSnapshot = $this->salePriceSnapshotService->snapshot(
+                    $systemPrice,
+                    (string) $submittedItem['selling_price'],
+                    $priceAction === 'override'
+                );
+                $resolvedItem = array_merge($resolvedItem, $priceSnapshot);
+            }
+
+            $exactMatch = in_array($priceAction, ['preserve', 'legacy'], true)
+                && $existingItem !== null
                 && $this->saleItemMatches($existingItem, $submittedItem);
             $attributes = $exactMatch
                 ? array_merge($existingItem->only([
@@ -888,14 +1007,16 @@ class SaleService
                     'base_qty',
                     'qty',
                     'selling_price',
+                    'original_price',
+                    'price_override_flag',
                     'cost_price',
                     'total',
                     'profit',
                 ]), $snapshots)
                 : $this->saleItemService->attributesForResolvedLine(
-                    $submittedItem,
+                    $resolvedItem,
                     $costPrice,
-                    $snapshots
+                    array_merge($snapshots, $priceSnapshot)
                 );
 
             if ($existingItem === null
@@ -903,7 +1024,7 @@ class SaleService
                 || ! $this->decimalEquals($existingItem->qty, $submittedItem['qty'])
                 || ! $this->decimalEquals(
                     $existingItem->selling_price,
-                    $submittedItem['selling_price']
+                    $attributes['selling_price']
                 )) {
                 $commissionAffected = true;
             }
@@ -928,6 +1049,33 @@ class SaleService
             'removed_items' => $removedItems,
             'commission_affected' => $commissionAffected || $removedItems->isNotEmpty(),
         ];
+    }
+
+    private function priceActionForUpdate(
+        array $submittedItem,
+        ?SaleItem $existingItem,
+        bool $sameIdentity
+    ): string {
+        $priceAction = $submittedItem['price_action'] ?? null;
+
+        if ($priceAction === null || $priceAction === '') {
+            if (! $sameIdentity || $existingItem === null) {
+                return 'legacy';
+            }
+
+            return ! $this->decimalEquals(
+                $existingItem->selling_price,
+                $submittedItem['selling_price'] ?? null
+            )
+                ? 'override'
+                : 'preserve';
+        }
+
+        if (! in_array($priceAction, ['preserve', 'override', 'system'], true)) {
+            throw new DomainException('invalid price action');
+        }
+
+        return $priceAction;
     }
 
     private function persistUpdatePlan(Sale $sale, array $plan): void

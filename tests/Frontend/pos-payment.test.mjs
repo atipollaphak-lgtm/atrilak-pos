@@ -216,10 +216,25 @@ test("payment modal opens with fresh cash defaults and cancel never confirms", (
 
     assert.equal(harness.elements["payment-total"].textContent, "100.00");
     assert.equal(harness.elements["payment-cash-amount"].value, "100.00");
-    assert.equal(harness.elements["payment-received"].value, "");
+    assert.equal(harness.elements["payment-received"].value, "100.00");
     assert.deepEqual(harness.modalActions, ["show"]);
     harness.elements["btn-cancel-payment"].dispatch("click");
     assert.equal(confirmations, 0);
+});
+
+test("default cash confirmation submits the exact total without opening a payment popup", async () => {
+    const confirmations = [];
+    const harness = controllerHarness(async payment => { confirmations.push(payment); });
+
+    await harness.controller.confirmDefaultCash();
+
+    assert.equal(confirmations.length, 1);
+    assert.equal(confirmations[0].payment_method, "cash");
+    assert.equal(confirmations[0].cash_amount, "100.00");
+    assert.equal(confirmations[0].promptpay_amount, "0.00");
+    assert.equal(confirmations[0].received_amount, "100.00");
+    assert.equal(confirmations[0].change_amount, "0.00");
+    assert.deepEqual(harness.modalActions, []);
 });
 
 test("payment modal restores stored mixed payment when its total is unchanged", () => {
@@ -252,7 +267,7 @@ test("payment modal resets stored payment when the edited total changed", () => 
 
     assert.equal(harness.elements["payment-method"].value, "cash");
     assert.equal(harness.elements["payment-cash-amount"].value, "120.00");
-    assert.equal(harness.elements["payment-received"].value, "");
+    assert.equal(harness.elements["payment-received"].value, "120.00");
     assert.equal(harness.elements["payment-change"].textContent, "0.00");
 });
 
@@ -285,7 +300,7 @@ test("changed total resets stale payment and blocks confirmation", async () => {
 
     assert.equal(confirmations, 0);
     assert.equal(harness.elements["payment-total"].textContent, "120.00");
-    assert.equal(harness.elements["payment-received"].value, "");
+    assert.equal(harness.elements["payment-received"].value, "120.00");
     assert.equal(harness.elements["payment-error"].classList.contains("d-none"), false);
 });
 

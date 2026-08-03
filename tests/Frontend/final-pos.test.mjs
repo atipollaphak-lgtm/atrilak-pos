@@ -252,6 +252,38 @@ test("resume restores the complete hold context without consuming it before paym
     );
 });
 
+test("resume restores held price override metadata without repricing", async () => {
+    const hold = {
+        id: 13,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        sale_date: "2026-07-29",
+        delivery_type: "pickup",
+        discount: "0.00",
+        delivery_fee: "0.00",
+        items: [{
+            product_id: 1,
+            product_unit_id: 2,
+            qty: "1.00",
+            selling_price: "99.50",
+            original_price: "100.00",
+            price_override_flag: true,
+            product_name_snapshot: "TEST held override",
+            unit_name_snapshot: "piece",
+            product: { id: 1, unit: "piece" },
+            product_unit: { id: 2, unit: { name: "piece" } },
+        }],
+    };
+    const harness = createHarness(hold);
+
+    await openAndResume(harness);
+
+    assert.equal(harness.state.cart[0].price, 99.5);
+    assert.equal(harness.state.cart[0].originalPrice, 100);
+    assert.equal(harness.state.cart[0].priceWasEdited, true);
+    assert.equal(harness.state.cart[0].priceChangedSinceHold, false);
+});
+
 test("resume blocks the whole hold when a product no longer exists", async () => {
     const hold = {
         id: 8,
@@ -370,7 +402,7 @@ test("finish resets the next bill and confirmation restores its actions", async 
     assert.equal(harness.state.deliveryFeeEdited, false);
     assert.equal(harness.state.note, "");
     assert.equal(harness.customerSelect.value, "");
-    assert.equal(harness.pickup.checked, false);
+    assert.equal(harness.pickup.checked, true);
 
     harness.elements.get("#final-confirm-payment").classList.add("d-none");
     harness.elements.get("#final-edit-items").classList.add("d-none");

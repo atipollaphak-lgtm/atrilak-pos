@@ -2,27 +2,29 @@
     const root = document.getElementById("pos-v3");
     if (!root) return;
 
-    const state = { cart: [], customerId: "", addressId: "", deliveryType: "delivery", address: null, zone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, editIndex: -1, filter: "all", category: "" };
+    const state = { cart: [], customerId: "", addressId: "", deliveryType: "pickup", address: null, zone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, editIndex: -1, filter: "all", category: "" };
     const $ = (selector) => document.querySelector(selector);
     const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
     const unitFor = (product, id = null) => product.productUnits?.find((unit) => String(unit.id) === String(id)) || product.productUnits?.find((unit) => unit.is_sale_unit) || product.productUnits?.[0] || { id: null, selling_price: product.price, unit: { name: product.unit || "หน่วย" }, barcodes: [] };
     const roundPrice = (value, product) => { const unit = Number(product.rounding_unit || 5); const direction = product.rounding_direction || "up"; const quotient = value / unit; const rounded = direction === "down" ? Math.floor(quotient) : direction === "nearest" ? Math.round(quotient) : Math.ceil(quotient); return rounded * unit; };
-    const unitPrice = (unit, qty, product) => { const tierPrice = (unit.price_tiers || []).reduce((price, tier) => Number(qty) >= Number(tier.min_qty) ? (tier.fixed_price !== null && tier.fixed_price !== "" ? Number(tier.fixed_price) : Number(unit.selling_price) * (1 - Number(tier.discount_percent || 0) / 100)) : price, Number(unit.selling_price || product.price || 0)); const delivery = state.zone && state.zone.active && !$("#v3-pickup").checked; const roundingIncrement = product.category_rounding_override || state.zone?.rounding_increment || "0.25"; if (delivery && window.ZonePricingMath) return Number(window.ZonePricingMath.ceilAfterMarkup(tierPrice, state.zone.price_markup_percent || 0, roundingIncrement)); const markup = delivery ? Number(state.zone.price_markup_percent || 0) : 0; return roundPrice(tierPrice * (1 + markup / 100), product); };
+    const unitPrice = (unit, qty, product) => { const tierPrice = (unit.price_tiers || []).reduce((price, tier) => Number(qty) >= Number(tier.min_qty) ? (tier.fixed_price !== null && tier.fixed_price !== "" ? Number(tier.fixed_price) : Number(unit.selling_price) * (1 - Number(tier.discount_percent || 0) / 100)) : price, Number(unit.selling_price || product.price || 0)); const delivery = state.zone && state.zone.active && state.deliveryType === "delivery"; const roundingIncrement = product.category_rounding_override || state.zone?.rounding_increment || "0.25"; if (delivery && window.ZonePricingMath) return Number(window.ZonePricingMath.ceilAfterMarkup(tierPrice, state.zone.price_markup_percent || 0, roundingIncrement)); const markup = delivery ? Number(state.zone.price_markup_percent || 0) : 0; return roundPrice(tierPrice * (1 + markup / 100), product); };
     const total = () => state.cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0) + state.deliveryFee - state.discount;
-    function updateDeliveryPreview() { if ($("#v3-pickup").checked) { state.deliveryFee = 0; return; } if (state.deliveryFeeEdited) return; if (!state.zone) { state.deliveryFee = 0; return; } const profit = state.cart.reduce((sum, item) => sum + Number(item.qty) * (Number(item.price) - Number(item.product.cost_price || 0) * Number(item.unit.conversion_rate || 1)), 0) - state.discount; state.deliveryFee = Math.max(0, Number(state.zone.minimum_profit || 0) - profit); }
+    function updateDeliveryPreview() { if (state.deliveryType === "pickup") { state.deliveryFee = 0; return; } if (state.deliveryFeeEdited) return; if (!state.zone) { state.deliveryFee = 0; return; } const profit = state.cart.reduce((sum, item) => sum + Number(item.qty) * (Number(item.price) - Number(item.product.cost_price || 0) * Number(item.unit.conversion_rate || 1)), 0) - state.discount; state.deliveryFee = Math.max(0, Number(state.zone.minimum_profit || 0) - profit); }
     function syncCartTotals() { updateDeliveryPreview(); $("#v3-cart-count").textContent = state.cart.length; $("#v3-delivery-fee").value = money(state.deliveryFee); $("#v3-subtotal").textContent = money(state.cart.reduce((sum, item) => sum + item.qty * item.price, 0)); $("#v3-total").textContent = money(total()); }
 
     function add(product, unitId = null, qty = 1) {
         const unit = unitFor(product, unitId);
         const key = `${product.id}:${unit.id || "base"}`;
         const existing = state.cart.find((item) => item.key === key);
-        if (existing) { existing.qty += Number(qty); existing.price = unitPrice(unit, existing.qty, product); }
+        if (existing) { const wasEdited = Boolean(existing.priceWasEdited); const salePrice = existing.price; existing.qty += Number(qty); const systemPrice = unitPrice(unit, existing.qty, product); existing.originalPrice = wasEdited ? systemPrice : null; existing.price = wasEdited ? salePrice : systemPrice; }
         else state.cart.push({ key, product, productId: product.id, productUnitId: unit.id, unit, unitName: unit.unit?.name || product.unit || "หน่วย", name: product.name, qty: Number(qty), price: unitPrice(unit, qty, product) });
         render();
     }
 
-    function repriceCart() { state.cart.forEach((item) => { item.price = unitPrice(item.unit, item.qty, item.product); }); }
+    function repriceCart() { state.cart.forEach((item) => { const systemPrice = unitPrice(item.unit, item.qty, item.product); if (item.priceWasEdited) item.originalPrice = systemPrice; else item.price = systemPrice; }); }
+
+    function ensurePriceMetadata() { state.cart.forEach((item) => { if (!Object.prototype.hasOwnProperty.call(item, "priceWasEdited")) item.priceWasEdited = false; if (!Object.prototype.hasOwnProperty.call(item, "originalPrice")) item.originalPrice = null; if (!Object.prototype.hasOwnProperty.call(item, "priceChangedSinceHold")) item.priceChangedSinceHold = false; }); }
 
     function refreshPricingContext() {
         repriceCart();
@@ -30,11 +32,16 @@
         const zoneLabel = $("#v3-address-zone"); if (zoneLabel) zoneLabel.textContent = state.zone?.name ? `โซนจัดส่ง: ${state.zone.name} +${money(state.zone.price_markup_percent || 0)}%` : "โซนจัดส่ง: -";
     }
 
+    function syncFulfillmentUi() { const pickup = state.deliveryType === "pickup"; const checkbox = $("#v3-pickup"); if (checkbox) checkbox.checked = pickup; const pickupButton = $("#v3-pickup-button"); const deliveryButton = $("#v3-delivery"); pickupButton?.classList.toggle("active", pickup); deliveryButton?.classList.toggle("active", !pickup); pickupButton?.classList.toggle("btn-primary", pickup); pickupButton?.classList.toggle("btn-outline-primary", !pickup); deliveryButton?.classList.toggle("btn-success", !pickup); deliveryButton?.classList.toggle("btn-outline-success", pickup); const feeInput = $("#v3-delivery-fee"); feeInput?.parentElement?.classList.toggle("d-none", pickup); $("#v3-customer-address")?.classList.toggle("d-none", pickup); }
+
     function render() {
+        ensurePriceMetadata();
+        syncFulfillmentUi();
         updateDeliveryPreview();
         const container = $("#v3-cart-items");
         if (!state.cart.length) container.innerHTML = '<div class="pos-v3-empty">ยังไม่มีสินค้า<br><small>คลิกสินค้า หรือยิง Barcode เพื่อเริ่มขาย</small></div>';
         else container.innerHTML = state.cart.map((item, index) => `<div class="v3-cart-row" data-index="${index}"><input class="v3-cart-quantity" data-index="${index}" value="${item.qty}" inputmode="decimal" aria-label="จำนวน ${escapeHtml(item.name)}"><div class="v3-cart-product"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.unitName)}</small></div><strong class="v3-cart-unit-price">${money(item.price)}</strong><strong class="v3-line-total">${money(item.qty * item.price)}</strong><button class="v3-cart-remove" data-action="remove" title="ลบ ${escapeHtml(item.name)}" aria-label="ลบ ${escapeHtml(item.name)}">×</button></div>`).join("");
+        container.querySelectorAll(".v3-cart-row").forEach((row) => { const actions = document.createElement("span"); actions.className = "v3-cart-actions"; const edit = document.createElement("button"); edit.type = "button"; edit.className = "btn btn-link btn-sm"; edit.dataset.action = "edit"; edit.textContent = "✎"; edit.title = "แก้ราคา"; const restore = document.createElement("button"); restore.type = "button"; restore.className = "btn btn-link btn-sm"; restore.dataset.action = "restore"; restore.textContent = "↺"; restore.title = "คืนราคาปกติ"; actions.append(edit, restore); row.append(actions); });
         $("#v3-subtotal").textContent = money(state.cart.reduce((sum, item) => sum + item.qty * item.price, 0));
         $("#v3-cart-count").textContent = state.cart.length;
         $("#v3-delivery-fee").value = money(state.deliveryFee);
@@ -75,7 +82,7 @@
         if (!Number.isFinite(qty) || qty < 0) { $("#v3-quantity-error").textContent = "จำนวนไม่ถูกต้อง"; return; }
         const { product, unitId, existingIndex } = state.activeProduct;
         if (qty > Number(product.stock_qty)) { $("#v3-quantity-error").textContent = `สต็อกคงเหลือ ${money(product.stock_qty)}`; return; }
-        if (existingIndex >= 0) { if (qty === 0) state.cart.splice(existingIndex, 1); else { state.cart[existingIndex].qty = qty; state.cart[existingIndex].price = unitPrice(state.cart[existingIndex].unit, qty, state.cart[existingIndex].product); } }
+        if (existingIndex >= 0) { if (qty === 0) state.cart.splice(existingIndex, 1); else { state.cart[existingIndex].qty = qty; const currentItem = state.cart[existingIndex]; currentItem.qty = qty; const systemPrice = unitPrice(currentItem.unit, qty, currentItem.product); if (currentItem.priceWasEdited) currentItem.originalPrice = systemPrice; else currentItem.price = systemPrice; } }
         else if (qty > 0) add(product, unitId, qty);
         render(); window.jQuery($("#v3-quantity-modal")).modal("hide");
     }
@@ -95,6 +102,51 @@
         item.productUnitId = unit.id; item.unit = unit; item.unitName = unit.unit?.name || item.product.unit || "หน่วย"; item.qty = qty; item.price = unitPrice(unit, qty, item.product); item.key = `${item.productId}:${unit.id || "base"}`; render(); window.jQuery($("#v3-edit-modal")).modal("hide");
     }
 
+    function confirmEditWithPriceIntent() {
+        const item = state.cart[state.editIndex];
+        const qty = Number($("#v3-edit-qty").value);
+        const requestedPrice = Number($("#v3-edit-price").value);
+        const unit = item ? unitFor(item.product, $("#v3-edit-unit").value || null) : null;
+        if (!item || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(requestedPrice) || requestedPrice <= 0) {
+            $("#v3-edit-error").textContent = "Invalid quantity or price";
+            return;
+        }
+        if (qty > Number(item.product.stock_qty)) {
+            $("#v3-edit-error").textContent = `Stock remaining ${money(item.product.stock_qty)}`;
+            return;
+        }
+        const previousPrice = Number(item.price);
+        const previousUnitId = item.productUnitId;
+        const previousOverride = Boolean(item.priceWasEdited);
+        const previousHoldChange = Boolean(item.priceChangedSinceHold);
+        const changed = String(previousUnitId) !== String(unit.id)
+            || Math.abs(requestedPrice - previousPrice) > 0.005;
+        const systemPrice = unitPrice(unit, qty, item.product);
+        item.productUnitId = unit.id;
+        item.unit = unit;
+        item.unitName = unit.unit?.name || item.product.unit || "หน่วย";
+        item.qty = qty;
+        item.key = `${item.productId}:${unit.id || "base"}`;
+        if (changed) {
+            item.price = requestedPrice;
+            item.priceWasEdited = true;
+            item.originalPrice = systemPrice;
+            item.priceChangedSinceHold = Boolean(previousHoldChange || state.holdBillId);
+        } else if (previousOverride) {
+            item.price = previousPrice;
+            item.priceWasEdited = true;
+            item.originalPrice = systemPrice;
+            item.priceChangedSinceHold = previousHoldChange;
+        } else {
+            item.price = systemPrice;
+            item.priceWasEdited = false;
+            item.originalPrice = null;
+            item.priceChangedSinceHold = false;
+        }
+        render();
+        window.jQuery($("#v3-edit-modal")).modal("hide");
+    }
+
     async function loadAddresses(customerId = null, preferredAddressId = null) {
         if (customerId?.target) customerId = null;
         const id = customerId === null ? $("#v3-customer-id").value : String(customerId || ""); const select = $("#v3-address-id"); state.customerId = id; $("#v3-customer-id").value = id; select.innerHTML = id ? '<option>กำลังโหลด...</option>' : '<option value="">เลือกลูกค้าก่อน</option>'; select.disabled = !id; state.addressId = ""; state.address = null; state.zone = null; state.deliveryFee = 0;
@@ -106,7 +158,7 @@
     async function setCustomer(customerId, preferredAddressId = null) { await loadAddresses(customerId, preferredAddressId); }
     function setAddress(addressId) { $("#v3-address-id").value = addressId ? String(addressId) : ""; $("#v3-address-id").dispatchEvent(new Event("change")); }
     function setDeliveryType(deliveryType) { state.deliveryType = deliveryType === "pickup" ? "pickup" : "delivery"; $("#v3-pickup").checked = state.deliveryType === "pickup"; $("#v3-pickup").dispatchEvent(new Event("change")); }
-    function buildPayload(payment) { return { hold_bill_id: state.holdBillId, customer_id: state.customerId || null, customer_delivery_address_id: state.addressId || null, technician_id: $("#v3-technician-id").value || null, sale_date: $("#v3-sale-date").value, delivery_type: state.deliveryType, delivery_fee: state.deliveryFee.toFixed(2), discount: state.discount.toFixed(2), notes: state.note || null, items: state.cart.map((item) => ({ product_id: item.productId, product_unit_id: item.productUnitId, qty: item.qty, selling_price: Number(item.price).toFixed(2) })), ...payment }; }
+    function buildPayload(payment) { return { hold_bill_id: state.holdBillId, customer_id: state.customerId || null, customer_delivery_address_id: state.addressId || null, technician_id: $("#v3-technician-id").value || null, sale_date: $("#v3-sale-date").value, delivery_type: state.deliveryType, delivery_fee: state.deliveryFee.toFixed(2), discount: state.discount.toFixed(2), notes: state.note || null, items: state.cart.map((item) => ({ product_id: item.productId, product_unit_id: item.productUnitId, qty: item.qty, selling_price: Number(item.price).toFixed(2), price_was_edited: Boolean(item.priceWasEdited), price_changed_since_hold: Boolean(item.priceChangedSinceHold) })), ...payment }; }
 
     function init() {
         render(); filterProducts();
@@ -117,11 +169,12 @@
         $("#v3-delivery").addEventListener("click", () => { $("#v3-pickup").checked = false; $("#v3-pickup").dispatchEvent(new Event("change")); }); $("#v3-pickup-button").addEventListener("click", () => { $("#v3-pickup").checked = true; $("#v3-pickup").dispatchEvent(new Event("change")); });
         document.querySelectorAll(".v3-category").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".v3-category").forEach((b) => b.classList.remove("active")); button.classList.add("active"); state.category = button.dataset.category; filterProducts(); }));
         document.querySelectorAll(".v3-filter").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".v3-filter").forEach((b) => b.classList.remove("active")); button.classList.add("active"); state.filter = button.dataset.filter; filterProducts(); }));
-        document.querySelectorAll(".v3-product-card").forEach((card) => card.addEventListener("click", () => openQuantity(JSON.parse(card.dataset.product)))); $("#v3-quantity-confirm").addEventListener("click", confirmQuantity); $("#v3-edit-confirm").addEventListener("click", confirmEdit);
+        document.querySelectorAll(".v3-product-card").forEach((card) => card.addEventListener("click", () => openQuantity(JSON.parse(card.dataset.product)))); $("#v3-quantity-confirm").addEventListener("click", confirmQuantity); $("#v3-edit-confirm").addEventListener("click", confirmEditWithPriceIntent);
         $("#v3-quantity-input").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); confirmQuantity(); } if (event.key === "Escape") window.jQuery($("#v3-quantity-modal")).modal("hide"); });
-        $("#v3-edit-qty").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); confirmEdit(); } if (event.key === "Escape") window.jQuery($("#v3-edit-modal")).modal("hide"); });
+        $("#v3-edit-qty").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); confirmEditWithPriceIntent(); } if (event.key === "Escape") window.jQuery($("#v3-edit-modal")).modal("hide"); });
         $("#v3-cart-items").addEventListener("click", (event) => { const row = event.target.closest(".v3-cart-row"); if (!row || event.target.dataset.action !== "remove") return; state.cart.splice(Number(row.dataset.index), 1); render(); });
-        $("#v3-cart-items").addEventListener("input", (event) => { if (!event.target.matches(".v3-cart-quantity")) return; const index = Number(event.target.dataset.index); const item = state.cart[index]; const qty = Number(event.target.value); if (!item || !Number.isFinite(qty) || qty <= 0 || qty > Number(item.product.stock_qty)) return; item.qty = qty; item.price = unitPrice(item.unit, qty, item.product); const row = event.target.closest(".v3-cart-row"); row.querySelector(".v3-cart-unit-price").textContent = money(item.price); row.querySelector(".v3-line-total").textContent = money(item.qty * item.price); syncCartTotals(); });
+        $("#v3-cart-items").addEventListener("click", (event) => { const action = event.target.dataset.action; const row = event.target.closest(".v3-cart-row"); if (!row || !["edit", "restore"].includes(action)) return; const index = Number(row.dataset.index); const item = state.cart[index]; if (!item) return; if (action === "edit") { openEdit(index); return; } const systemPrice = unitPrice(item.unit, item.qty, item.product); item.price = systemPrice; item.originalPrice = null; item.priceWasEdited = false; item.priceChangedSinceHold = Boolean(item.priceChangedSinceHold && state.holdBillId); render(); });
+        $("#v3-cart-items").addEventListener("input", (event) => { if (!event.target.matches(".v3-cart-quantity")) return; const index = Number(event.target.dataset.index); const item = state.cart[index]; const qty = Number(event.target.value); if (!item || !Number.isFinite(qty) || qty <= 0 || qty > Number(item.product.stock_qty)) return; item.qty = qty; const systemPrice = unitPrice(item.unit, qty, item.product); if (item.priceWasEdited) item.originalPrice = systemPrice; else item.price = systemPrice; const row = event.target.closest(".v3-cart-row"); row.querySelector(".v3-cart-unit-price").textContent = money(item.price); row.querySelector(".v3-line-total").textContent = money(item.qty * item.price); syncCartTotals(); });
         $("#v3-cart-items").addEventListener("change", (event) => { if (event.target.matches(".v3-cart-quantity")) render(); });
         $("#v3-note-button").addEventListener("click", () => { $("#v3-note-input").value = state.note; window.jQuery($("#v3-note-modal")).modal("show"); }); $("#v3-note-confirm").addEventListener("click", () => { state.note = $("#v3-note-input").value.trim(); window.jQuery($("#v3-note-modal")).modal("hide"); }); $("#v3-new-bill").addEventListener("click", () => { if (!state.cart.length || confirm("ล้างตะกร้าและเริ่มบิลใหม่หรือไม่?")) { state.cart = []; state.discount = 0; state.note = ""; state.deliveryFee = 0; state.deliveryFeeEdited = false; state.holdBillId = null; $("#v3-discount").value = "0.00"; render(); $("#v3-product-search").focus(); } }); $("#v3-clear-cart").addEventListener("click", () => $("#v3-new-bill").click());
         const payment = PosPayment.createController({ getTotal: () => money(total()), onConfirm: submit }); window.FinalPos?.configure({ payment, state, total, render, loadAddresses, root, customerSelect: $("#v3-customer-id"), addressSelect: $("#v3-address-id") }); $("#v3-submit").addEventListener("click", () => { if (!state.cart.length) return alert("กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ"); window.FinalPos?.openConfirmation(); if (!window.FinalPos) payment.open(); });

@@ -47,6 +47,7 @@
         clone.querySelectorAll('input').forEach((input) => {
             input.value = '';
         });
+        clone.querySelector('.price-action').value = 'preserve';
         clone.querySelectorAll('.invalid-historical-option').forEach((option) => option.remove());
         clone.querySelectorAll('[data-inactive="1"]').forEach((option) => {
             option.disabled = true;
@@ -69,6 +70,15 @@
     });
 
     document.addEventListener('input', (event) => {
+        if (event.target.classList.contains('price')) {
+            const row = event.target.closest('tr');
+            const priceAction = row?.querySelector('.price-action');
+
+            if (priceAction) {
+                priceAction.value = 'override';
+            }
+        }
+
         if (event.target.classList.contains('qty')
             || event.target.classList.contains('price')
             || event.target.id === 'delivery_fee'
@@ -88,7 +98,25 @@
         row.querySelector('.sale-item-id').value = '';
         row.querySelector('.product-unit-id').value = '';
         row.querySelector('.price').value = selectedOption?.dataset.price || 0;
+        row.querySelector('.price-action').value = 'system';
 
+        calculateTotals();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.classList.contains('restore-system-price')) {
+            return;
+        }
+
+        const row = event.target.closest('tr');
+        const selectedOption = row?.querySelector('.product-select')?.selectedOptions[0];
+
+        if (!row || !selectedOption?.value) {
+            return;
+        }
+
+        row.querySelector('.price').value = selectedOption.dataset.price || 0;
+        row.querySelector('.price-action').value = 'system';
         calculateTotals();
     });
 

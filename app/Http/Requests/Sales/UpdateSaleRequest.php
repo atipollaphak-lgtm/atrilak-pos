@@ -46,6 +46,8 @@ class UpdateSaleRequest extends FormRequest
             'promptpay_amount' => [$paymentIsRequired ? 'required' : 'nullable', $this->decimalRule(2, 13, false)],
             'received_amount' => [$paymentIsRequired ? 'required' : 'nullable', $this->decimalRule(2, 13, false)],
             'change_amount' => ['prohibited'],
+            'original_price' => ['prohibited'],
+            'price_override_flag' => ['prohibited'],
             'base_qty' => ['prohibited'],
             'conversion_rate_used' => ['prohibited'],
             'product_id' => ['required', 'array'],
@@ -59,6 +61,7 @@ class UpdateSaleRequest extends FormRequest
             'normalized_items.*.product_unit_id' => ['nullable', 'integer', 'exists:product_units,id'],
             'normalized_items.*.qty' => ['bail', 'required', $this->decimalRule(2, 13, true)],
             'normalized_items.*.selling_price' => ['bail', 'required', $this->decimalRule(2, 13, true)],
+            'normalized_items.*.price_action' => ['nullable', 'in:preserve,override,system'],
         ];
     }
 
@@ -79,7 +82,11 @@ class UpdateSaleRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            $this->validateParallelArrayAlignment($validator, ['sale_item_id', 'product_unit_id']);
+            $this->validateParallelArrayAlignment($validator, [
+                'sale_item_id',
+                'product_unit_id',
+                'price_action',
+            ]);
             $this->validateDeliveryAddressOwnership($validator);
             $this->validateActiveReferences($validator);
         });
@@ -92,7 +99,11 @@ class UpdateSaleRequest extends FormRequest
 
     private function normalizeParallelItems(): array
     {
-        return $this->normalizeParallelSaleItems(['sale_item_id', 'product_unit_id']);
+        return $this->normalizeParallelSaleItems([
+            'sale_item_id',
+            'product_unit_id',
+            'price_action',
+        ]);
     }
 
     private function saleRequiresPayment(): bool

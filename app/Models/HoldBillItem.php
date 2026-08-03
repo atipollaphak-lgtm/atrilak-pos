@@ -14,6 +14,8 @@ class HoldBillItem extends Model
         'product_unit_id_snapshot',
         'qty',
         'selling_price',
+        'original_price',
+        'price_override_flag',
         'product_name_snapshot',
         'product_sku_snapshot',
         'product_code_snapshot',
@@ -26,6 +28,8 @@ class HoldBillItem extends Model
         return [
             'qty' => 'decimal:2',
             'selling_price' => 'decimal:2',
+            'original_price' => 'decimal:2',
+            'price_override_flag' => 'boolean',
         ];
     }
 

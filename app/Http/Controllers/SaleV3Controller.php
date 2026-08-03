@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\Sales\StoreSaleV2Request;
+use App\Http\Requests\Sales\StoreSaleV3Request;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
@@ -27,7 +27,7 @@ class SaleV3Controller extends Controller
         return view('sales-v3.index', compact('customers', 'categories', 'products', 'technicians'));
     }
 
-    public function store(StoreSaleV2Request $request, SaleService $saleService)
+    public function store(StoreSaleV3Request $request, SaleService $saleService)
     {
         try {
             $validated = $request->validated();
@@ -37,7 +37,7 @@ class SaleV3Controller extends Controller
                 'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
                 'technician_id' => $validated['technician_id'] ?? null,
                 'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
-                'delivery_type' => $validated['delivery_type'] ?? 'delivery',
+                'delivery_type' => $validated['delivery_type'],
                 'delivery_fee' => $validated['delivery_fee'] ?? 0,
                 'discount' => $validated['discount'] ?? 0,
                 'notes' => $validated['notes'] ?? null,

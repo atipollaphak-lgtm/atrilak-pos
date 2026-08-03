@@ -105,6 +105,76 @@ class SaleSnapshotPreservingUpdateTest extends TestCase
         $this->assertChangedItemFlow($sale, $item, $items);
     }
 
+    public function test_preserve_price_action_keeps_existing_override_metadata_when_quantity_changes(): void
+    {
+        [$sale, $product, , $item] = $this->existingSale();
+        $item->update([
+            'selling_price' => '95.00',
+            'original_price' => '100.00',
+            'price_override_flag' => true,
+        ]);
+        $product->update(['selling_price' => '110.00']);
+
+        $items = $this->submittedItems($sale);
+        $items[0]['qty'] = '3.00';
+        $items[0]['price_action'] = 'preserve';
+
+        app(SaleService::class)->updateSale($sale, $this->updateData($sale, [
+            'items' => $items,
+        ]), (int) $sale->fresh()->revision);
+
+        $updated = $sale->fresh()->items()->sole();
+
+        $this->assertSame('95.00', $updated->selling_price);
+        $this->assertSame('100.00', $updated->original_price);
+        $this->assertTrue($updated->price_override_flag);
+    }
+
+    public function test_override_price_action_recomputes_current_system_price_snapshot(): void
+    {
+        [$sale, $product, , $item] = $this->existingSale();
+        $product->update(['selling_price' => '110.00']);
+
+        $items = $this->submittedItems($sale);
+        $items[0]['selling_price'] = '90.00';
+        $items[0]['price_action'] = 'override';
+
+        app(SaleService::class)->updateSale($sale, $this->updateData($sale, [
+            'items' => $items,
+        ]), (int) $sale->fresh()->revision);
+
+        $updated = $sale->fresh()->items()->sole();
+
+        $this->assertSame('90.00', $updated->selling_price);
+        $this->assertSame('110.00', $updated->original_price);
+        $this->assertTrue($updated->price_override_flag);
+    }
+
+    public function test_system_price_action_uses_current_system_price_and_clears_override_metadata(): void
+    {
+        [$sale, $product, , $item] = $this->existingSale();
+        $item->update([
+            'selling_price' => '90.00',
+            'original_price' => '100.00',
+            'price_override_flag' => true,
+        ]);
+        $product->update(['selling_price' => '110.00']);
+
+        $items = $this->submittedItems($sale);
+        $items[0]['selling_price'] = '90.00';
+        $items[0]['price_action'] = 'system';
+
+        app(SaleService::class)->updateSale($sale, $this->updateData($sale, [
+            'items' => $items,
+        ]), (int) $sale->fresh()->revision);
+
+        $updated = $sale->fresh()->items()->sole();
+
+        $this->assertSame('110.00', $updated->selling_price);
+        $this->assertNull($updated->original_price);
+        $this->assertFalse($updated->price_override_flag);
+    }
+
     public function test_changed_product_uses_existing_update_flow(): void
     {
         [$sale, $oldProduct, , $item] = $this->existingSale();
