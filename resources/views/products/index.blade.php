@@ -12,9 +12,14 @@
             <h1 class="mb-1">สินค้า</h1>
             <p class="text-muted mb-0">จัดการข้อมูลสินค้าและสถานะการใช้งาน</p>
         </div>
+        <div class="d-flex align-items-center">
+            <a href="{{ route('products.import.index') }}" class="btn btn-outline-success mr-2">
+                <i class="fas fa-file-excel mr-1"></i> นำเข้าจาก Excel
+            </a>
         <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#productModal" data-product-mode="create">
             <i class="fas fa-plus mr-1"></i> เพิ่มสินค้า
         </button>
+        </div>
     </div>
 @stop
 

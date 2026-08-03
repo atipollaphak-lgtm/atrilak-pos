@@ -12,6 +12,7 @@ use App\Http\Controllers\HoldBillController;
 use App\Http\Controllers\PriceController;
 use App\Http\Controllers\PricingManagementController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductImportController;
 use App\Http\Controllers\ProductPriceTierController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
@@ -172,6 +173,15 @@ Route::middleware(['auth'])->group(function () {
             ->name('daily-payment-closings.finalize');
         Route::post('/sales/{sale}/void', [SaleController::class, 'void'])
             ->name('sales.void');
+
+        Route::prefix('products/import')->name('products.import.')->group(function () {
+            Route::get('/', [ProductImportController::class, 'index'])->name('index');
+            Route::get('/template', [ProductImportController::class, 'template'])->name('template');
+            Route::post('/preview', [ProductImportController::class, 'preview'])->name('preview');
+            Route::post('/confirm', [ProductImportController::class, 'confirm'])->name('confirm');
+            Route::get('/errors/{token}', [ProductImportController::class, 'errors'])->name('errors');
+            Route::delete('/{token}', [ProductImportController::class, 'destroy'])->name('destroy');
+        });
 
         Route::resource('products', ProductController::class)->except('show');
         Route::post(
