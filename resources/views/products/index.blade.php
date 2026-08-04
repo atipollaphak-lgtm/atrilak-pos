@@ -28,6 +28,10 @@
         <div class="alert alert-success">{{ session('success') }}</div>
     @endif
 
+    @if (session('error'))
+        <div class="alert alert-danger">{{ session('error') }}</div>
+    @endif
+
     @if ($errors->any())
         <div class="alert alert-danger">
             <strong>กรุณาตรวจสอบข้อมูล</strong>
@@ -123,6 +127,9 @@
                         </tr>
                     </thead>
                     <tbody>
+                        @php
+                            $productPlaceholder = asset('images/product-placeholder.svg');
+                        @endphp
                         @forelse ($products as $product)
                             @php
                                 $profitPercent = (float) $product->cost_price > 0
@@ -141,6 +148,7 @@
                                     'remark' => $product->remark,
                                     'active' => (bool) $product->active,
                                     'image_path' => $product->image_path,
+                                    'image_url' => $product->image_url,
                                     'cost_price' => $product->cost_price,
                                     'selling_price' => $product->selling_price,
                                     'stock_qty' => $product->stock_qty,
@@ -154,7 +162,13 @@
                             @endphp
                             <tr class="{{ $product->active ? '' : 'product-row-inactive' }}" data-product-id="{{ $product->id }}">
                                 <td>
-                                    <img class="product-thumb" src="{{ $product->image_path ? asset('storage/' . $product->image_path) : asset('images/product-placeholder.svg') }}" alt="รูป {{ $product->name }}">
+                                    <img
+                                        class="product-thumb"
+                                        src="{{ $product->image_url ?: $productPlaceholder }}"
+                                        alt="รูป {{ $product->name }}"
+                                        loading="lazy"
+                                        onerror="this.onerror=null;this.src='{{ $productPlaceholder }}';"
+                                    >
                                 </td>
                                 <td>
                                     <div class="font-weight-bold">{{ $product->name }}</div>
@@ -186,8 +200,10 @@
     </div>
 
     @include('products.partials._product_modal')
+    @include('products.partials._product_cost_modal')
 @stop
 
 @section('js')
     <script src="{{ asset('js/modules/product-management.js') }}"></script>
+    <script src="{{ asset('js/modules/product-cost-adjustment.js') }}"></script>
 @stop

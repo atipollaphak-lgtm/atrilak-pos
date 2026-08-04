@@ -65,8 +65,8 @@
                             <div class="col-md-6"><span class="summary-label">กฎการขาย</span><select class="form-control" disabled aria-label="กฎการขายในรายละเอียด"><option>ยังไม่ได้กำหนด</option></select></div>
                         </div>
                         <div class="small text-muted mt-3" id="productUsageSummary"></div>
+                        <button type="button" class="btn btn-outline-warning btn-sm mt-3" data-open-cost-modal>จัดการต้นทุน</button>
                         <div class="mt-3">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" disabled>จัดการราคา</button>
                             <button type="button" class="btn btn-outline-secondary btn-sm" disabled>ดูประวัติสต็อก</button>
                         </div>
                     </div>

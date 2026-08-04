@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\StaleProductCostException;
+use App\Http\Requests\Products\UpdateProductCostRequest;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductBarcode;
@@ -10,6 +12,7 @@ use App\Models\Unit;
 use App\Services\Pricing\PricingService;
 use App\Services\ProductBarcodeService;
 use App\Services\ProductCreationService;
+use App\Services\Products\ProductCostAdjustmentService;
 use App\Services\ProductUnitService;
 use App\Services\ProductUpdateService;
 use Illuminate\Http\Request;
@@ -25,16 +28,20 @@ class ProductController extends Controller
 
     protected ProductCreationService $productCreationService;
 
+    protected ProductCostAdjustmentService $productCostAdjustmentService;
+
     public function __construct(
         ProductUnitService $productUnitService,
         ProductBarcodeService $productBarcodeService,
         ProductUpdateService $productUpdateService,
-        ProductCreationService $productCreationService
+        ProductCreationService $productCreationService,
+        ProductCostAdjustmentService $productCostAdjustmentService
     ) {
         $this->productUnitService = $productUnitService;
         $this->productBarcodeService = $productBarcodeService;
         $this->productUpdateService = $productUpdateService;
         $this->productCreationService = $productCreationService;
+        $this->productCostAdjustmentService = $productCostAdjustmentService;
     }
 
     public function index(Request $request)
@@ -224,6 +231,40 @@ class ProductController extends Controller
                 'success',
                 'แก้ไขสินค้าเรียบร้อย'
             );
+    }
+
+    public function updateCost(UpdateProductCostRequest $request, Product $product)
+    {
+        try {
+            $result = $this->productCostAdjustmentService->adjust(
+                $product,
+                (string) $request->input('cost_price'),
+                (string) $request->input('current_cost_price'),
+                (string) $request->input('reason'),
+                (int) $request->user()->id
+            );
+
+            return redirect()
+                ->route('products.index', $this->indexQuery($request))
+                ->with(
+                    'success',
+                    $result['changed']
+                        ? 'ปรับต้นทุนสินค้าเรียบร้อยแล้ว'
+                        : 'ต้นทุนสินค้าเท่าเดิม ไม่มีการเปลี่ยนแปลง'
+                );
+        } catch (StaleProductCostException $exception) {
+            return redirect()
+                ->route('products.index', $this->indexQuery($request))
+                ->withInput()
+                ->with('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return redirect()
+                ->route('products.index', $this->indexQuery($request))
+                ->withInput()
+                ->with('error', 'ไม่สามารถปรับต้นทุนสินค้าได้ กรุณาลองใหม่อีกครั้ง');
+        }
     }
 
     private function indexQuery(Request $request): array

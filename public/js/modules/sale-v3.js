@@ -32,7 +32,35 @@
         const zoneLabel = $("#v3-address-zone"); if (zoneLabel) zoneLabel.textContent = state.zone?.name ? `โซนจัดส่ง: ${state.zone.name} +${money(state.zone.price_markup_percent || 0)}%` : "โซนจัดส่ง: -";
     }
 
-    function syncFulfillmentUi() { const pickup = state.deliveryType === "pickup"; const checkbox = $("#v3-pickup"); if (checkbox) checkbox.checked = pickup; const pickupButton = $("#v3-pickup-button"); const deliveryButton = $("#v3-delivery"); pickupButton?.classList.toggle("active", pickup); deliveryButton?.classList.toggle("active", !pickup); pickupButton?.classList.toggle("btn-primary", pickup); pickupButton?.classList.toggle("btn-outline-primary", !pickup); deliveryButton?.classList.toggle("btn-success", !pickup); deliveryButton?.classList.toggle("btn-outline-success", pickup); const feeInput = $("#v3-delivery-fee"); feeInput?.parentElement?.classList.toggle("d-none", pickup); $("#v3-customer-address")?.classList.toggle("d-none", pickup); }
+    function syncFulfillmentUi() {
+        const pickup = state.deliveryType === "pickup";
+        const checkbox = $("#v3-pickup");
+        if (checkbox) checkbox.checked = pickup;
+
+        const pickupButton = $("#v3-pickup-button");
+        const deliveryButton = $("#v3-delivery");
+        const buttons = [
+            [pickupButton, pickup],
+            [deliveryButton, !pickup],
+        ];
+
+        buttons.forEach(([button, selected]) => {
+            if (!button) return;
+            button.classList.toggle("active", selected);
+            button.classList.toggle("is-selected", selected);
+            button.setAttribute("aria-pressed", selected ? "true" : "false");
+            const check = button.querySelector(".fulfillment-check");
+            if (check) check.hidden = !selected;
+        });
+
+        pickupButton?.classList.toggle("btn-primary", pickup);
+        pickupButton?.classList.toggle("btn-outline-primary", !pickup);
+        deliveryButton?.classList.toggle("btn-success", !pickup);
+        deliveryButton?.classList.toggle("btn-outline-success", pickup);
+        const feeInput = $("#v3-delivery-fee");
+        feeInput?.parentElement?.classList.toggle("d-none", pickup);
+        $("#v3-customer-address")?.classList.toggle("d-none", pickup);
+    }
 
     function commitUnitPrice(index, rawValue) {
         const item = state.cart[index];
@@ -97,7 +125,7 @@
         const selectedAddress = state.address;
         const zoneName = state.zone?.name || "";
         const addressText = selectedAddress?.textContent?.trim() || "เลือกที่อยู่จัดส่งเพื่อเริ่มคำนวณโซน";
-        const fulfillmentText = $("#v3-pickup").checked ? "รับเอง · ค่าส่ง 0.00 บาท" : `จัดส่ง · ค่าส่ง ${money(state.deliveryFee)} บาท`;
+        const fulfillmentText = state.deliveryType === "pickup" ? "รับเอง · ค่าส่ง 0.00 บาท" : `จัดส่ง · ค่าส่ง ${money(state.deliveryFee)} บาท`;
         $("#v3-customer-address").innerHTML = `<i class="fas fa-map-marker-alt"></i> ${escapeHtml(addressText)}${zoneName ? ` <span class="badge badge-success ml-2">โซน: ${escapeHtml(zoneName)}</span>` : ""} <span class="text-muted ml-2">${fulfillmentText}</span>`;
         window.FinalPos?.syncCustomerDisplay();
     }

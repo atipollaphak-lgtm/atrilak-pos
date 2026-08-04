@@ -185,6 +185,8 @@ Route::middleware(['auth'])->group(function () {
         });
 
         Route::resource('products', ProductController::class)->except('show');
+        Route::put('/products/{product}/cost', [ProductController::class, 'updateCost'])
+            ->name('products.cost.update');
         Route::post(
             '/products/{product}/restore',
             [ProductController::class, 'restore']
@@ -380,6 +382,10 @@ Route::middleware(['auth'])->group(function () {
 
         Route::post('/backups/create', [BackupController::class, 'createBackup'])
             ->name('backups.create');
+
+        Route::post('/backups/reset-business-data', [BackupController::class, 'resetBusinessData'])
+            ->middleware('throttle:3,1')
+            ->name('backups.reset-business-data');
 
         Route::get('/backups/{fileName}/download', [BackupController::class, 'downloadFile'])
             ->name('backups.download');

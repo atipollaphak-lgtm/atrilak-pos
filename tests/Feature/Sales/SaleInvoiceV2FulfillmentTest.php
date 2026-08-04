@@ -5,6 +5,8 @@ namespace Tests\Feature\Sales;
 use App\Models\Customer;
 use App\Models\CustomerDeliveryAddress;
 use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\Setting;
 use App\Services\CommercialDocumentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -275,6 +277,56 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
         $this->assertStringContainsString('data-document-type="tax-invoice"', $taxInvoice);
         $this->assertSame(12, substr_count($taxInvoice, '<tr><td>&nbsp;</td>'));
         $this->assertSame(15, substr_count($deliveryNote, '<tr><td>&nbsp;</td>'));
+    }
+
+    public function test_delivery_note_uses_readable_five_column_layout_and_print_hooks(): void
+    {
+        $longName = str_repeat('Long product name ', 8);
+        $sale = Sale::make([
+            'sale_no' => 'SAL-LONG-NAME',
+            'sale_date' => '2026-07-26',
+            'delivery_fee' => '20.00',
+            'discount' => '0.00',
+            'total_amount' => '32.00',
+        ]);
+        $sale->setRelation('customer', null);
+        $sale->setRelation('items', collect([
+            SaleItem::make([
+                'qty' => '1.00',
+                'selling_price' => '12.00',
+                'total' => '12.00',
+                'product_name_snapshot' => $longName,
+                'unit_name_snapshot' => 'piece',
+            ]),
+        ]));
+        $document = app(CommercialDocumentService::class)
+            ->buildSaleDocument($sale, 'delivery-note');
+
+        $html = view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => new Setting(['qr_image' => 'settings/qr.png']),
+            'document' => $document,
+        ])->render();
+        $css = file_get_contents(base_path('public/css/sales-invoice-v2.css'));
+
+        $this->assertStringContainsString('style="width: 6%;"', $html);
+        $this->assertStringContainsString('style="width: 54%; text-align: left;"', $html);
+        $this->assertStringContainsString('style="width: 12%;"', $html);
+        $this->assertStringContainsString('style="width: 13%;"', $html);
+        $this->assertStringContainsString('style="width: 15%;"', $html);
+        $this->assertStringContainsString($longName, $html);
+        $this->assertStringContainsString('class="delivery-qr"', $html);
+        $this->assertStringContainsString(
+            '.delivery-note[data-document-type="delivery-note"] .delivery-note-items .item-name',
+            $css
+        );
+        $this->assertStringContainsString('white-space: normal', $css);
+        $this->assertStringContainsString('font-size: 14px', $css);
+        $this->assertStringContainsString('font-size: 12px', $css);
+        $this->assertStringContainsString(
+            '.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items',
+            $css
+        );
     }
 
     private function renderInvoice(?string $deliveryType): string

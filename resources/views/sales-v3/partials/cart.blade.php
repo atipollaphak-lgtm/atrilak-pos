@@ -1,6 +1,13 @@
 <aside class="pos-v3-cart card">
     <div class="pos-v3-cart-date"><label for="v3-sale-date">วันที่จัดส่ง</label><input id="v3-sale-date" type="date" value="{{ now()->toDateString() }}"><button id="v3-clear-cart" type="button" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash-alt mr-1"></i>ล้างตะกร้า</button><button id="v3-new-bill" type="button" class="d-none">บิลใหม่</button></div>
-    <div class="pos-v3-cart-controls"><button id="v3-delivery" type="button" class="btn btn-success"><i class="fas fa-truck mr-2"></i>จัดส่ง</button><button id="v3-pickup-button" type="button" class="btn btn-primary"><i class="fas fa-store mr-2"></i>รับเอง</button></div>
+    <div class="pos-v3-cart-controls">
+        <button id="v3-delivery" type="button" class="btn btn-outline-success" aria-pressed="false">
+            <i class="fas fa-truck mr-2"></i><span class="fulfillment-check" aria-hidden="true" hidden>✓</span><span class="fulfillment-label">จัดส่ง</span>
+        </button>
+        <button id="v3-pickup-button" type="button" class="btn btn-primary active is-selected" aria-pressed="true">
+            <i class="fas fa-store mr-2"></i><span class="fulfillment-check" aria-hidden="true">✓</span><span class="fulfillment-label">รับเอง</span>
+        </button>
+    </div>
     <div class="v3-cart-table-head"><span>จำนวน</span><span>สินค้า</span><span>ราคาต่อหน่วย</span><span>รวม</span><span aria-hidden="true"></span></div>
     <div id="v3-cart-items" class="pos-v3-cart-items"><div class="pos-v3-empty">ยังไม่มีสินค้า<br><small>คลิกสินค้า หรือยิง Barcode เพื่อเริ่มขาย</small></div></div>
     <div class="pos-v3-cart-footer">

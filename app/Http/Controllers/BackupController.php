@@ -2,12 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Console\Commands\ResetBusinessDataCommand;
 use App\Services\Backup\DatabaseBackupService;
+use App\Services\BusinessDataResetService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+use Throwable;
 
 class BackupController extends Controller
 {
-    public function __construct(private DatabaseBackupService $databaseBackupService) {}
+    public function __construct(
+        private DatabaseBackupService $databaseBackupService,
+        private BusinessDataResetService $businessDataResetService,
+    ) {}
 
     public function index()
     {
@@ -39,6 +48,46 @@ class BackupController extends Controller
         }
 
         return back()->with('success', 'สร้าง Backup สำเร็จ: '.$result->fileName());
+    }
+
+    public function resetBusinessData(Request $request)
+    {
+        $validated = $request->validate([
+            'acknowledged' => ['accepted'],
+            'confirmation' => [
+                'required',
+                'string',
+                Rule::in([ResetBusinessDataCommand::CONFIRMATION]),
+            ],
+            'password' => ['required', 'current_password'],
+        ]);
+
+        try {
+            $result = $this->businessDataResetService->run(
+                $this->databaseBackupService,
+                $request->user()->id,
+            );
+        } catch (Throwable $exception) {
+            Log::error('business_data_reset.web_failed', [
+                'database' => config('database.connections.pgsql.database'),
+                'exception' => $exception::class,
+            ]);
+
+            return back()->with('error', 'Business data reset failed. Check the application log.');
+        }
+
+        $reset = $result['reset'];
+
+        return back()
+            ->with('success', 'ล้างข้อมูลธุรกิจเรียบร้อยแล้ว')
+            ->with('reset_summary', [
+                'status' => 'success',
+                'completed_at' => now()->toIso8601String(),
+                'backup_file' => $result['backup']['file_name'],
+                'backup_sha256' => substr($result['backup']['sha256'], 0, 12),
+                'users' => $reset['protected_after']['users'] ?? null,
+                'settings' => $reset['protected_after']['settings'] ?? null,
+            ]);
     }
 
     public function downloadFile($fileName)

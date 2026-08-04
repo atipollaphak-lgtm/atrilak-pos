@@ -96,6 +96,20 @@ class ProductManagementTest extends TestCase
             ->assertSee('readonly', false);
     }
 
+    public function test_product_list_uses_one_normalized_storage_url_for_prefixed_image_paths(): void
+    {
+        $category = $this->category('Hardware');
+        Product::query()->create($this->productPayload($category, [
+            'name' => 'Prefixed Image Product',
+            'image_path' => 'storage/products/list.jpg',
+        ]));
+
+        $this->get(route('products.index'))
+            ->assertOk()
+            ->assertSee('http://localhost/storage/products/list.jpg', false)
+            ->assertDontSee('http://localhost/storage/storage/products/list.jpg', false);
+    }
+
     public function test_product_image_is_stored_and_path_is_persisted(): void
     {
         Storage::fake('public');

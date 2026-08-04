@@ -55,6 +55,9 @@ body:has(#pos-v3) .content { padding:0!important; }
 .pos-v3-cart-date button { height:42px; white-space:nowrap; font-weight:700; }
 .pos-v3-cart-controls { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:10px 16px; }
 .pos-v3-cart-controls button { height:48px; border:0; border-radius:6px; font-size:17px; font-weight:800; }
+.pos-v3-cart-controls button.is-selected { box-shadow: inset 0 0 0 2px rgba(255,255,255,.75), 0 0 0 2px rgba(0,91,45,.18); }
+.pos-v3-cart-controls button:focus-visible { outline:3px solid #f59e0b; outline-offset:2px; }
+.pos-v3-cart-controls .fulfillment-check { margin-right:4px; font-weight:900; }
 .v3-cart-table-head { display:grid; grid-template-columns:68px minmax(0,1fr) 104px 94px 24px; gap:8px; align-items:center; padding:12px 20px; border-top:1px solid var(--pos-line); border-bottom:1px solid var(--pos-line); background:#fff; color:var(--pos-green); font-size:13px; font-weight:800; }
 .v3-cart-table-head span:nth-child(3),.v3-cart-table-head span:nth-child(4) { text-align:right; }
 .pos-v3-cart-items { flex:1 1 auto; min-height:0; max-height:none; overflow-y:auto; padding:0 12px; background:#fff; }

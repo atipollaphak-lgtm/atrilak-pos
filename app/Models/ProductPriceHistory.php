@@ -6,6 +6,24 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductPriceHistory extends Model
 {
+    protected $casts = [
+        'old_cost_price' => 'decimal:2',
+        'new_cost_price' => 'decimal:2',
+        'old_selling_price' => 'decimal:2',
+        'new_selling_price' => 'decimal:2',
+        'old_price' => 'decimal:2',
+        'new_price' => 'decimal:2',
+        'old_average_cost' => 'decimal:2',
+        'pricing_value' => 'decimal:2',
+        'rounding_unit' => 'decimal:2',
+        'average_cost' => 'decimal:2',
+        'profit_percent' => 'decimal:2',
+        'price_before_round' => 'decimal:2',
+        'satang_rounded_price' => 'decimal:2',
+        'final_price' => 'decimal:2',
+        'profit_amount' => 'decimal:2',
+    ];
+
     protected $fillable = [
         'product_id',
         'old_cost_price',

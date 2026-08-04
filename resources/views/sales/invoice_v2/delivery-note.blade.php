@@ -62,7 +62,11 @@
         $sale->customer?->tax_number,
         null
     );
-    $showTaxInformation = ($document['type'] ?? null) === 'tax-invoice'
+    $isTaxInvoice = ($document['type'] ?? null) === 'tax-invoice';
+    $deliveryNoteColumnWidths = $isTaxInvoice
+        ? [8, 42, 18, 16, 16]
+        : [6, 54, 12, 13, 15];
+    $showTaxInformation = $isTaxInvoice
         && filled($customerTaxNumber);
     $subTotal = $sale->items->sum('total');
     $deliveryFee = $sale->delivery_fee ?? 0;
@@ -70,7 +74,7 @@
     $grandTotal = $subTotal + $deliveryFee - $discount;
     $minimumRows = ($paper ?? 'a4') === 'a5'
         ? $sale->items->count()
-        : (($document['type'] ?? null) === 'tax-invoice'
+        : ($isTaxInvoice
             ? max($sale->items->count(), 12)
             : 15);
 @endphp
@@ -130,11 +134,11 @@
     <table class="items-table delivery-note-items">
         <thead>
             <tr>
-                <th style="width: 8%;">ลำดับ</th>
-                <th style="width: 42%; text-align: left;">รายการสินค้า</th>
-                <th style="width: 18%;">จำนวน</th>
-                <th style="width: 16%;">หน่วยละ</th>
-                <th style="width: 16%;">ราคารวม</th>
+                <th style="width: {{ $deliveryNoteColumnWidths[0] }}%;">ลำดับ</th>
+                <th style="width: {{ $deliveryNoteColumnWidths[1] }}%; text-align: left;">รายการสินค้า</th>
+                <th style="width: {{ $deliveryNoteColumnWidths[2] }}%;">จำนวน</th>
+                <th style="width: {{ $deliveryNoteColumnWidths[3] }}%;">หน่วยละ</th>
+                <th style="width: {{ $deliveryNoteColumnWidths[4] }}%;">ราคารวม</th>
             </tr>
         </thead>
         <tbody>
@@ -151,9 +155,9 @@
                 <tr>
                     <td class="text-center">{{ $index + 1 }}</td>
                     <td class="item-name">{{ \App\Support\DocumentSnapshotValue::resolve($item->product_name_snapshot, $item->product?->name) }}</td>
-                    <td class="text-center">{{ $formatNumber($item->qty) }} {{ $itemUnit }}</td>
-                    <td class="text-end">{{ number_format((float) $item->selling_price, 2) }}</td>
-                    <td class="text-end">{{ number_format((float) $item->total, 2) }}</td>
+                    <td class="text-end item-quantity">{{ $formatNumber($item->qty) }} {{ $itemUnit }}</td>
+                    <td class="text-end item-unit-price">{{ number_format((float) $item->selling_price, 2) }}</td>
+                    <td class="text-end item-total">{{ number_format((float) $item->total, 2) }}</td>
                 </tr>
             @endforeach
             @for ($row = $sale->items->count(); $row < $minimumRows; $row++)

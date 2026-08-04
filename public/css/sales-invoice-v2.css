@@ -31,6 +31,19 @@ body {
     background: #fff;
 }
 
+.delivery-note[data-document-type="delivery-note"] {
+    font-size: 14px;
+}
+
+.delivery-note[data-document-type="delivery-note"] .delivery-logo {
+    width: 22mm;
+    height: 22mm;
+}
+
+.delivery-note[data-document-type="delivery-note"] .delivery-logo-placeholder {
+    line-height: 22mm;
+}
+
 .delivery-header {
     display: flex;
     justify-content: space-between;
@@ -74,6 +87,34 @@ body {
 .items-table th + th { border-left: 1px solid #4b5563; }
 .items-table td:last-child, .items-table th:last-child { border-right: 0; }
 .item-name { overflow-wrap: anywhere; }
+.delivery-note[data-document-type="delivery-note"] .delivery-note-items .item-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.25;
+}
+.delivery-note[data-document-type="delivery-note"] .delivery-note-items th,
+.delivery-note[data-document-type="delivery-note"] .delivery-note-items td {
+    font-size: 14px;
+}
+.delivery-note[data-document-type="delivery-note"] .delivery-note-items td:nth-child(3),
+.delivery-note[data-document-type="delivery-note"] .delivery-note-items td:nth-child(4),
+.delivery-note[data-document-type="delivery-note"] .delivery-note-items td:nth-child(5) {
+    white-space: nowrap;
+    text-align: right;
+}
+.delivery-note[data-document-type="delivery-note"] .delivery-qr {
+    width: 32mm;
+    height: 32mm;
+}
+.delivery-note[data-document-type="delivery-note"] .qr-payment strong {
+    font-size: 12px;
+}
+.delivery-note[data-document-type="delivery-note"] .delivery-footer strong {
+    font-size: 12px;
+}
 .text-center { text-align: center; }
 .text-end { text-align: right; white-space: nowrap; }
 
@@ -166,6 +207,54 @@ body {
 .paper-a5 .notes-block, .paper-a5 .receiver-block { min-height: 16mm; padding: 2mm; font-size: 9px; }
 .paper-a5 .signature-line { margin-top: 6mm; }
 .paper-a5 .delivery-footer { margin-top: 2mm; font-size: 8px; }
+
+.paper-a5 .delivery-note[data-document-type="delivery-note"] {
+    font-size: 12px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .company-tagline,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .company-line,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .document-subtitle,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .document-meta,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .customer-line,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .qr-payment,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .notes-block,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .receiver-block {
+    font-size: 11px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-logo {
+    width: 16mm;
+    height: 16mm;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-logo-placeholder {
+    line-height: 16mm;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items th,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items td {
+    font-size: 12px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items {
+    font-size: 12px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-qr {
+    width: 26mm;
+    height: 26mm;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .qr-payment strong {
+    font-size: 11px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .summary div {
+    font-size: 12px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .summary .grand-total {
+    font-size: 14px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .summary .grand-total strong {
+    font-size: 18px;
+}
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-footer,
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-footer strong {
+    font-size: 10px;
+}
 
 @media print {
     @page { size: A4 portrait; }

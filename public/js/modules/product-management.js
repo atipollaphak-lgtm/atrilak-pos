@@ -22,6 +22,15 @@
     };
 
     const setValue = (field, value) => { if (field) field.value = value ?? ''; };
+    const setImageSource = (url) => {
+        if (!imagePreview) return;
+
+        imagePreview.onerror = () => {
+            imagePreview.onerror = null;
+            imagePreview.src = placeholder;
+        };
+        imagePreview.src = url || placeholder;
+    };
     const updateAutoNumberHints = () => {
         if (!fields.category || method.value !== 'POST') return;
 
@@ -50,6 +59,10 @@
         const product = trigger && trigger.dataset.product ? JSON.parse(trigger.dataset.product) : null;
         const isDetails = mode === 'details' && product;
 
+        if (isDetails) {
+            window.dispatchEvent(new CustomEvent('product-details-loaded', { detail: product }));
+        }
+
         document.getElementById('productModalTitle').textContent = isDetails ? 'รายละเอียดสินค้า' : 'เพิ่มสินค้า';
         document.getElementById('productModalSubtitle').textContent = isDetails ? 'แก้ไขข้อมูลพื้นฐานและสถานะการใช้งาน' : 'ข้อมูลพื้นฐานและราคาเริ่มต้น';
         document.getElementById('productInitialPriceSection').classList.toggle('d-none', Boolean(isDetails));
@@ -73,12 +86,12 @@
             document.getElementById('productModalBarcodeHint').textContent = 'สร้างไว้แล้วและแก้ไขไม่ได้';
             setValue(fields.active, product.active ? '1' : '0');
             setValue(fields.remark, product.remark);
-            imagePreview.src = product.image_path ? `/storage/${product.image_path}` : placeholder;
+            setImageSource(product.image_url);
             setReadOnlySummary(product);
         } else {
             form.reset();
             method.value = 'POST';
-            imagePreview.src = placeholder;
+            setImageSource(placeholder);
             setValue(fields.productCode, '');
             setValue(fields.barcode, '');
             fields.productCode.placeholder = 'ระบบจะสร้างอัตโนมัติ';
@@ -103,7 +116,7 @@
     if (imageInput) {
         imageInput.addEventListener('change', function () {
             const file = this.files && this.files[0];
-            if (file) imagePreview.src = URL.createObjectURL(file);
+            if (file) setImageSource(URL.createObjectURL(file));
         });
     }
 })();

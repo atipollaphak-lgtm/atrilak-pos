@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
@@ -47,6 +48,50 @@ class Product extends Model
         'stock_qty' => 'decimal:4',
         'minimum_stock' => 'decimal:4',
     ];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        $rawPath = trim((string) $this->image_path);
+
+        if ($rawPath === '') {
+            return null;
+        }
+
+        if (preg_match('/^[A-Za-z]:[\\\\\/]/', $rawPath) === 1
+            || str_starts_with($rawPath, '\\\\')) {
+            return null;
+        }
+
+        if (preg_match('#^https?://#i', $rawPath) === 1) {
+            return $rawPath;
+        }
+
+        $path = str_replace('\\', '/', $rawPath);
+
+        if (str_starts_with($path, '/')) {
+            if (! str_starts_with($path, '/storage/')) {
+                return null;
+            }
+
+            $path = substr($path, strlen('/storage/'));
+        }
+
+        $path = ltrim($path, '/');
+
+        if (str_starts_with($path, 'storage/')) {
+            $path = substr($path, strlen('storage/'));
+        }
+
+        if ($path === ''
+            || $path === '..'
+            || str_starts_with($path, '../')
+            || str_contains($path, '/../')
+            || preg_match('/^[a-z][a-z0-9+.-]*:/i', $path) === 1) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($path);
+    }
 
     public function category()
     {

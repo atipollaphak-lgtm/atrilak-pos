@@ -85,6 +85,22 @@ class SaleV3BrowserStateContractTest extends TestCase
         );
     }
 
+    public function test_fulfillment_buttons_expose_one_truthful_selected_state(): void
+    {
+        $cart = $this->source('resources/views/sales-v3/partials/cart.blade.php');
+        $sale = $this->source('public/js/modules/sale-v3.js');
+
+        $this->assertStringContainsString('class="fulfillment-check"', $cart);
+        $this->assertStringContainsString('aria-pressed="false"', $cart);
+        $this->assertStringContainsString('setAttribute("aria-pressed"', $sale);
+        $this->assertStringContainsString('is-selected', $sale);
+        $this->assertStringContainsString('state.deliveryType === "pickup"', $sale);
+        $this->assertStringNotContainsString(
+            'const fulfillmentText = $("#v3-pickup").checked',
+            $sale
+        );
+    }
+
     private function source(string $path): string
     {
         $source = file_get_contents(dirname(__DIR__, 3).'/'.$path);
