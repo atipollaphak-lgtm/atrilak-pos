@@ -1,0 +1,21 @@
+﻿{
+    "generated_at":  "2026-08-04T09:15:54.4250270+07:00",
+    "source_root":  "C:\\laragon\\www\\atrilak-pos",
+    "production_root":  "C:\\laragon\\www\\atrilak-pos-production",
+    "backup_root":  "C:\\laragon\\www\\atrilak-pos-production-recovery\\controlled-deployment-20260804",
+    "source_file_count":  26,
+    "production_file_count":  26,
+    "deploy_performed":  false,
+    "excluded_paths":  [
+                           ".env",
+                           ".git",
+                           "node_modules",
+                           "vendor",
+                           "tests",
+                           "test fixtures",
+                           "local uploads",
+                           "backups",
+                           "design-qa.md",
+                           "old Hold Bill plan"
+                       ]
+}

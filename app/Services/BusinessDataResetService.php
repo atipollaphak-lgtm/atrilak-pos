@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Services\Backup\DatabaseBackupService;
+use App\Support\DatabaseEnvironmentGuard;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -190,7 +191,7 @@ class BusinessDataResetService
         $backup = null;
 
         try {
-            $identity ??= $this->assertProductionIdentity();
+            $identity ??= $this->assertAllowedResetIdentity();
             $preflight ??= $this->preflight();
             $backup = $this->createAndVerifyBackup($backupService, $identity['database']);
 
@@ -303,6 +304,31 @@ class BusinessDataResetService
             'app_url' => (string) config('app.url'),
             'database' => $database,
             'driver' => $driver,
+        ];
+    }
+
+    /** @return array{app_env: string, app_url: string, database: string, driver: string} */
+    private function assertAllowedResetIdentity(): array
+    {
+        $environment = (string) app()->environment();
+
+        if ($environment === 'production') {
+            return $this->assertProductionIdentity();
+        }
+
+        if (! in_array($environment, ['local', 'testing'], true)) {
+            throw new RuntimeException('Reset requires APP_ENV=production or an explicitly named test environment. No changes were made.');
+        }
+
+        $this->assertPostgresConnection();
+        $database = (string) DB::selectOne('SELECT current_database() AS database_name')->database_name;
+        DatabaseEnvironmentGuard::assertTestDatabase($environment, $database);
+
+        return [
+            'app_env' => $environment,
+            'app_url' => (string) config('app.url'),
+            'database' => $database,
+            'driver' => (string) DB::connection()->getDriverName(),
         ];
     }
 

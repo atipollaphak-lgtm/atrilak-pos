@@ -1,0 +1,210 @@
+﻿[
+    {
+        "relative_path":  "app/Console/Commands/ResetBusinessDataCommand.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Console\\Commands\\ResetBusinessDataCommand.php",
+        "size_bytes":  5751,
+        "sha256":  "f70800354843decbab620bf8b07207ff64bcfbaa16907c3206d9ce881f3edc30",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Exceptions/StaleProductCostException.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Exceptions\\StaleProductCostException.php",
+        "size_bytes":  370,
+        "sha256":  "c03d22dd59611ef5a479b30fdf19dfb2aaf7f4be2810443c0266dcb644ebb311",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Http/Controllers/BackupController.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Http\\Controllers\\BackupController.php",
+        "size_bytes":  3595,
+        "sha256":  "59402f71e38fa3fc35422886f8eb6bf7e18c52d4cdbcf22764557d09d1d2c117",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Http/Controllers/ProductController.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Http\\Controllers\\ProductController.php",
+        "size_bytes":  15338,
+        "sha256":  "1716ef35501b974ada143ca63e8f09d681a1ba0ec75dac7c48cb0611d5a256d3",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Http/Requests/Products/UpdateProductCostRequest.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Http\\Requests\\Products\\UpdateProductCostRequest.php",
+        "size_bytes":  1005,
+        "sha256":  "bfbd0e1edacd09e62bdecb4794503187e9b774436292fcf87a4620224e3e1aea",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Models/BusinessResetAudit.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Models\\BusinessResetAudit.php",
+        "size_bytes":  843,
+        "sha256":  "06ecd9d359f6c76f6ea73a9421f0725b3142b70393d087e4a2f668883b06fcd5",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Models/Product.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Models\\Product.php",
+        "size_bytes":  3310,
+        "sha256":  "d0326a813bb1f7e3fa5fbf04b3c9ccd3ad7acf54bb90287148933b9034388422",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Models/ProductPriceHistory.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Models\\ProductPriceHistory.php",
+        "size_bytes":  1655,
+        "sha256":  "38bb9364fb17a6694e07c0aa9c852967d0a760e2aa81786087839e5c9b4e67b2",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Services/BusinessDataResetService.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Services\\BusinessDataResetService.php",
+        "size_bytes":  21329,
+        "sha256":  "b24a3ded8ff5910e7cc2ad0c7fb1727beaf7e412ade1776bd9f70954f7da964c",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Services/Products/ProductCostAdjustmentService.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Services\\Products\\ProductCostAdjustmentService.php",
+        "size_bytes":  4999,
+        "sha256":  "145f6a1fa2f698edc7c63b5ecf7be711ea9646beea2132bbcee6991c3ce29c3e",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "app/Support/DatabaseEnvironmentGuard.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\app\\Support\\DatabaseEnvironmentGuard.php",
+        "size_bytes":  1472,
+        "sha256":  "19a36f453f0633e9498b3496d8aaf2e3ada5c3b10159ffc194833223b90bf4a2",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "database/migrations/2026_08_04_000001_create_business_reset_audits_table.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\database\\migrations\\2026_08_04_000001_create_business_reset_audits_table.php",
+        "size_bytes":  1214,
+        "sha256":  "1edec3f7a01e46cd180b8ab7491ac52caa7448d9b9acc185f455ad5d4eeef674",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "public/css/sales-invoice-v2.css",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\public\\css\\sales-invoice-v2.css",
+        "size_bytes":  10991,
+        "sha256":  "ba75e9ca37d6cfe713668bcae4698f4db10cd4dad3d4c45d0a7058a6bc6c15d9",
+        "file_type":  "css",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "public/css/sale-v3.css",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\public\\css\\sale-v3.css",
+        "size_bytes":  14016,
+        "sha256":  "d66fe1b730509a008e224084eae7a78d408717d0c811c238eed44f401b0d4163",
+        "file_type":  "css",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "public/js/modules/business-data-reset.js",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\public\\js\\modules\\business-data-reset.js",
+        "size_bytes":  2015,
+        "sha256":  "6ca39095d6d4350e38e386337f0fc77cf6cefba4ada1cf718427a84a28ed3d40",
+        "file_type":  "js",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "public/js/modules/product-cost-adjustment.js",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\public\\js\\modules\\product-cost-adjustment.js",
+        "size_bytes":  2538,
+        "sha256":  "1dd2bd67fe4b7d4ae95b110c3ab07457c2693dbecd0ca6444f4c2e0106c00f2f",
+        "file_type":  "js",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "public/js/modules/product-management.js",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\public\\js\\modules\\product-management.js",
+        "size_bytes":  7107,
+        "sha256":  "12aa817f3a2eaacadca93c14190116d1ea13767344b1c6e64484db9c0f07d432",
+        "file_type":  "js",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "public/js/modules/sale-v3.js",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\public\\js\\modules\\sale-v3.js",
+        "size_bytes":  29923,
+        "sha256":  "7bc47b85133eb62cedd0ff6e3b02f46c4aadae67fdbf04f3fa078a931855dcfa",
+        "file_type":  "js",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "resources/views/backups/index.blade.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\resources\\views\\backups\\index.blade.php",
+        "size_bytes":  11713,
+        "sha256":  "c407f522e785232ac3fe0ec8b95e5d74e14276cf336d01b722973054cffff353",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "resources/views/products/index.blade.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\resources\\views\\products\\index.blade.php",
+        "size_bytes":  12392,
+        "sha256":  "2a2218356d568d440a97f834f02404d3b4014a24917f7c36784539d97607adb2",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "resources/views/products/partials/_product_cost_modal.blade.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\resources\\views\\products\\partials\\_product_cost_modal.blade.php",
+        "size_bytes":  4854,
+        "sha256":  "d788fe559028f6e16a8c51923f46de55094af4b28af7c5f9d27fc0b1d822d27d",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "resources/views/products/partials/_product_modal.blade.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\resources\\views\\products\\partials\\_product_modal.blade.php",
+        "size_bytes":  9421,
+        "sha256":  "9c559532d16c081e2e069977ab8a4b078fb228070855ee746e4c479669cbb4e5",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "resources/views/sales/invoice_v2/delivery-note.blade.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\resources\\views\\sales\\invoice_v2\\delivery-note.blade.php",
+        "size_bytes":  9752,
+        "sha256":  "2c3f813e8c401827e4b45480c5d1974fe8f3bacc0368150d75a4c7162c7f3520",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "resources/views/sales-v3/partials/cart.blade.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\resources\\views\\sales-v3\\partials\\cart.blade.php",
+        "size_bytes":  2627,
+        "sha256":  "f0e204c8a918ce4b406a29b738d252f730fc37b1ec9078a66cfa2376e3ea7764",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "resources/views/sales-v3/partials/product-grid.blade.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\resources\\views\\sales-v3\\partials\\product-grid.blade.php",
+        "size_bytes":  1978,
+        "sha256":  "1374fb6c078851cd6e911be4d6c31d9a8fc1e95bf04319cfd6f7cf6961978529",
+        "file_type":  "php",
+        "deploy":  "yes"
+    },
+    {
+        "relative_path":  "routes/web.php",
+        "source_absolute_path":  "C:\\laragon\\www\\atrilak-pos\\routes\\web.php",
+        "size_bytes":  19587,
+        "sha256":  "9f2a9710f42d9e2d371c60555cf1b33285b9f86d1897087b909ac04f9629d4f1",
+        "file_type":  "php",
+        "deploy":  "yes"
+    }
+]

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420" role="img" aria-labelledby="title desc">
+  <title id="title">ATRILAK browser test product</title>
+  <desc id="desc">A safe local-only product image fixture for browser verification.</desc>
+  <rect width="640" height="420" rx="28" fill="#0f766e"/>
+  <circle cx="320" cy="180" r="100" fill="#ccfbf1"/>
+  <path d="M255 250h130l-18 70H273z" fill="#f59e0b"/>
+  <path d="M275 250h90l-10-72h-70z" fill="#fbbf24"/>
+  <text x="320" y="370" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="28" font-weight="700">BTEST IMAGE</text>
+</svg>
