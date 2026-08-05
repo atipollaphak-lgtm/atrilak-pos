@@ -75,7 +75,7 @@
     $receiptFooter = trim((string) ($setting?->receipt_footer ?? ''));
     $receiptFooter = $receiptFooter !== ''
         ? $receiptFooter
-        : 'ขอบคุณที่ไว้วางใจ ATRILAK BUILDING SOLUTIONS';
+        : 'ขอบคุณที่ไว้วางใจเรา';
     $minimumRows = ($paper ?? 'a4') === 'a5'
         ? $sale->items->count()
         : ($isTaxInvoice
@@ -176,7 +176,7 @@
                 <img src="{{ asset('storage/' . $setting->qr_image) }}" class="delivery-qr" alt="QR Payment">
                 <strong>สแกนเพื่อชำระเงิน</strong>
             @else
-                <span>ยังไม่ได้ตั้งค่า QR Code</span>
+                <span>ช่องทางการชำระเงิน</span>
             @endif
         </div>
         <div class="notes-block">
@@ -185,7 +185,7 @@
                 @if (filled($sale->notes))
                     {!! nl2br(e($sale->notes)) !!}
                 @else
-                    <span class="notes-empty">-</span>
+                    &nbsp;
                 @endif
             </div>
         </div>
@@ -199,5 +199,6 @@
 
     <footer class="delivery-footer">
         <span class="delivery-footer-message">{!! nl2br(e($receiptFooter)) !!}</span>
+        <strong>ATRILAK BUILDING SOLUTIONS</strong>
     </footer>
 </div>

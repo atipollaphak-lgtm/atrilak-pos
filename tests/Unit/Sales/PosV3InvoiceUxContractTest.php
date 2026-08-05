@@ -74,38 +74,81 @@ class PosV3InvoiceUxContractTest extends TestCase
         $this->assertStringContainsString('qr-payment', $view);
         $this->assertStringContainsString('notes-block', $view);
         $this->assertStringContainsString('summary', $view);
+        $this->assertStringContainsString('delivery-footer-message', $view);
+        $this->assertStringContainsString('$minimumRows', $view);
         $this->assertStringNotContainsString('receiver-section', $view);
         $this->assertStringNotContainsString('ผู้รับสินค้า', $view);
         $this->assertStringContainsString('border-right', $css);
-        $this->assertStringContainsString('border-bottom: 1px solid', $css);
+        $this->assertStringContainsString('border-top: 1px solid var(--delivery-light-border);', $css);
         $this->assertStringContainsString('overflow-wrap: anywhere', $css);
-        $this->assertStringNotContainsString('.items-table td { height: 6mm; padding: 1mm 2mm; border-top:', $css);
+        $this->assertStringContainsString('.items-table td { height: 6mm; padding: 1mm 2mm;', $css);
         $this->assertStringContainsString('name="receipt_footer"', $settings);
     }
 
-    public function test_invoice_design_highlights_table_header_and_grand_total(): void
+    public function test_invoice_preserves_production_proportions_while_adding_approved_features(): void
     {
         $css = $this->source('public/css/sales-invoice-v2.css');
 
-        $this->assertStringContainsString('--delivery-table-header: #f3f4f6;', $css);
-        $this->assertStringContainsString('background: var(--delivery-table-header);', $css);
-        $this->assertStringContainsString('color: var(--delivery-primary);', $css);
-        $this->assertStringContainsString('border-bottom: 1px solid var(--delivery-primary);', $css);
-        $this->assertStringContainsString('--delivery-column-divider: 1px solid var(--delivery-border);', $css);
-        $this->assertSame(2, substr_count($css, 'border-right: var(--delivery-column-divider);'));
-        $this->assertStringContainsString(
-            '--delivery-row-divider: 1px solid var(--delivery-light-border);',
-            $css
-        );
-        $this->assertStringContainsString('border-bottom: var(--delivery-row-divider);', $css);
-        $this->assertStringContainsString(
-            '.delivery-note[data-document-type="tax-invoice"] .items-table td',
-            $css
-        );
-        $this->assertStringContainsString('padding-top: .75mm;', $css);
-        $this->assertStringContainsString('padding-bottom: .75mm;', $css);
-        $this->assertStringContainsString('box-shadow: inset 0 0 0 1px var(--delivery-border);', $css);
-        $this->assertStringContainsString('border-radius: 2mm;', $css);
+        $this->assertStringContainsString('padding: 7mm 8mm 4mm;', $css);
+        $this->assertStringContainsString('gap: 8mm;', $css);
+        $this->assertStringContainsString('height: 6mm;', $css);
+        $this->assertStringContainsString('padding: 1mm 2mm;', $css);
+        $this->assertStringContainsString('margin-top: 2mm;', $css);
+        $this->assertStringContainsString('width: 32mm;', $css);
+        $this->assertStringContainsString('min-height: 20mm;', $css);
+        $this->assertStringContainsString('display: table-cell;', $css);
+        $this->assertStringContainsString('width: 28%;', $css);
+        $this->assertStringContainsString('width: 42%;', $css);
+        $this->assertStringContainsString('width: 30%;', $css);
+        $this->assertStringContainsString('font-size: 13px;', $css);
+        $this->assertStringContainsString('font-size: 15px;', $css);
+        $this->assertStringContainsString('text-overflow: clip;', $css);
+        $this->assertStringNotContainsString('text-overflow: ellipsis', $css);
+        $this->assertStringNotContainsString('--delivery-document-font-size', $css);
+        $this->assertStringNotContainsString('--delivery-a5-font-size', $css);
+        $this->assertStringNotContainsString('grid-template-columns: 25% 40% 35%;', $css);
+        $this->assertStringNotContainsString('min-height: 40mm;', $css);
+        $this->assertStringNotContainsString('width: 36mm;', $css);
+        $this->assertStringNotContainsString('.item-cell-content', $css);
+    }
+
+    public function test_invoice_keeps_production_spacing_and_footer_dimensions(): void
+    {
+        $css = $this->source('public/css/sales-invoice-v2.css');
+
+        $this->assertStringContainsString('padding-bottom: 3mm;', $css);
+        $this->assertStringContainsString('padding: 2.5mm 4mm;', $css);
+        $this->assertStringContainsString('line-height: 1.35;', $css);
+        $this->assertStringContainsString('margin-top: 1mm;', $css);
+        $this->assertStringContainsString('.paper-a5 .delivery-qr { width: 26mm; height: 26mm; }', $css);
+        $this->assertStringContainsString('.paper-a5 .notes-block { min-height: 16mm;', $css);
+    }
+
+    public function test_invoice_documents_keep_production_rows_and_approved_footer_features(): void
+    {
+        $css = $this->source('public/css/sales-invoice-v2.css');
+        $view = $this->source('resources/views/sales/invoice_v2/delivery-note.blade.php');
+
+        $this->assertStringContainsString('height: auto;', $css);
+        $this->assertStringContainsString('.delivery-note[data-document-type="tax-invoice"] .items-table td', $css);
+        $this->assertStringContainsString('width: 32mm;', $css);
+        $this->assertStringContainsString('.paper-a5 .delivery-qr { width: 26mm; height: 26mm; }', $css);
+        $this->assertStringContainsString('padding: 2.5mm 4mm;', $css);
+        $this->assertStringContainsString('line-height: 1.35;', $css);
+        $this->assertStringContainsString('$minimumRows', $view);
+        $this->assertStringNotContainsString('item-cell-content', $view);
+    }
+
+    public function test_invoice_print_page_size_keeps_a4_default_and_conditional_a5_override(): void
+    {
+        $css = $this->source('public/css/sales-invoice-v2.css');
+        $view = $this->source('resources/views/sales/invoice_v2.blade.php');
+
+        $this->assertGreaterThanOrEqual(2, substr_count($css, '@page'));
+        $this->assertStringContainsString('@page { size: A4 portrait; margin: 0; }', $css);
+        $this->assertStringContainsString('@page { size: A5 portrait; }', $css);
+        $this->assertStringContainsString("@if ((\$paper ?? 'a4') === 'a5')", $view);
+        $this->assertStringContainsString('@page { size: A5 portrait; margin: 0; }', $view);
     }
 
     private function source(string $path): string

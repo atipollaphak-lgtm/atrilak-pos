@@ -249,7 +249,7 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
         $this->assertSame('-', $document['customer_address']);
     }
 
-    public function test_tax_invoice_a4_uses_a_compact_blank_row_budget_without_changing_delivery_note(): void
+    public function test_tax_invoice_a4_keeps_production_blank_row_budget_without_changing_delivery_note(): void
     {
         $sale = Sale::make([
             'sale_no' => 'SAL-TAX-A4-ACCEPTANCE',
@@ -321,10 +321,10 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
             $css
         );
         $this->assertStringContainsString('white-space: normal', $css);
-        $this->assertStringContainsString('font-size: 15px', $css);
-        $this->assertStringContainsString('font-size: 13px', $css);
+        $this->assertStringContainsString('font-size: 14px', $css);
+        $this->assertStringContainsString('font-size: 12px', $css);
         $this->assertStringContainsString(
-            '.paper-a5 .items-table td',
+            '.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items',
             $css
         );
     }
@@ -335,7 +335,7 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
 
         $this->assertNotFalse($css);
 
-        foreach ([1, 10, 30] as $itemCount) {
+        foreach ([1, 2, 3, 10, 30] as $itemCount) {
             $html = $this->renderStressInvoice($itemCount);
 
             $this->assertSame(
@@ -347,6 +347,7 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
                 "Long item {$itemCount} that wraps across multiple lines",
                 $html
             );
+            $this->assertStringNotContainsString('item-cell-content', $html);
         }
 
         $this->assertStringContainsString('text-overflow: clip', $css);
@@ -385,12 +386,17 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
 
         $this->assertStringContainsString('class="notes-block"', $withoutQr);
         $this->assertSame(10, substr_count($withoutQr, 'Note line '));
-        $this->assertStringContainsString('ยังไม่ได้ตั้งค่า QR Code', $withoutQr);
+        $this->assertStringContainsString('ช่องทางการชำระเงิน', $withoutQr);
         $this->assertStringNotContainsString('class="delivery-qr"', $withoutQr);
         $this->assertStringContainsString('class="delivery-qr"', $withQr);
         $this->assertStringContainsString('Thank you for your purchase', $withQr);
         $this->assertStringContainsString('ตรวจสอบสินค้าก่อนออกจากร้าน', $withQr);
         $this->assertStringNotContainsString('class="receiver-section"', $withQr);
+        $this->assertStringContainsString('<strong>ATRILAK BUILDING SOLUTIONS</strong>', $withQr);
+
+        $emptyNotes = $this->renderStressInvoice(1, 'a5', null, null);
+        $this->assertStringContainsString('class="notes-content"', $emptyNotes);
+        $this->assertStringNotContainsString('notes-empty', $emptyNotes);
 
         foreach ($footerCases as $footer) {
             $html = $this->renderStressInvoice(1, 'a5', new Setting([
@@ -403,6 +409,46 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
                 $html
             );
         }
+    }
+
+    public function test_a5_short_documents_keep_production_row_behavior_without_blank_rows(): void
+    {
+        $sale = Sale::make([
+            'sale_no' => 'SAL-A5-BALANCED',
+            'sale_date' => '2026-08-05',
+            'customer_tax_number_snapshot' => 'CUSTOMER-TAX-123',
+            'delivery_fee' => '0.00',
+            'discount' => '0.00',
+            'total_amount' => '12.00',
+        ]);
+        $sale->setRelation('customer', null);
+        $sale->setRelation('items', collect([
+            SaleItem::make([
+                'qty' => '1.00',
+                'selling_price' => '12.00',
+                'total' => '12.00',
+                'product_name_snapshot' => 'Balanced A5 item',
+                'unit_name_snapshot' => 'piece',
+            ]),
+        ]));
+        $this->app->instance('request', Request::create(
+            '/sales/1/invoice-v2?paper=a5'
+        ));
+
+        $service = app(CommercialDocumentService::class);
+        $deliveryNote = view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => null,
+            'document' => $service->buildSaleDocument($sale, 'delivery-note'),
+        ])->render();
+        $taxInvoice = view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => null,
+            'document' => $service->buildSaleDocument($sale, 'tax-invoice'),
+        ])->render();
+
+        $this->assertSame(2, substr_count($deliveryNote, '<tr>'));
+        $this->assertSame(2, substr_count($taxInvoice, '<tr>'));
     }
 
     public function test_a5_invoice_keeps_summary_and_footer_in_the_shared_non_signature_layout(): void
