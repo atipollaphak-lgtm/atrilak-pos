@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\Unit;
+use App\Services\UnitCodeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -18,21 +19,19 @@ class UnitController extends Controller
         return view('units.index', compact('units'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, UnitCodeService $unitCodeService)
     {
-        $request->validate([
-            'code' => 'required|string|max:30|unique:units,code',
+        $validated = $request->validate([
             'name' => 'required|string|max:100',
             'short_name' => 'required|string|max:20',
             'sort_order' => 'nullable|integer',
         ]);
 
-        Unit::create([
-            'code' => strtoupper($request->code),
-            'name' => $request->name,
-            'short_name' => $request->short_name,
+        $unitCodeService->create([
+            'name' => $validated['name'],
+            'short_name' => $validated['short_name'],
             'active' => $request->boolean('active'),
-            'sort_order' => $request->sort_order ?? 0,
+            'sort_order' => $validated['sort_order'] ?? 0,
         ]);
 
         return redirect()
@@ -42,19 +41,17 @@ class UnitController extends Controller
 
     public function update(Request $request, Unit $unit)
     {
-        $request->validate([
-            'code' => 'required|string|max:30|unique:units,code,' . $unit->id,
+        $validated = $request->validate([
             'name' => 'required|string|max:100',
             'short_name' => 'required|string|max:20',
             'sort_order' => 'nullable|integer',
         ]);
 
         $unit->update([
-            'code' => strtoupper($request->code),
-            'name' => $request->name,
-            'short_name' => $request->short_name,
+            'name' => $validated['name'],
+            'short_name' => $validated['short_name'],
             'active' => $request->boolean('active'),
-            'sort_order' => $request->sort_order ?? 0,
+            'sort_order' => $validated['sort_order'] ?? 0,
         ]);
 
         return redirect()
@@ -76,6 +73,7 @@ class UnitController extends Controller
             ->route('units.index')
             ->with('success', 'ลบหน่วยนับเรียบร้อยแล้ว');
     }
+
     public function seed()
     {
         $units = [

@@ -22,9 +22,10 @@ class CustomerService
                 'active' => true,
             ]);
 
-            $this->savePrimaryAddress($customer, $data);
+            $primaryAddress = $this->savePrimaryAddress($customer, $data);
+            $customer->update(['address' => $primaryAddress->address]);
 
-            return $customer;
+            return $customer->fresh();
         });
     }
 
@@ -51,11 +52,11 @@ class CustomerService
                 abort(404);
             }
 
-            if ($address === null) {
-                $this->savePrimaryAddress($customer, $data);
-            } else {
-                $this->savePrimaryAddress($customer, $data, $address);
-            }
+            $primaryAddress = $address === null
+                ? $this->savePrimaryAddress($customer, $data)
+                : $this->savePrimaryAddress($customer, $data, $address);
+
+            $customer->update(['address' => $primaryAddress->address]);
 
             return $customer->fresh();
         });

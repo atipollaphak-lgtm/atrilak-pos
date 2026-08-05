@@ -2,7 +2,7 @@
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content final-payment-modal-content">
             <div class="modal-header">
-                <div class="final-payment-heading"><span class="final-payment-icon"><i class="fas fa-baht-sign"></i></span><div><h4 class="modal-title">ยืนยันการชำระเงิน</h4><p>ตรวจสอบรายการสินค้าและยอดรวมก่อนยืนยันการชำระเงิน</p></div></div>
+                <div class="final-payment-heading"><span class="final-payment-icon"><i class="fas fa-baht-sign"></i></span><div><h4 id="final-payment-title" class="modal-title">ยืนยันการชำระเงิน</h4><p id="final-payment-subtitle">ตรวจสอบรายการสินค้าและยอดรวมก่อนยืนยันการชำระเงิน</p></div></div>
                 <button id="final-payment-close" type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -11,7 +11,7 @@
                         <div class="final-bill-title"><i class="fas fa-file-invoice"></i><strong>ข้อมูลบิล</strong><strong id="final-preview-sale-no" class="final-bill-number">รอออกเลขที่บิล</strong></div>
                         <div class="final-bill-meta"><div><span>วันที่บิล</span><strong id="final-preview-bill-date">-</strong></div><div><span>ชื่อลูกค้า</span><strong id="final-preview-customer">ลูกค้าทั่วไป</strong></div><div><span>เบอร์โทร</span><strong id="final-preview-phone">-</strong></div><div><span>ที่อยู่</span><strong id="final-preview-address">-</strong></div></div>
                         <div class="final-items-heading"><i class="fas fa-shopping-cart"></i><strong>รายการสินค้า (<span id="final-preview-item-count">0 รายการ</span>)</strong></div>
-                        <div class="final-items-table-wrap"><table class="final-items-table"><thead><tr><th>#</th><th>สินค้า</th><th>หน่วย</th><th>จำนวน</th><th>ราคา</th><th>รวม</th></tr></thead><tbody id="final-preview-items"></tbody></table></div>
+                        <div class="final-items-table-wrap"><table class="final-items-table"><thead><tr><th>#</th><th>สินค้า</th><th>จำนวน</th><th>รวม</th></tr></thead><tbody id="final-preview-items"></tbody></table></div>
                         <div class="final-summary-box"><div><span>รวมราคาสินค้า</span><strong id="final-preview-subtotal">0.00</strong></div><div><span>ส่วนลด</span><strong id="final-preview-discount">0.00</strong></div><div><span>ค่าส่ง</span><strong id="final-preview-delivery">0.00</strong></div><hr><div class="final-summary-total"><span>ยอดรวมทั้งสิ้น</span><strong id="final-preview-total">0.00</strong></div></div>
                     </section>
                     <section class="final-payment-side">
@@ -26,8 +26,8 @@
                     </section>
                     <section id="final-document-panel" class="final-document-panel d-none">
                         <h5>เอกสารหลังชำระเงิน</h5><p class="text-muted">เลือกเอกสารที่ต้องการพิมพ์หลังบันทึกการขาย</p>
-                        <label class="d-block p-2"><input id="final-print-delivery" type="checkbox" checked> ใบส่งของ</label><label class="d-block p-2"><input id="final-print-tax" type="checkbox"> ใบกำกับภาษี</label><small id="final-tax-help" class="text-muted d-none"></small>
-                        <button id="final-print-documents" type="button" class="btn btn-outline-primary btn-block mt-3" disabled><i class="fas fa-print mr-2"></i>พิมพ์เอกสาร</button><button id="final-finish-payment" type="button" class="btn btn-success btn-block mt-2" disabled>✓ เสร็จสิ้น</button>
+                        <div class="final-document-actions"><button id="final-print-delivery" type="button" class="btn btn-outline-primary btn-block" disabled><i class="fas fa-print mr-2"></i>พิมพ์ใบส่งของ</button><button id="final-print-tax" type="button" class="btn btn-outline-primary btn-block" disabled><i class="fas fa-file-invoice mr-2"></i>พิมพ์ใบกำกับภาษี</button></div><small id="final-tax-help" class="text-muted d-none"></small>
+                        <button id="final-finish-payment" type="button" class="btn btn-success btn-block btn-lg mt-3" disabled>✓ เสร็จสิ้น</button>
                     </section>
                 </div>
             </div>

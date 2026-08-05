@@ -18,7 +18,10 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('setCustomer', $final);
         $this->assertStringContainsString('setDeliveryType', $final);
         $this->assertStringContainsString('await context.setCustomer', $final);
+        $this->assertStringContainsString("context.state.draftZone = null;\n        context.state.zone = null;\n        context.customerSelect.dispatchEvent", $final);
         $this->assertStringContainsString('context.setDeliveryType(hold.delivery_type)', $final);
+        $this->assertStringContainsString("const pickupSuffix = context.state.deliveryType === 'pickup' && option ? ' (รับเอง)' : ''", $final);
+        $this->assertStringContainsString('filterCustomers();', $final);
     }
 
     public function test_payment_payload_is_built_from_the_canonical_draft_state(): void
@@ -50,6 +53,34 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringNotContainsString('restore.dataset.action = "restore"', $sale);
     }
 
+    public function test_delivery_draft_keeps_preview_zone_and_requires_explicit_multiple_address_selection(): void
+    {
+        $sale = $this->source('public/js/modules/sale-v3.js');
+        $navigation = $this->source('resources/views/sales-v3/partials/product-navigation.blade.php');
+
+        $this->assertStringContainsString('state.draftZone', $sale);
+        $this->assertStringContainsString('state.addresses.length === 1', $sale);
+        $this->assertStringContainsString('state.addresses.length > 1', $sale);
+        $this->assertStringContainsString('confirmZoneChange', $sale);
+        $this->assertStringContainsString('const nextZone = nextAddress?.delivery_zone || null', $sale);
+        $this->assertStringContainsString('state.address ? (state.address.delivery_zone || null)', $sale);
+        $this->assertStringContainsString('state.deliveryFeeEdited = false', $sale);
+        $this->assertStringContainsString('v3-price-zone-select', $navigation);
+        $this->assertStringContainsString('deliveryZones', $navigation);
+    }
+
+    public function test_quantity_modal_exposes_touch_controls_and_price_context(): void
+    {
+        $modal = $this->source('resources/views/sales-v3/partials/quantity-modal.blade.php');
+        $sale = $this->source('public/js/modules/sale-v3.js');
+
+        foreach (['v3-quantity-decrease', 'v3-quantity-increase', 'v3-quantity-unit', 'v3-quantity-price', 'v3-quantity-total'] as $marker) {
+            $this->assertStringContainsString($marker, $modal);
+        }
+
+        $this->assertStringContainsString('syncQuantityPreview', $sale);
+    }
+
     public function test_unit_price_is_inline_editable_without_opening_a_price_popup(): void
     {
         $sale = $this->source('public/js/modules/sale-v3.js');
@@ -69,20 +100,21 @@ class SaleV3BrowserStateContractTest extends TestCase
 
         $this->assertStringContainsString('confirmDefaultCash()', $final);
         $this->assertStringContainsString("$('#final-document-panel')?.classList.remove('d-none')", $final);
-        $this->assertStringContainsString("$('#final-print-documents').disabled = false", $final);
+        $this->assertStringContainsString("$('#final-print-delivery')", $final);
+        $this->assertStringContainsString("$('#final-print-tax')", $final);
+        $this->assertStringNotContainsString('final-print-documents', $final);
         $this->assertStringContainsString('ensurePaymentMethodSummary', $final);
     }
 
-    public function test_payment_summary_shows_the_actual_selling_price_on_the_left(): void
+    public function test_payment_summary_is_compact_and_includes_quantity_unit(): void
     {
         $final = $this->source('public/js/modules/final-pos.js');
-        $css = $this->source('public/css/sale-v3.css');
+        $modal = $this->source('resources/views/sales-v3/partials/final-payment-modal.blade.php');
 
-        $this->assertStringContainsString('<td>${item.qty}</td><td>${money(item.price)}</td>', $final);
-        $this->assertStringNotContainsString(
-            '.final-items-table th:nth-child(3),.final-items-table td:nth-child(3),.final-items-table th:nth-child(5),.final-items-table td:nth-child(5) { display:none; }',
-            $css
-        );
+        $this->assertStringContainsString('<td>${item.qty} ${escapeHtml(item.unitName)}</td><td>${money(item.qty * item.price)}</td>', $final);
+        $this->assertStringContainsString('<th>จำนวน</th>', $modal);
+        $this->assertStringContainsString('<th>รวม</th>', $modal);
+        $this->assertStringNotContainsString('<th>ราคา</th>', $modal);
     }
 
     public function test_fulfillment_buttons_expose_one_truthful_selected_state(): void
@@ -95,6 +127,8 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('setAttribute("aria-pressed"', $sale);
         $this->assertStringContainsString('is-selected', $sale);
         $this->assertStringContainsString('state.deliveryType === "pickup"', $sale);
+        $this->assertStringContainsString('pos-v3-fulfillment-status', $sale);
+        $this->assertStringContainsString('noteStatus?.addEventListener("click"', $sale);
         $this->assertStringNotContainsString(
             'const fulfillmentText = $("#v3-pickup").checked',
             $sale

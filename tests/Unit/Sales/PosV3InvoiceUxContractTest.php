@@ -19,6 +19,19 @@ class PosV3InvoiceUxContractTest extends TestCase
         $this->assertStringContainsString("'delivery_date' => \$validated['delivery_date'] ?? null", $controller);
     }
 
+    public function test_pos_v3_uses_display_dates_while_preserving_iso_request_values(): void
+    {
+        $cart = $this->source('resources/views/sales-v3/partials/cart.blade.php');
+        $date = $this->source('public/js/modules/pos-date.js');
+        $sale = $this->source('public/js/modules/sale-v3.js');
+
+        $this->assertStringContainsString('id="v3-delivery-date-display"', $cart);
+        $this->assertStringContainsString('id="v3-delivery-date" type="hidden"', $cart);
+        $this->assertStringContainsString('formatDisplay', $date);
+        $this->assertStringContainsString('toIso', $date);
+        $this->assertStringContainsString('PosDate?.toIso', $sale);
+    }
+
     public function test_cart_rows_have_delete_only_and_keep_inline_price_editing(): void
     {
         $sale = $this->source('public/js/modules/sale-v3.js');
@@ -35,6 +48,31 @@ class PosV3InvoiceUxContractTest extends TestCase
         $this->assertStringNotContainsString('v3-edit-', $sale);
         $this->assertStringContainsString('input.className = "v3-cart-unit-price"', $sale);
         $this->assertStringNotContainsString('.v3-cart-actions', $css);
+    }
+
+    public function test_payment_summary_is_compact_and_includes_quantity_unit(): void
+    {
+        $modal = $this->source('resources/views/sales-v3/partials/final-payment-modal.blade.php');
+        $final = $this->source('public/js/modules/final-pos.js');
+
+        $this->assertStringContainsString('<th>#</th><th>สินค้า</th><th>จำนวน</th><th>รวม</th>', $modal);
+        $this->assertStringNotContainsString('<th>ราคา</th>', $modal);
+        $this->assertStringContainsString('<td>${item.qty} ${escapeHtml(item.unitName)}</td>', $final);
+        $this->assertStringContainsString('<td>${money(item.qty * item.price)}</td>', $final);
+    }
+
+    public function test_delivery_success_uses_display_copy_only_and_keeps_existing_payment_contract(): void
+    {
+        $modal = $this->source('resources/views/sales-v3/partials/final-payment-modal.blade.php');
+        $final = $this->source('public/js/modules/final-pos.js');
+
+        $this->assertStringContainsString('id="final-print-delivery"', $modal);
+        $this->assertStringContainsString('id="final-print-tax"', $modal);
+        $this->assertStringNotContainsString('final-print-documents', $modal);
+        $this->assertStringNotContainsString('final-print-documents', $final);
+        $this->assertStringContainsString("'ยืนยันการจัดส่ง'", $final);
+        $this->assertStringContainsString("['cash', 'promptpay', 'mixed']", $final);
+        $this->assertStringNotContainsString('ยังไม่ชำระ', $final);
     }
 
     public function test_product_card_refreshes_from_the_same_pricing_context_before_first_render(): void
@@ -128,9 +166,12 @@ class PosV3InvoiceUxContractTest extends TestCase
             $css
         );
         $this->assertStringContainsString(
-            ".paper-a5 .delivery-note {\n    width: 148mm;\n    min-height: 0;\n    padding: 5mm 5mm 4mm;\n    font-size: 12px;\n}",
+            ".paper-a5 .delivery-note {\n    width: 148mm;\n    min-height: 0;\n    padding: 5mm 5mm 4mm;\n    font-size: 13px;\n}",
             $css
         );
+        $this->assertStringContainsString('.paper-a5 .company-name { font-size: 18px; }', $css);
+        $this->assertStringContainsString('.paper-a5 .items-table th { padding: 1.5mm 1mm; font-size: 11px; }', $css);
+        $this->assertStringContainsString('.paper-a5 .items-table td { height: 6mm; padding: 1mm; font-size: 11px; }', $css);
         $this->assertStringContainsString('font-size: 15px;', $css);
         $this->assertStringContainsString('text-overflow: clip;', $css);
         $this->assertStringNotContainsString('text-overflow: ellipsis', $css);

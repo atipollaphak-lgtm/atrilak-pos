@@ -80,6 +80,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/sales-v3', [SaleV3Controller::class, 'index'])
             ->name('sales.v3');
 
+        Route::post('/sales-v3/customers', [CustomerController::class, 'storeFromPos'])
+            ->name('sales.v3.customers.store');
+
         Route::get('/sales-v3/hold-bills', [HoldBillController::class, 'index'])
             ->name('sales.v3.hold-bills.index');
         Route::get('/sales-v3/hold-bills/{holdBill}', [HoldBillController::class, 'show'])

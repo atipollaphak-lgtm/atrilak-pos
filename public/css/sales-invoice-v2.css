@@ -171,7 +171,7 @@ body {
     width: 148mm;
     min-height: 0;
     padding: 5mm 5mm 4mm;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .paper-a5 .delivery-header { gap: 3mm; padding-bottom: 3mm; }
@@ -179,25 +179,25 @@ body {
 .paper-a5 .company-brand { width: 22mm; flex-basis: 22mm; }
 .paper-a5 .delivery-logo { width: 20mm; height: 20mm; }
 .paper-a5 .delivery-logo-placeholder { font-size: 28px; line-height: 20mm; }
-.paper-a5 .company-name { font-size: 16px; }
-.paper-a5 .company-tagline { margin: 1mm 0 1.5mm; font-size: 10px; }
-.paper-a5 .company-line { margin-top: .8mm; font-size: 9px; }
-.paper-a5 .document-block h1 { font-size: 20px; }
-.paper-a5 .document-subtitle { margin: 1mm 0 2mm; font-size: 10px; }
-.paper-a5 .document-meta div { padding: 1.8mm 2mm; font-size: 9px; }
+.paper-a5 .company-name { font-size: 18px; }
+.paper-a5 .company-tagline { margin: 1mm 0 1.5mm; font-size: 11px; }
+.paper-a5 .company-line { margin-top: .8mm; font-size: 10px; }
+.paper-a5 .document-block h1 { font-size: 22px; }
+.paper-a5 .document-subtitle { margin: 1mm 0 2mm; font-size: 11px; }
+.paper-a5 .document-meta div { padding: 1.8mm 2mm; font-size: 10px; }
 .paper-a5 .customer-information { padding: 2.5mm 1mm 2mm; }
-.paper-a5 .customer-line { gap: 2mm; min-height: 5mm; font-size: 9px; }
-.paper-a5 .items-table th { padding: 1.5mm 1mm; font-size: 10px; }
-.paper-a5 .items-table td { height: 6mm; padding: 1mm; font-size: 10px; }
+.paper-a5 .customer-line { gap: 2mm; min-height: 5mm; font-size: 10px; }
+.paper-a5 .items-table th { padding: 1.5mm 1mm; font-size: 11px; }
+.paper-a5 .items-table td { height: 6mm; padding: 1mm; font-size: 11px; }
 .paper-a5 .payment-summary-section { margin-top: 2mm; }
 .paper-a5 .qr-payment { padding: 2.5mm; }
 .paper-a5 .delivery-qr { width: 26mm; height: auto; }
-.paper-a5 .qr-payment strong { margin-top: 1.5mm; font-size: 9px; }
-.paper-a5 .notes-block { min-height: 16mm; padding: 2mm; font-size: 10px; }
-.paper-a5 .summary div { padding: 2mm; font-size: 11px; }
-.paper-a5 .summary .grand-total { font-size: 13px; }
-.paper-a5 .summary .grand-total strong { font-size: 16px; }
-.paper-a5 .delivery-footer { margin-top: 2mm; font-size: 9px; }
+.paper-a5 .qr-payment strong { margin-top: 1.5mm; font-size: 10px; }
+.paper-a5 .notes-block { min-height: 16mm; padding: 2mm; font-size: 11px; }
+.paper-a5 .summary div { padding: 2mm; font-size: 12px; }
+.paper-a5 .summary .grand-total { font-size: 14px; }
+.paper-a5 .summary .grand-total strong { font-size: 18px; }
+.paper-a5 .delivery-footer { margin-top: 2mm; font-size: 10px; }
 
 .paper-a5 .delivery-note[data-document-type="delivery-note"] {
     font-size: 13px;

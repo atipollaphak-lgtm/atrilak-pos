@@ -64,6 +64,17 @@ class CustomerController extends Controller
             ->with('success', 'สร้างลูกค้าและที่อยู่จัดส่งหลักเรียบร้อยแล้ว');
     }
 
+    public function storeFromPos(StoreCustomerRequest $request, CustomerService $service)
+    {
+        $customer = $service->create($request->validated());
+        $customer->load('deliveryAddresses.deliveryZone');
+
+        return response()->json([
+            'success' => true,
+            'customer' => $customer->toArray(),
+        ], 201);
+    }
+
     public function show(Customer $customer)
     {
         $customer->load(['deliveryAddresses.deliveryZone', 'defaultDeliveryAddress.deliveryZone']);

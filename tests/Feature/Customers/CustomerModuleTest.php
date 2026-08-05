@@ -83,6 +83,39 @@ class CustomerModuleTest extends TestCase
         $this->assertSame('Updated Receiver', $address->fresh()->receiver_name);
     }
 
+    public function test_pos_customer_create_returns_the_new_customer_and_primary_address_as_json(): void
+    {
+        $zone = DeliveryZone::create(['name' => 'POS North', 'active' => true]);
+
+        $response = $this->postJson(route('sales.v3.customers.store'), [
+            'name' => 'POS Builder',
+            'phone' => '0800000099',
+            'tax_number' => '0100000000001',
+            'branch_type' => 'สำนักงานใหญ่',
+            'address' => 'POS address',
+            'delivery_zone_id' => $zone->id,
+            'receiver_name' => 'POS Receiver',
+            'use_customer_phone' => true,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('customer.name', 'POS Builder')
+            ->assertJsonPath('customer.address', 'POS address')
+            ->assertJsonPath('customer.delivery_addresses.0.address', 'POS address')
+            ->assertJsonPath('customer.delivery_addresses.0.delivery_zone.id', $zone->id);
+
+        $this->assertSame('POS address', Customer::query()->where('name', 'POS Builder')->firstOrFail()->address);
+    }
+
+    public function test_customer_form_identifies_the_tax_number_field_correctly(): void
+    {
+        $this->get(route('customers.create'))
+            ->assertOk()
+            ->assertSee('เลขประจำตัวผู้เสียภาษี')
+            ->assertDontSee('ชื่อ/ข้อมูลลูกค้าใบกำกับภาษี');
+    }
+
     public function test_customer_list_searches_all_addresses_and_has_one_show_action(): void
     {
         $zone = DeliveryZone::create(['name' => 'North', 'sort_order' => 1, 'active' => true]);

@@ -88,8 +88,12 @@ function createHarness(hold) {
         ["#v3-discount", discount],
         ["#v3-customer-name", new FakeElement()],
         ["#v3-customer-phone", new FakeElement()],
-        ["#final-print-delivery", new FakeElement({ checked: true })],
-        ["#final-print-tax", new FakeElement({ checked: false })],
+        ["#final-payment-status", new FakeElement()],
+        ["#final-payment-title", new FakeElement()],
+        ["#final-payment-subtitle", new FakeElement()],
+        ["#final-print-delivery", new FakeElement()],
+        ["#final-print-tax", new FakeElement()],
+        ["#final-tax-help", new FakeElement()],
         ["#final-payment-close", new FakeElement()],
         ["#final-payment-method-summary", new FakeElement()],
         ["#final-payment-method-label", new FakeElement()],
@@ -107,6 +111,9 @@ function createHarness(hold) {
         deliveryFeeEdited: false,
         discount: 0,
         note: "",
+        deliveryType: "pickup",
+        addresses: [],
+        draftZone: null,
     };
 
     addressSelect.addEventListener("change", () => {
@@ -411,7 +418,8 @@ test("finish resets the next bill and confirmation restores its actions", async 
     harness.elements.get("#final-confirm-payment").classList.add("d-none");
     harness.elements.get("#final-edit-items").classList.add("d-none");
     harness.elements.get("#final-document-panel").classList.remove("d-none");
-    harness.elements.get("#final-print-documents").disabled = false;
+    harness.elements.get("#final-print-delivery").disabled = false;
+    harness.elements.get("#final-print-tax").disabled = false;
     harness.elements.get("#final-finish-payment").disabled = false;
     harness.state.cart = [{
         name: "TEST next product",
@@ -433,7 +441,8 @@ test("finish resets the next bill and confirmation restores its actions", async 
         harness.elements.get("#final-document-panel").classList.contains("d-none"),
         true,
     );
-    assert.equal(harness.elements.get("#final-print-documents").disabled, true);
+    assert.equal(harness.elements.get("#final-print-delivery").disabled, true);
+    assert.equal(harness.elements.get("#final-print-tax").disabled, true);
     assert.equal(harness.elements.get("#final-finish-payment").disabled, true);
     assert.equal(
         harness.elements.get("#final-payment-close").classList.contains("d-none"),
@@ -448,16 +457,80 @@ test("success printing uses the created sale id and configured document route", 
         customer_delivery_address_id: null,
         items: [],
     });
-    harness.elements.get("#final-print-delivery").checked = true;
-    harness.elements.get("#final-print-tax").checked = false;
-
     harness.finalPos.showSuccess({ sale_id: 55, sale_no: "SAL-TEST-55" });
-    await harness.elements.get("#final-print-documents").dispatch("click");
+    await harness.elements.get("#final-print-delivery").dispatch("click");
 
     assert.deepEqual(
         harness.openedUrls,
         ["/sales/55/invoice-v2?document_type=delivery-note"],
     );
+});
+
+test("delivery success uses the delivery copy without changing the payment snapshot", () => {
+    const harness = createHarness({
+        id: 11,
+        customer_id: 12,
+        customer_delivery_address_id: 34,
+        items: [],
+    });
+    harness.state.deliveryType = "delivery";
+    harness.customerSelect.selectedOptions = [{
+        dataset: {
+            name: "TEST delivery customer",
+            phone: "0800000000",
+            taxNumber: "0100000000001",
+            customerAddress: "TEST invoice address",
+            branchType: "สำนักงานใหญ่",
+        },
+    }];
+    harness.state.cart = [{ name: "TEST product", unitName: "piece", qty: 1, price: 100 }];
+    harness.finalPos.openConfirmation();
+    assert.match(harness.elements.get("#final-confirm-payment").innerHTML, /ยืนยันการจัดส่ง/);
+
+    harness.finalPos.showSuccess({
+        sale_id: 56,
+        sale_no: "SAL-TEST-56",
+        payment: {
+            payment_method: "cash",
+            cash_amount: "100.00",
+            promptpay_amount: "0.00",
+            received_amount: "120.00",
+            change_amount: "20.00",
+        },
+    });
+
+    assert.equal(harness.elements.get("#final-payment-status").textContent, "ยืนยันการจัดส่ง");
+    assert.equal(harness.elements.get("#final-payment-title").textContent, "ยืนยันการจัดส่ง");
+    assert.equal(harness.elements.get("#final-payment-subtitle").textContent, "ยืนยันการจัดส่ง");
+    assert.equal(harness.elements.get("#final-payment-method-label").textContent, "วิธีชำระเงิน: เงินสด");
+    assert.equal(harness.elements.get("#final-print-delivery").disabled, false);
+    assert.equal(harness.elements.get("#final-print-tax").disabled, false);
+    assert.doesNotMatch(source, /ยังไม่ชำระ/);
+});
+
+test("tax invoice printing stays disabled when customer tax data is incomplete", () => {
+    const harness = createHarness({
+        id: 12,
+        customer_id: 13,
+        customer_delivery_address_id: 35,
+        items: [],
+    });
+    harness.state.deliveryType = "delivery";
+    harness.customerSelect.selectedOptions = [{
+        dataset: {
+            name: "TEST incomplete tax customer",
+            taxNumber: "0100000000001",
+            customerAddress: "",
+            branchType: "สาขา",
+            branchNumber: "",
+        },
+    }];
+
+    harness.finalPos.showSuccess({ sale_id: 57, sale_no: "SAL-TEST-57" });
+
+    assert.equal(harness.elements.get("#final-print-tax").disabled, true);
+    assert.match(harness.elements.get("#final-tax-help").textContent, /ที่อยู่ใบกำกับภาษี/);
+    assert.match(harness.elements.get("#final-tax-help").textContent, /เลขสาขา/);
 });
 
 test("success modal uses the server payment snapshot for cash, PromptPay, and mixed payments", () => {

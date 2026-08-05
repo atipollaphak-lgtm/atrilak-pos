@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Sales\StoreSaleV3Request;
 use App\Models\Category;
 use App\Models\Customer;
+use App\Models\DeliveryZone;
 use App\Models\Product;
 use App\Models\Technician;
 use App\Services\SaleService;
@@ -15,7 +16,11 @@ class SaleV3Controller extends Controller
 {
     public function index()
     {
-        $customers = Customer::query()->where('active', true)->orderBy('name')->get();
+        $customers = Customer::query()
+            ->where('active', true)
+            ->withCount('deliveryAddresses')
+            ->orderBy('name')
+            ->get();
         $categories = Category::query()->orderBy('name')->get();
         $products = Product::query()
             ->with(['category', 'productUnits.unit', 'productUnits.barcodes', 'productUnits.priceTiers'])
@@ -23,8 +28,13 @@ class SaleV3Controller extends Controller
             ->orderBy('name')
             ->get();
         $technicians = Technician::query()->where('active', true)->orderBy('name')->get();
+        $deliveryZones = DeliveryZone::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
 
-        return view('sales-v3.index', compact('customers', 'categories', 'products', 'technicians'));
+        return view('sales-v3.index', compact('customers', 'categories', 'products', 'technicians', 'deliveryZones'));
     }
 
     public function store(StoreSaleV3Request $request, SaleService $saleService)
