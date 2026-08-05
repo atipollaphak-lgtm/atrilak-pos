@@ -72,6 +72,10 @@
     $deliveryFee = $sale->delivery_fee ?? 0;
     $discount = $sale->discount ?? 0;
     $grandTotal = $subTotal + $deliveryFee - $discount;
+    $receiptFooter = trim((string) ($setting?->receipt_footer ?? ''));
+    $receiptFooter = $receiptFooter !== ''
+        ? $receiptFooter
+        : 'ขอบคุณที่ไว้วางใจ ATRILAK BUILDING SOLUTIONS';
     $minimumRows = ($paper ?? 'a4') === 'a5'
         ? $sale->items->count()
         : ($isTaxInvoice
@@ -172,8 +176,18 @@
                 <img src="{{ asset('storage/' . $setting->qr_image) }}" class="delivery-qr" alt="QR Payment">
                 <strong>สแกนเพื่อชำระเงิน</strong>
             @else
-                <span>ช่องทางการชำระเงิน</span>
+                <span>ยังไม่ได้ตั้งค่า QR Code</span>
             @endif
+        </div>
+        <div class="notes-block">
+            <strong>หมายเหตุ</strong>
+            <div class="notes-content">
+                @if (filled($sale->notes))
+                    {!! nl2br(e($sale->notes)) !!}
+                @else
+                    <span class="notes-empty">-</span>
+                @endif
+            </div>
         </div>
         <div class="summary">
             <div><span>รวมเงิน</span><strong>{{ number_format((float) $subTotal, 2) }}</strong></div>
@@ -183,13 +197,7 @@
         </div>
     </section>
 
-    <section class="receiver-section">
-        <div class="notes-block"><strong>หมายเหตุ</strong><div>{{ $sale->notes ?: ' ' }}</div><div></div><div></div></div>
-        <div class="receiver-block"><strong>ผู้รับสินค้า</strong><div class="signature-line"></div><div>วันที่ ____ / ____ / ______</div></div>
-    </section>
-
     <footer class="delivery-footer">
-        <span>ขอบคุณที่ไว้วางใจเรา</span>
-        <strong>ATRILAK BUILDING SOLUTIONS</strong>
+        <span class="delivery-footer-message">{!! nl2br(e($receiptFooter)) !!}</span>
     </footer>
 </div>

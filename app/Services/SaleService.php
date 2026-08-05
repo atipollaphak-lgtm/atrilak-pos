@@ -146,6 +146,10 @@ class SaleService
                     $holdBill->load([
                         'items' => fn ($query) => $query->orderBy('id'),
                     ]);
+
+                    if (! array_key_exists('delivery_date', $data)) {
+                        $data['delivery_date'] = $holdBill->delivery_date;
+                    }
                 }
 
                 $items = $data['items'] ?? [];
@@ -361,6 +365,7 @@ class SaleService
         );
 
         $saleDate = $data['sale_date'];
+        $deliveryDate = $pickup ? null : ($data['delivery_date'] ?? null);
         $grandTotal = $this->saleValidationService->calculateItemsTotal($items);
         $deliveryType = $data['delivery_type'] ?? 'delivery';
         $discount = $this->saleValidationService->money($data['discount'] ?? 0);
@@ -422,6 +427,7 @@ class SaleService
         $sale->customer_delivery_address_id = $deliveryAddressId;
         $sale->technician_id = $data['technician_id'] ?? null;
         $sale->sale_date = $saleDate;
+        $sale->delivery_date = $deliveryDate;
         $sale->total_amount = $netTotal;
         $sale->delivery_fee = $deliveryFee;
         $sale->delivery_type = $deliveryType;

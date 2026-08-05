@@ -1,3 +1,9 @@
+@php
+    $paper = in_array(request()->query('paper', 'a4'), ['a4', 'a5'], true)
+        ? request()->query('paper', 'a4')
+        : 'a4';
+@endphp
+
 <!DOCTYPE html>
 <html lang="th">
 
@@ -431,12 +437,6 @@
         <button onclick="window.print()">พิมพ์อีกครั้ง</button>
     </div>
 
-    @php
-        $paper = in_array(request()->query('paper', 'a4'), ['a4', 'a5'], true)
-            ? request()->query('paper', 'a4')
-            : 'a4';
-    @endphp
-
     <div class="invoice paper-{{ $paper }}">
 
         @if (in_array(($document['type'] ?? null), ['delivery-note', 'tax-invoice'], true))
@@ -475,8 +475,14 @@
 
 
 
-        <div class="footer-note">
-            ขอบคุณที่ใช้บริการ
+        @php
+            $receiptFooter = trim((string) ($setting?->receipt_footer ?? ''));
+            $receiptFooter = $receiptFooter !== ''
+                ? $receiptFooter
+                : 'ขอบคุณที่ไว้วางใจ ATRILAK BUILDING SOLUTIONS';
+        @endphp
+        <div class="footer-note" style="white-space: pre-line; line-height: 1.4;">
+            {!! nl2br(e($receiptFooter)) !!}
         </div>
 
         @endif

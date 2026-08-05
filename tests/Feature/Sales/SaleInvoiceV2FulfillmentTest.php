@@ -321,12 +321,108 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
             $css
         );
         $this->assertStringContainsString('white-space: normal', $css);
-        $this->assertStringContainsString('font-size: 14px', $css);
-        $this->assertStringContainsString('font-size: 12px', $css);
+        $this->assertStringContainsString('font-size: 15px', $css);
+        $this->assertStringContainsString('font-size: 13px', $css);
         $this->assertStringContainsString(
-            '.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items',
+            '.paper-a5 .items-table td',
             $css
         );
+    }
+
+    public function test_invoice_stress_counts_keep_one_ten_and_thirty_items_in_the_same_table(): void
+    {
+        $css = file_get_contents(base_path('public/css/sales-invoice-v2.css'));
+
+        $this->assertNotFalse($css);
+
+        foreach ([1, 10, 30] as $itemCount) {
+            $html = $this->renderStressInvoice($itemCount);
+
+            $this->assertSame(
+                1 + max($itemCount, 15),
+                substr_count($html, '<tr>'),
+                "Unexpected row count for {$itemCount} items."
+            );
+            $this->assertStringContainsString(
+                "Long item {$itemCount} that wraps across multiple lines",
+                $html
+            );
+        }
+
+        $this->assertStringContainsString('text-overflow: clip', $css);
+        $this->assertStringNotContainsString('text-overflow: ellipsis', $css);
+    }
+
+    public function test_invoice_footer_handles_qr_states_long_notes_and_multiline_receipt_footer(): void
+    {
+        $notes = implode("\n", array_map(
+            fn (int $line): string => "Note line {$line} with Thai-English content",
+            range(1, 10)
+        ));
+        $footerCases = [
+            'ขอบคุณที่ใช้บริการ',
+            "ขอบคุณที่ใช้บริการ\nThank you for your purchase\nตรวจสอบสินค้าก่อนออกจากร้าน",
+            implode("\n", [
+                'ขอบคุณที่ใช้บริการ',
+                'Thank you for your purchase',
+                'ตรวจสอบสินค้าก่อนออกจากร้าน',
+                'Footer line 4',
+                'Footer line 5',
+            ]),
+            implode("\n", array_map(
+                fn (int $line): string => "ข้อความท้ายบิลยาวมากสำหรับการทดสอบ {$line} ".str_repeat('Long footer text ', 8),
+                range(1, 5)
+            )),
+        ];
+
+        $withoutQr = $this->renderStressInvoice(1, 'a5', new Setting([
+            'receipt_footer' => $footerCases[1],
+        ]), $notes);
+        $withQr = $this->renderStressInvoice(1, 'a5', new Setting([
+            'qr_image' => 'settings/qr.png',
+            'receipt_footer' => $footerCases[1],
+        ]), $notes);
+
+        $this->assertStringContainsString('class="notes-block"', $withoutQr);
+        $this->assertSame(10, substr_count($withoutQr, 'Note line '));
+        $this->assertStringContainsString('ยังไม่ได้ตั้งค่า QR Code', $withoutQr);
+        $this->assertStringNotContainsString('class="delivery-qr"', $withoutQr);
+        $this->assertStringContainsString('class="delivery-qr"', $withQr);
+        $this->assertStringContainsString('Thank you for your purchase', $withQr);
+        $this->assertStringContainsString('ตรวจสอบสินค้าก่อนออกจากร้าน', $withQr);
+        $this->assertStringNotContainsString('class="receiver-section"', $withQr);
+
+        foreach ($footerCases as $footer) {
+            $html = $this->renderStressInvoice(1, 'a5', new Setting([
+                'receipt_footer' => $footer,
+            ]));
+
+            $this->assertStringContainsString('class="delivery-footer-message"', $html);
+            $this->assertStringContainsString(
+                e(explode("\n", $footer)[0]),
+                $html
+            );
+        }
+    }
+
+    public function test_a5_invoice_keeps_summary_and_footer_in_the_shared_non_signature_layout(): void
+    {
+        $html = $this->renderStressInvoice(10, 'a5', new Setting([
+            'receipt_footer' => implode("\n", [
+                'Footer line 1',
+                'Footer line 2',
+                'Footer line 3',
+                'Footer line 4',
+                'Footer line 5',
+            ]),
+        ]));
+
+        $this->assertStringContainsString('class="invoice paper-a5"', $html);
+        $this->assertStringContainsString('class="payment-summary-section"', $html);
+        $this->assertStringContainsString('class="grand-total"', $html);
+        $this->assertStringContainsString('class="delivery-footer"', $html);
+        $this->assertStringNotContainsString('class="signature-line"', $html);
+        $this->assertStringNotContainsString('class="receiver-section"', $html);
     }
 
     private function renderInvoice(?string $deliveryType): string
@@ -345,6 +441,45 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
         return view('sales.invoice_v2', [
             'sale' => $sale,
             'setting' => null,
+            'document' => app(CommercialDocumentService::class)
+                ->buildSaleDocument($sale, 'delivery-note'),
+        ])->render();
+    }
+
+    private function renderStressInvoice(
+        int $itemCount,
+        string $paper = 'a4',
+        ?Setting $setting = null,
+        ?string $notes = null
+    ): string {
+        $sale = Sale::make([
+            'sale_no' => "SAL-STRESS-{$itemCount}",
+            'sale_date' => '2026-07-26',
+            'delivery_fee' => '25.00',
+            'discount' => '10.00',
+            'notes' => $notes,
+            'total_amount' => (string) ($itemCount * 12 + 15),
+        ]);
+        $sale->setRelation('customer', null);
+        $sale->setRelation('items', collect(range(1, $itemCount))->map(
+            fn (int $index): SaleItem => SaleItem::make([
+                'qty' => (string) $index,
+                'selling_price' => '12.00',
+                'total' => (string) ($index * 12),
+                'product_name_snapshot' => $index === 1
+                    ? "Long item {$itemCount} that wraps across multiple lines ".str_repeat('ชื่อสินค้ายาว ', 3)
+                    : "Stress item {$index}",
+                'unit_name_snapshot' => 'piece',
+            ])
+        ));
+
+        $this->app->instance('request', Request::create(
+            "/sales/1/invoice-v2?paper={$paper}"
+        ));
+
+        return view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => $setting,
             'document' => app(CommercialDocumentService::class)
                 ->buildSaleDocument($sale, 'delivery-note'),
         ])->render();

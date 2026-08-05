@@ -47,7 +47,7 @@ class SaleV3BrowserStateContractTest extends TestCase
             $sale
         );
         $this->assertStringContainsString('if (item.priceWasEdited) item.originalPrice', $sale);
-        $this->assertStringContainsString('restore.dataset.action = "restore"', $sale);
+        $this->assertStringNotContainsString('restore.dataset.action = "restore"', $sale);
     }
 
     public function test_unit_price_is_inline_editable_without_opening_a_price_popup(): void
@@ -59,7 +59,7 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('function commitUnitPrice', $sale);
         $this->assertStringContainsString('event.target.matches(".v3-cart-unit-price")', $sale);
         $this->assertStringContainsString('priceCell.value = Number(item.price).toFixed(2)', $sale);
-        $this->assertStringContainsString('restore.dataset.action = "restore"', $sale);
+        $this->assertStringNotContainsString('restore.dataset.action = "restore"', $sale);
         $this->assertStringNotContainsString('action === "edit"', $sale);
     }
 

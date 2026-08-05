@@ -21,6 +21,7 @@ class UpdateSettingRequest extends FormRequest
             'tax_number' => ['nullable', 'string', 'max:30'],
             'branch_type' => ['required', 'string', Rule::in(['head_office', 'branch'])],
             'branch_number' => ['nullable', 'string', 'max:30'],
+            'receipt_footer' => ['nullable', 'string', 'max:2000'],
             'logo_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'qr_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ];

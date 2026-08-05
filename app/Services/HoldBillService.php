@@ -39,6 +39,9 @@ class HoldBillService
                 'delivery_zone_rounding_increment_snapshot' => $data['delivery_zone_rounding_increment_snapshot'] ?? null,
                 'delivery_zone_minimum_profit_snapshot' => $data['delivery_zone_minimum_profit_snapshot'] ?? null,
                 'sale_date' => $data['sale_date'],
+                'delivery_date' => ($data['delivery_type'] ?? 'pickup') === 'pickup'
+                    ? null
+                    : ($data['delivery_date'] ?? null),
                 'delivery_type' => $data['delivery_type'],
                 'discount' => $data['discount'] ?? 0,
                 'delivery_fee' => $data['delivery_fee'] ?? 0,

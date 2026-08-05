@@ -78,12 +78,12 @@ function createHarness(hold) {
     holdList.resumeButton = resumeButton;
     const customerSelect = new FakeElement();
     const addressSelect = new FakeElement();
-    const saleDate = new FakeElement({ value: "2026-07-30" });
+    const deliveryDate = new FakeElement({ value: "2026-07-30" });
     const pickup = new FakeElement({ checked: false });
     const discount = new FakeElement({ value: "0.00" });
     const elements = new Map([
         ["#v3-hold-list", holdList],
-        ["#v3-sale-date", saleDate],
+        ["#v3-delivery-date", deliveryDate],
         ["#v3-pickup", pickup],
         ["#v3-discount", discount],
         ["#v3-customer-name", new FakeElement()],
@@ -164,6 +164,7 @@ function createHarness(hold) {
                 holdStoreUrl: "/holds",
                 holdUrlTemplate: "/holds/__HOLD__",
                 documentUrlTemplate: "/sales/__SALE__/invoice-v2",
+                saleDate: "2026-07-30",
             },
         },
         customerSelect,
@@ -192,7 +193,7 @@ function createHarness(hold) {
         pickup,
         requests,
         resumeButton,
-        saleDate,
+        deliveryDate,
         state,
     };
 }
@@ -240,7 +241,7 @@ test("resume restores the complete hold context without consuming it before paym
     assert.equal(harness.addressLoads, 1);
     assert.equal(harness.customerSelect.value, "12");
     assert.equal(harness.addressSelect.value, "34");
-    assert.equal(harness.saleDate.value, "2026-07-29");
+    assert.equal(harness.deliveryDate.value, "2026-07-30");
     assert.equal(harness.pickup.checked, true);
     assert.equal(harness.state.note, "TEST hold note");
     assert.equal(harness.state.discount, 10);
@@ -506,7 +507,7 @@ test("success modal uses the server payment snapshot for cash, PromptPay, and mi
     }
 });
 
-test("success payment snapshot stays visible after the sale form is reset", async () => {
+test("starting the next bill clears the previous payment snapshot", async () => {
     const harness = createHarness({
         id: 21,
         customer_id: null,
@@ -525,11 +526,11 @@ test("success payment snapshot stays visible after the sale form is reset", asyn
             change_amount: "0.00",
         },
     });
-    const labelBeforeReset = harness.elements.get("#final-payment-method-label").textContent;
-    const amountsBeforeReset = harness.elements.get("#final-payment-amounts").textContent;
-
     await harness.elements.get("#final-finish-payment").dispatch("click");
 
-    assert.equal(harness.elements.get("#final-payment-method-label").textContent, labelBeforeReset);
-    assert.equal(harness.elements.get("#final-payment-amounts").textContent, amountsBeforeReset);
+    assert.equal(
+        harness.elements.get("#final-payment-method-label").textContent,
+        "วิธีชำระเงิน: ยังไม่ได้ยืนยัน",
+    );
+    assert.equal(harness.elements.get("#final-payment-amounts").textContent, "");
 });

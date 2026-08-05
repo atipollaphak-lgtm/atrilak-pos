@@ -26,6 +26,7 @@ class StoreHoldBillRequest extends FormRequest
             'delivery_zone_rounding_increment_snapshot' => ['nullable', 'numeric', 'min:0'],
             'delivery_zone_minimum_profit_snapshot' => ['nullable', 'numeric', 'min:0'],
             'sale_date' => ['required', 'date_format:Y-m-d'],
+            'delivery_date' => ['nullable', 'date_format:Y-m-d'],
             'delivery_type' => ['required', 'in:delivery,pickup'],
             'discount' => ['nullable', 'numeric', 'min:0'],
             'delivery_fee' => ['nullable', 'numeric', 'min:0'],

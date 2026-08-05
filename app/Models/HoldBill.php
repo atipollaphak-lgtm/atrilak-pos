@@ -19,6 +19,7 @@ class HoldBill extends Model
         'delivery_zone_rounding_increment_snapshot',
         'delivery_zone_minimum_profit_snapshot',
         'sale_date',
+        'delivery_date',
         'delivery_type',
         'discount',
         'delivery_fee',
@@ -30,6 +31,7 @@ class HoldBill extends Model
     {
         return [
             'sale_date' => 'date:Y-m-d',
+            'delivery_date' => 'date:Y-m-d',
             'discount' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',

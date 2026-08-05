@@ -79,6 +79,18 @@
         value="{{ $setting->branch_number }}">
 </div>
 
+<div class="form-group">
+    <label for="receipt_footer">ข้อความท้ายบิล</label>
+    <textarea
+        id="receipt_footer"
+        name="receipt_footer"
+        class="form-control"
+        rows="3"
+        maxlength="2000"
+        placeholder="หากเว้นว่าง ระบบจะใช้ข้อความเริ่มต้น">{{ $setting->receipt_footer }}</textarea>
+    <small class="form-text text-muted">รองรับหลายบรรทัด และใช้กับใบส่งของ/ใบกำกับภาษีทุกขนาด</small>
+</div>
+
                 <div class="form-group">
                     <label>Logo</label>
                     @if($setting->logo_image)

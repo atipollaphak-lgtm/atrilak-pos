@@ -64,6 +64,23 @@ class SettingUpdateTest extends TestCase
         Storage::disk('public')->assertExists('settings/'.$qr->hashName());
     }
 
+    public function test_owner_can_save_a_multiline_receipt_footer(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+
+        $this->actingAs($owner)
+            ->post(route('settings.update'), [
+                'branch_type' => 'head_office',
+                'receipt_footer' => "ขอบคุณที่ใช้บริการ\nกรุณาตรวจสอบสินค้าก่อนออกจากร้าน",
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('settings', [
+            'receipt_footer' => "ขอบคุณที่ใช้บริการ\nกรุณาตรวจสอบสินค้าก่อนออกจากร้าน",
+        ]);
+    }
+
     public function test_replacing_logo_removes_only_the_previous_logo_file(): void
     {
         Storage::fake('public');

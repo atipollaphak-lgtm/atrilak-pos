@@ -20,6 +20,7 @@ class Sale extends Model
         'customer_delivery_address_id',
         'technician_id',
         'sale_date',
+        'delivery_date',
         'total_amount',
         'delivery_fee',
         'delivery_zone_id',
@@ -64,6 +65,7 @@ class Sale extends Model
         return [
             'revision' => 'integer',
             'voided_at' => 'datetime',
+            'delivery_date' => 'date:Y-m-d',
             'cash_amount' => 'decimal:2',
             'promptpay_amount' => 'decimal:2',
             'received_amount' => 'decimal:2',

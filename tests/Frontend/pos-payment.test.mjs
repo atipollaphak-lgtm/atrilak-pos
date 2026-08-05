@@ -271,6 +271,27 @@ test("payment modal resets stored payment when the edited total changed", () => 
     assert.equal(harness.elements["payment-change"].textContent, "0.00");
 });
 
+test("new bill can explicitly reset the payment state before the next confirmation", () => {
+    const harness = controllerHarness(async () => {});
+
+    harness.controller.open();
+    harness.elements["payment-method"].value = "mixed";
+    harness.elements["payment-method"].dispatch("change");
+    harness.elements["payment-mixed-cash"].value = "40.00";
+    harness.elements["payment-received"].value = "50.00";
+    harness.elements["payment-received"].dispatch("input");
+    harness.setTotal("120.00");
+
+    harness.controller.reset();
+
+    assert.equal(harness.elements["payment-total"].textContent, "120.00");
+    assert.equal(harness.elements["payment-method"].value, "cash");
+    assert.equal(harness.elements["payment-cash-amount"].value, "120.00");
+    assert.equal(harness.elements["payment-received"].value, "120.00");
+    assert.equal(harness.elements["payment-promptpay-amount"].value, "0.00");
+    assert.equal(harness.elements["payment-change"].textContent, "0.00");
+});
+
 test("mixed modal preview and confirm use decimal-safe derived values", async () => {
     const confirmations = [];
     const harness = controllerHarness(async payment => { confirmations.push(payment); });

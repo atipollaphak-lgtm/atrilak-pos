@@ -333,7 +333,11 @@
             }
         });
 
-        return Object.freeze({ open, confirmDefaultCash });
+        function resetForNewSale() {
+            reset(canonicalTotal());
+        }
+
+        return Object.freeze({ open, reset: resetForNewSale, confirmDefaultCash });
     }
 
     global.PosPayment = Object.freeze({

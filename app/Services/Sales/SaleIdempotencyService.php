@@ -16,6 +16,7 @@ class SaleIdempotencyService
             'customer_delivery_address_id' => $this->normalizeId($data['customer_delivery_address_id'] ?? null),
             'technician_id' => $this->normalizeId($data['technician_id'] ?? null),
             'sale_date' => (string) $data['sale_date'],
+            'delivery_date' => $data['delivery_date'] ?? null,
             'delivery_type' => (string) ($data['delivery_type'] ?? 'delivery'),
             'discount' => $this->normalizeDecimal($data['discount'] ?? 0),
             'payment_method' => (string) ($data['payment_method'] ?? ''),

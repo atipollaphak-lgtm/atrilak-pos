@@ -87,7 +87,7 @@ class SalePaymentDisplayTest extends TestCase
         $this->assertStringContainsString('class="delivery-note"', $legacyTaxInvoice);
     }
 
-    public function test_delivery_note_uses_minimal_print_regions_and_preserves_sale_values(): void
+    public function test_delivery_note_uses_the_redesigned_footer_and_preserves_sale_values(): void
     {
         $sale = $this->sale('cash', '100.00', '0.00', '100.00', '0.00');
         $html = view('sales.invoice_v2', [
@@ -98,7 +98,13 @@ class SalePaymentDisplayTest extends TestCase
         ])->render();
 
         $this->assertStringContainsString('class="delivery-note"', $html);
-        $this->assertStringContainsString('class="receiver-section"', $html);
+        $this->assertStringContainsString('class="payment-summary-section"', $html);
+        $this->assertStringContainsString('class="qr-payment"', $html);
+        $this->assertStringContainsString('class="notes-block"', $html);
+        $this->assertStringContainsString('class="summary"', $html);
+        $this->assertStringContainsString('class="delivery-footer"', $html);
+        $this->assertStringNotContainsString('class="receiver-section"', $html);
+        $this->assertStringNotContainsString('class="signature-line"', $html);
         $this->assertStringContainsString('class="items-table delivery-note-items"', $html);
         $this->assertSame(5, preg_match_all('/<th\b/', $html));
         $this->assertStringContainsString($sale->sale_no, $html);

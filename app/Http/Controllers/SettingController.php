@@ -34,6 +34,7 @@ class SettingController extends Controller
             'tax_number',
             'branch_type',
             'branch_number',
+            'receipt_footer',
         ]);
 
         if ($request->hasFile('logo_image')) {

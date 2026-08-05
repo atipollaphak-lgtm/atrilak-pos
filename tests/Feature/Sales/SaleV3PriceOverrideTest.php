@@ -15,6 +15,7 @@ use App\Services\CommercialDocumentService;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -70,6 +71,61 @@ class SaleV3PriceOverrideTest extends TestCase
         $this->assertSame('100.00', $item->selling_price);
         $this->assertNull($item->original_price);
         $this->assertFalse($item->price_override_flag);
+    }
+
+    public function test_v3_card_cart_and_backend_keep_the_rounded_system_price_in_sync(): void
+    {
+        $product = $this->product('Rounded V3 parity product');
+        $product->update([
+            'selling_price' => '252.00',
+            'rounding_unit' => '5.00',
+            'rounding_direction' => 'up',
+        ]);
+
+        $this->postJson(route('sales.v3.store'), $this->payload($product, '255.00', false))
+            ->assertOk();
+
+        $item = Sale::query()->sole()->items()->sole();
+
+        $this->assertSame('255.00', $item->selling_price);
+        $this->assertNull($item->original_price);
+        $this->assertFalse($item->price_override_flag);
+    }
+
+    public function test_v3_uses_payment_date_for_sale_date_and_keeps_delivery_date_separate(): void
+    {
+        Carbon::setTestNow('2026-08-05 10:00:00');
+
+        try {
+            $product = $this->product('Separate V3 dates product');
+            $customer = Customer::query()->create(['name' => 'Separate dates customer']);
+            $zone = DeliveryZone::query()->create([
+                'name' => 'Separate dates zone',
+                'price_markup_percent' => '0.00',
+                'minimum_profit' => '0.00',
+                'rounding_increment' => '0.25',
+                'active' => true,
+            ]);
+            $address = CustomerDeliveryAddress::query()->create([
+                'customer_id' => $customer->id,
+                'delivery_zone_id' => $zone->id,
+                'name' => 'Separate dates address',
+            ]);
+            $payload = $this->payload($product, '100.00', false);
+            $payload['sale_date'] = '2020-01-01';
+            $payload['delivery_date'] = '2026-08-12';
+            $payload['delivery_type'] = 'delivery';
+            $payload['customer_id'] = $customer->id;
+            $payload['customer_delivery_address_id'] = $address->id;
+
+            $this->postJson(route('sales.v3.store'), $payload)->assertOk();
+
+            $sale = Sale::query()->sole();
+            $this->assertSame('2026-08-05', (string) $sale->sale_date);
+            $this->assertSame('2026-08-12', $sale->delivery_date->format('Y-m-d'));
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_v3_sale_with_price_edit_keeps_sale_price_and_snapshots_normal_price(): void

@@ -115,6 +115,7 @@ trait CreatesSaleTransactionTestSchema
             $table->decimal('delivery_zone_minimum_profit_snapshot', 12, 2)->nullable();
             $table->foreignId('technician_id')->nullable()->constrained()->nullOnDelete();
             $table->date('sale_date');
+            $table->date('delivery_date')->nullable();
             $table->decimal('total_amount', 15, 2)->default(0);
             $table->decimal('delivery_fee', 12, 2)->default(0);
             $table->string('delivery_type')->default('delivery');

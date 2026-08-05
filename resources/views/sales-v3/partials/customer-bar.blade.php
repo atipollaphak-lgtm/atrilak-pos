@@ -2,8 +2,8 @@
     <div class="card-body pos-v3-customer-panel">
         <div class="pos-v3-avatar"><i class="fas fa-user"></i></div>
         <div class="flex-grow-1">
-            <h4 id="v3-customer-name" class="mb-1">ลูกค้ายังไม่ได้เลือก</h4>
-            <div id="v3-customer-phone" class="pos-v3-customer-line"><i class="fas fa-phone"></i> กรุณาเลือกลูกค้า</div>
+            <h4 id="v3-customer-name" class="mb-1">ลูกค้าทั่วไป</h4>
+            <div id="v3-customer-phone" class="pos-v3-customer-line"><i class="fas fa-phone"></i> ไม่ระบุข้อมูลลูกค้า</div>
             <div id="v3-customer-address" class="pos-v3-customer-line"><i class="fas fa-map-marker-alt"></i> เลือกที่อยู่จัดส่งเพื่อเริ่มคำนวณโซน</div>
         </div>
         <div class="pos-v3-customer-actions">

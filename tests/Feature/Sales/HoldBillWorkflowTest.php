@@ -28,6 +28,7 @@ class HoldBillWorkflowTest extends TestCase
             'customer_id' => $customer->id,
             'customer_delivery_address_id' => $address->id,
             'sale_date' => '2026-07-29',
+            'delivery_date' => '2026-08-12',
             'delivery_type' => 'delivery',
             'discount' => '10.00',
             'delivery_fee' => '50.00',
@@ -50,6 +51,7 @@ class HoldBillWorkflowTest extends TestCase
             'customer_id' => $customer->id,
             'customer_delivery_address_id' => $address->id,
             'total_amount' => '240.00',
+            'delivery_date' => '2026-08-12',
         ]);
         $this->assertDatabaseHas('hold_bill_items', [
             'product_id' => $product->id,
