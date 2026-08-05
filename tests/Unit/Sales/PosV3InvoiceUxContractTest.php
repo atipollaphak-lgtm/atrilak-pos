@@ -67,6 +67,7 @@ class PosV3InvoiceUxContractTest extends TestCase
     public function test_invoice_documents_use_the_shared_clean_table_and_three_column_footer(): void
     {
         $view = $this->source('resources/views/sales/invoice_v2/delivery-note.blade.php');
+        $invoice = $this->source('resources/views/sales/invoice_v2.blade.php');
         $css = $this->source('public/css/sales-invoice-v2.css');
         $settings = $this->source('resources/views/settings/index.blade.php');
 
@@ -75,6 +76,10 @@ class PosV3InvoiceUxContractTest extends TestCase
         $this->assertStringContainsString('notes-block', $view);
         $this->assertStringContainsString('summary', $view);
         $this->assertStringContainsString('delivery-footer-message', $view);
+        $this->assertStringContainsString('qr-empty', $view);
+        $this->assertStringContainsString('notes-empty', $view);
+        $this->assertStringNotContainsString('ATRILAK BUILDING SOLUTIONS', $view);
+        $this->assertStringNotContainsString('ATRILAK BUILDING SOLUTIONS', $invoice);
         $this->assertStringContainsString('$minimumRows', $view);
         $this->assertStringNotContainsString('receiver-section', $view);
         $this->assertStringNotContainsString('ผู้รับสินค้า', $view);
@@ -97,10 +102,35 @@ class PosV3InvoiceUxContractTest extends TestCase
         $this->assertStringContainsString('width: 32mm;', $css);
         $this->assertStringContainsString('min-height: 20mm;', $css);
         $this->assertStringContainsString('display: table-cell;', $css);
-        $this->assertStringContainsString('width: 28%;', $css);
-        $this->assertStringContainsString('width: 42%;', $css);
-        $this->assertStringContainsString('width: 30%;', $css);
-        $this->assertStringContainsString('font-size: 13px;', $css);
+        $this->assertStringContainsString(
+            '.qr-payment { display: table-cell; box-sizing: border-box; width: 20%;',
+            $css
+        );
+        $this->assertStringContainsString(
+            '.notes-block { display: table-cell; width: 35%;',
+            $css
+        );
+        $this->assertStringContainsString(
+            '.summary { display: table-cell; width: 45%;',
+            $css
+        );
+        $this->assertStringContainsString(
+            '.summary div strong { text-align: right; white-space: nowrap; }',
+            $css
+        );
+        $this->assertStringContainsString(
+            '.qr-empty { display: block; color: var(--delivery-muted);',
+            $css
+        );
+        $this->assertStringContainsString('.notes-empty { color: #9ca3af; }', $css);
+        $this->assertStringContainsString(
+            "font-size: 14px;\n    background: #f3f4f6;",
+            $css
+        );
+        $this->assertStringContainsString(
+            ".paper-a5 .delivery-note {\n    width: 148mm;\n    min-height: 0;\n    padding: 5mm 5mm 4mm;\n    font-size: 12px;\n}",
+            $css
+        );
         $this->assertStringContainsString('font-size: 15px;', $css);
         $this->assertStringContainsString('text-overflow: clip;', $css);
         $this->assertStringNotContainsString('text-overflow: ellipsis', $css);
@@ -119,8 +149,11 @@ class PosV3InvoiceUxContractTest extends TestCase
         $this->assertStringContainsString('padding-bottom: 3mm;', $css);
         $this->assertStringContainsString('padding: 2.5mm 4mm;', $css);
         $this->assertStringContainsString('line-height: 1.35;', $css);
-        $this->assertStringContainsString('margin-top: 1mm;', $css);
-        $this->assertStringContainsString('.paper-a5 .delivery-qr { width: 26mm; height: 26mm; }', $css);
+        $this->assertStringContainsString(
+            '.delivery-footer { display: flex; flex-direction: column; align-items: center; gap: 1mm; margin-top: 2mm;',
+            $css
+        );
+        $this->assertStringContainsString('.paper-a5 .delivery-qr { width: 26mm; height: auto; }', $css);
         $this->assertStringContainsString('.paper-a5 .notes-block { min-height: 16mm;', $css);
     }
 
@@ -132,7 +165,7 @@ class PosV3InvoiceUxContractTest extends TestCase
         $this->assertStringContainsString('height: auto;', $css);
         $this->assertStringContainsString('.delivery-note[data-document-type="tax-invoice"] .items-table td', $css);
         $this->assertStringContainsString('width: 32mm;', $css);
-        $this->assertStringContainsString('.paper-a5 .delivery-qr { width: 26mm; height: 26mm; }', $css);
+        $this->assertStringContainsString('.paper-a5 .delivery-qr { width: 26mm; height: auto; }', $css);
         $this->assertStringContainsString('padding: 2.5mm 4mm;', $css);
         $this->assertStringContainsString('line-height: 1.35;', $css);
         $this->assertStringContainsString('$minimumRows', $view);

@@ -64,8 +64,8 @@
     );
     $isTaxInvoice = ($document['type'] ?? null) === 'tax-invoice';
     $deliveryNoteColumnWidths = $isTaxInvoice
-        ? [8, 42, 18, 16, 16]
-        : [6, 54, 12, 13, 15];
+        ? [8, 46, 15, 15, 16]
+        : [6, 58, 10, 11, 15];
     $showTaxInformation = $isTaxInvoice
         && filled($customerTaxNumber);
     $subTotal = $sale->items->sum('total');
@@ -176,7 +176,7 @@
                 <img src="{{ asset('storage/' . $setting->qr_image) }}" class="delivery-qr" alt="QR Payment">
                 <strong>สแกนเพื่อชำระเงิน</strong>
             @else
-                <span>ช่องทางการชำระเงิน</span>
+                <span class="qr-empty">ยังไม่ได้ตั้งค่า QR Code</span>
             @endif
         </div>
         <div class="notes-block">
@@ -185,12 +185,12 @@
                 @if (filled($sale->notes))
                     {!! nl2br(e($sale->notes)) !!}
                 @else
-                    &nbsp;
+                    <span class="notes-empty">- ไม่มีหมายเหตุ -</span>
                 @endif
             </div>
         </div>
         <div class="summary">
-            <div><span>รวมเงิน</span><strong>{{ number_format((float) $subTotal, 2) }}</strong></div>
+            <div><span>ยอดรวมสินค้า</span><strong>{{ number_format((float) $subTotal, 2) }}</strong></div>
             <div><span>ส่วนลด</span><strong>-{{ number_format((float) $discount, 2) }}</strong></div>
             <div><span>ค่าจัดส่ง</span><strong>{{ number_format((float) $deliveryFee, 2) }}</strong></div>
             <div class="grand-total"><span>ยอดรวมสุทธิ</span><strong>{{ number_format((float) $grandTotal, 2) }}</strong></div>
@@ -199,6 +199,5 @@
 
     <footer class="delivery-footer">
         <span class="delivery-footer-message">{!! nl2br(e($receiptFooter)) !!}</span>
-        <strong>ATRILAK BUILDING SOLUTIONS</strong>
     </footer>
 </div>

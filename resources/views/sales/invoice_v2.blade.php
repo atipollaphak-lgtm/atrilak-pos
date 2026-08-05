@@ -477,13 +477,12 @@
 
         @php
             $receiptFooter = trim((string) ($setting?->receipt_footer ?? ''));
-            $receiptFooter = $receiptFooter !== ''
-                ? $receiptFooter
-                : 'ขอบคุณที่ไว้วางใจ ATRILAK BUILDING SOLUTIONS';
         @endphp
-        <div class="footer-note" style="white-space: pre-line; line-height: 1.4;">
-            {!! nl2br(e($receiptFooter)) !!}
-        </div>
+        @if ($receiptFooter !== '')
+            <div class="footer-note" style="white-space: pre-line; line-height: 1.4;">
+                {!! nl2br(e($receiptFooter)) !!}
+            </div>
+        @endif
 
         @endif
 

@@ -16,7 +16,7 @@ body {
     margin: 0;
     color: var(--delivery-primary);
     font-family: "Sarabun", "Noto Sans Thai", Arial, sans-serif;
-    font-size: 13px;
+    font-size: 14px;
     background: #f3f4f6;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -82,8 +82,8 @@ body {
 .items-table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid var(--delivery-border); border-radius: 2mm; table-layout: fixed; }
 .items-table thead { display: table-header-group; }
 .items-table tr { break-inside: avoid; page-break-inside: avoid; }
-.items-table th { padding: 2mm 2mm; color: #fff; background: var(--delivery-primary); font-size: 12px; }
-.items-table td { height: 6mm; padding: 1mm 2mm; border-top: 1px solid var(--delivery-light-border); border-right: 1px solid var(--delivery-light-border); vertical-align: middle; font-size: 12px; }
+.items-table th { padding: 2mm 2mm; color: #fff; background: var(--delivery-primary); font-size: 13px; }
+.items-table td { height: 6mm; padding: 1mm 2mm; border-top: 1px solid var(--delivery-light-border); border-right: 1px solid var(--delivery-light-border); vertical-align: middle; font-size: 13px; }
 .items-table th + th { border-left: 1px solid #4b5563; }
 .items-table td:last-child, .items-table th:last-child { border-right: 0; }
 .item-name { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: break-word; }
@@ -97,7 +97,7 @@ body {
 }
 .delivery-note[data-document-type="delivery-note"] .delivery-note-items th,
 .delivery-note[data-document-type="delivery-note"] .delivery-note-items td {
-    font-size: 14px;
+    font-size: 15px;
 }
 .delivery-note[data-document-type="delivery-note"] .delivery-note-items td:nth-child(3),
 .delivery-note[data-document-type="delivery-note"] .delivery-note-items td:nth-child(4),
@@ -107,34 +107,33 @@ body {
 }
 .delivery-note[data-document-type="delivery-note"] .delivery-qr {
     width: 32mm;
-    height: 32mm;
+    height: auto;
 }
 .delivery-note[data-document-type="delivery-note"] .qr-payment strong {
-    font-size: 12px;
-}
-.delivery-note[data-document-type="delivery-note"] .delivery-footer strong {
     font-size: 12px;
 }
 .text-center { text-align: center; }
 .text-end { text-align: right; white-space: nowrap; }
 
-/* The Production footer proportions remain unchanged; notes are the added middle column. */
+/* Production footer proportions: QR / notes / summary. */
 .payment-summary-section { display: table; width: 100%; table-layout: fixed; margin-top: 2mm; border: 1px solid var(--delivery-border); border-radius: 2mm; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
-.qr-payment { display: table-cell; box-sizing: border-box; width: 28%; padding: 3mm; border-right: 1px solid var(--delivery-border); text-align: center; vertical-align: middle; }
-.delivery-qr { display: block; width: 32mm; height: 32mm; margin: 0 auto; object-fit: contain; }
+.qr-payment { display: table-cell; box-sizing: border-box; width: 20%; padding: 3mm; border-right: 1px solid var(--delivery-border); text-align: center; vertical-align: middle; }
+.delivery-qr { display: block; width: 32mm; max-width: 100%; height: auto; margin: 0 auto; object-fit: contain; }
 .qr-payment strong { display: block; margin-top: 2mm; font-size: 10px; line-height: 1.2; white-space: nowrap; }
-.notes-block { display: table-cell; width: 42%; min-height: 20mm; padding: 2.5mm 4mm; border-right: 1px solid var(--delivery-border); vertical-align: top; overflow-wrap: anywhere; }
+.qr-empty { display: block; color: var(--delivery-muted); line-height: 1.3; }
+.notes-block { display: table-cell; width: 35%; min-height: 20mm; padding: 2.5mm 4mm; border-right: 1px solid var(--delivery-border); vertical-align: top; overflow-wrap: anywhere; }
 .notes-block strong { display: block; margin-bottom: 2mm; }
 .notes-content { white-space: pre-line; overflow-wrap: anywhere; line-height: 1.35; }
-.summary { display: table-cell; width: 30%; vertical-align: top; }
-.summary div { display: flex; justify-content: space-between; padding: 2.5mm 4mm; border-bottom: 1px solid var(--delivery-light-border); font-size: 14px; }
+.notes-empty { color: #9ca3af; }
+.summary { display: table-cell; width: 45%; vertical-align: top; }
+.summary div { display: flex; justify-content: space-between; padding: 2.5mm 4mm; border-bottom: 1px solid var(--delivery-light-border); font-size: 15px; }
+.summary div strong { text-align: right; white-space: nowrap; }
 .summary div:last-child { border-bottom: 0; }
 .summary .grand-total { align-items: center; background: var(--delivery-soft); font-size: 19px; font-weight: 800; }
 .summary .grand-total strong { font-size: 24px; }
 
-.delivery-footer { display: flex; flex-direction: column; align-items: center; gap: 1mm; margin-top: 1mm; color: var(--delivery-secondary); text-align: center; }
+.delivery-footer { display: flex; flex-direction: column; align-items: center; gap: 1mm; margin-top: 2mm; color: var(--delivery-secondary); text-align: center; }
 .delivery-footer-message { white-space: pre-line; overflow-wrap: anywhere; }
-.delivery-footer strong { letter-spacing: 1.5px; font-size: 11px; }
 
 .delivery-note[data-document-type="tax-invoice"] .customer-information {
     padding-top: 2mm;
@@ -172,7 +171,7 @@ body {
     width: 148mm;
     min-height: 0;
     padding: 5mm 5mm 4mm;
-    font-size: 11px;
+    font-size: 12px;
 }
 
 .paper-a5 .delivery-header { gap: 3mm; padding-bottom: 3mm; }
@@ -188,20 +187,20 @@ body {
 .paper-a5 .document-meta div { padding: 1.8mm 2mm; font-size: 9px; }
 .paper-a5 .customer-information { padding: 2.5mm 1mm 2mm; }
 .paper-a5 .customer-line { gap: 2mm; min-height: 5mm; font-size: 9px; }
-.paper-a5 .items-table th { padding: 1.5mm 1mm; font-size: 9px; }
-.paper-a5 .items-table td { height: 6mm; padding: 1mm; font-size: 9px; }
+.paper-a5 .items-table th { padding: 1.5mm 1mm; font-size: 10px; }
+.paper-a5 .items-table td { height: 6mm; padding: 1mm; font-size: 10px; }
 .paper-a5 .payment-summary-section { margin-top: 2mm; }
 .paper-a5 .qr-payment { padding: 2.5mm; }
-.paper-a5 .delivery-qr { width: 26mm; height: 26mm; }
+.paper-a5 .delivery-qr { width: 26mm; height: auto; }
 .paper-a5 .qr-payment strong { margin-top: 1.5mm; font-size: 9px; }
-.paper-a5 .notes-block { min-height: 16mm; padding: 2mm; font-size: 9px; }
-.paper-a5 .summary div { padding: 2mm; font-size: 10px; }
+.paper-a5 .notes-block { min-height: 16mm; padding: 2mm; font-size: 10px; }
+.paper-a5 .summary div { padding: 2mm; font-size: 11px; }
 .paper-a5 .summary .grand-total { font-size: 13px; }
 .paper-a5 .summary .grand-total strong { font-size: 16px; }
-.paper-a5 .delivery-footer { margin-top: 2mm; font-size: 8px; }
+.paper-a5 .delivery-footer { margin-top: 2mm; font-size: 9px; }
 
 .paper-a5 .delivery-note[data-document-type="delivery-note"] {
-    font-size: 12px;
+    font-size: 13px;
 }
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .company-tagline,
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .company-line,
@@ -221,14 +220,14 @@ body {
 }
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items th,
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items td {
-    font-size: 12px;
+    font-size: 13px;
 }
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items {
-    font-size: 12px;
+    font-size: 13px;
 }
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-qr {
     width: 26mm;
-    height: 26mm;
+    height: auto;
 }
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .qr-payment strong {
     font-size: 11px;
@@ -242,8 +241,7 @@ body {
 .paper-a5 .delivery-note[data-document-type="delivery-note"] .summary .grand-total strong {
     font-size: 18px;
 }
-.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-footer,
-.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-footer strong {
+.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-footer {
     font-size: 10px;
 }
 

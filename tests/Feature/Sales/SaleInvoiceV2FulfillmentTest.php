@@ -69,6 +69,10 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
         $this->assertStringContainsString('Snapshot Company', $invoice);
         $this->assertStringContainsString('Snapshot Billing Address', $invoice);
         $this->assertStringContainsString('STORE-TAX-123', $invoice);
+        $this->assertStringContainsString('style="width: 8%;"', $invoice);
+        $this->assertStringContainsString('style="width: 46%; text-align: left;"', $invoice);
+        $this->assertStringContainsString('style="width: 15%;"', $invoice);
+        $this->assertStringContainsString('style="width: 16%;"', $invoice);
     }
 
     public function test_tax_invoice_without_customer_tax_number_has_no_tax_rows_or_store_tax_header(): void
@@ -310,9 +314,9 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
         $css = file_get_contents(base_path('public/css/sales-invoice-v2.css'));
 
         $this->assertStringContainsString('style="width: 6%;"', $html);
-        $this->assertStringContainsString('style="width: 54%; text-align: left;"', $html);
-        $this->assertStringContainsString('style="width: 12%;"', $html);
-        $this->assertStringContainsString('style="width: 13%;"', $html);
+        $this->assertStringContainsString('style="width: 58%; text-align: left;"', $html);
+        $this->assertStringContainsString('style="width: 10%;"', $html);
+        $this->assertStringContainsString('style="width: 11%;"', $html);
         $this->assertStringContainsString('style="width: 15%;"', $html);
         $this->assertStringContainsString($longName, $html);
         $this->assertStringContainsString('class="delivery-qr"', $html);
@@ -321,8 +325,11 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
             $css
         );
         $this->assertStringContainsString('white-space: normal', $css);
-        $this->assertStringContainsString('font-size: 14px', $css);
-        $this->assertStringContainsString('font-size: 12px', $css);
+        $this->assertStringContainsString(
+            ".delivery-note[data-document-type=\"delivery-note\"] .delivery-note-items th,\n.delivery-note[data-document-type=\"delivery-note\"] .delivery-note-items td {\n    font-size: 15px;\n}",
+            $css
+        );
+        $this->assertStringContainsString('font-size: 13px', $css);
         $this->assertStringContainsString(
             '.paper-a5 .delivery-note[data-document-type="delivery-note"] .delivery-note-items',
             $css
@@ -386,17 +393,21 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
 
         $this->assertStringContainsString('class="notes-block"', $withoutQr);
         $this->assertSame(10, substr_count($withoutQr, 'Note line '));
-        $this->assertStringContainsString('ช่องทางการชำระเงิน', $withoutQr);
+        $this->assertStringContainsString('ยังไม่ได้ตั้งค่า QR Code', $withoutQr);
+        $this->assertStringContainsString('class="qr-empty"', $withoutQr);
         $this->assertStringNotContainsString('class="delivery-qr"', $withoutQr);
         $this->assertStringContainsString('class="delivery-qr"', $withQr);
+        $this->assertStringContainsString('สแกนเพื่อชำระเงิน', $withQr);
         $this->assertStringContainsString('Thank you for your purchase', $withQr);
         $this->assertStringContainsString('ตรวจสอบสินค้าก่อนออกจากร้าน', $withQr);
         $this->assertStringNotContainsString('class="receiver-section"', $withQr);
-        $this->assertStringContainsString('<strong>ATRILAK BUILDING SOLUTIONS</strong>', $withQr);
+        $this->assertStringNotContainsString('ATRILAK BUILDING SOLUTIONS', $withQr);
+        $this->assertStringContainsString('ยอดรวมสินค้า', $withoutQr);
 
         $emptyNotes = $this->renderStressInvoice(1, 'a5', null, null);
         $this->assertStringContainsString('class="notes-content"', $emptyNotes);
-        $this->assertStringNotContainsString('notes-empty', $emptyNotes);
+        $this->assertStringContainsString('class="notes-empty"', $emptyNotes);
+        $this->assertStringContainsString('- ไม่มีหมายเหตุ -', $emptyNotes);
 
         foreach ($footerCases as $footer) {
             $html = $this->renderStressInvoice(1, 'a5', new Setting([
