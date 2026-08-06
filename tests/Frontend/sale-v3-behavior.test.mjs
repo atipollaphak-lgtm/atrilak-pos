@@ -60,6 +60,7 @@ class FakeElement {
         this.checked = checked;
         this.tagName = tagName;
         this.hidden = hidden;
+        this.style = {};
         this.disabled = false;
         this.innerHTML = "";
         this.textContent = "";
@@ -133,6 +134,10 @@ class FakeElement {
     select() {}
 
     append() {}
+
+    remove() {
+        this.removed = true;
+    }
 }
 
 class FakeSelect extends FakeElement {
@@ -153,6 +158,7 @@ function zoneOption(zone) {
 function createHarness({
     addresses = [],
     zones = [],
+    simulateQuantityBackdropRace = false,
     product = {
         id: 1,
         name: "Test Product",
@@ -171,6 +177,15 @@ function createHarness({
     },
 } = {}) {
     const elements = new Map();
+    const modalState = {
+        quantityBackdropActive: false,
+        confirmationOpened: 0,
+    };
+    const modalBackdrop = {
+        remove() {
+            modalState.quantityBackdropActive = false;
+        },
+    };
     const root = new FakeElement({
         dataset: {
             saleDate: "2026-08-05",
@@ -239,6 +254,7 @@ function createHarness({
         "#v3-clear-cart",
         "#v3-submit",
         "#v3-action-feedback",
+        "#payment-confirmation-modal",
         "#pos-v3-clock",
     ].forEach((selector) => add(selector));
     elements.get("#v3-delivery-date").value = "2026-08-05";
@@ -253,6 +269,7 @@ function createHarness({
 
     const document = {
         activeElement: elements.get("#v3-product-search"),
+        body: { classList: new ClassList() },
         getElementById(id) {
             return id === "pos-v3" ? root : elements.get("#" + id) || null;
         },
@@ -266,6 +283,8 @@ function createHarness({
         querySelectorAll(selector) {
             if (selector === ".v3-product-card") return [productCard];
             if (selector === ".v3-category" || selector === ".v3-filter") return [];
+            if (selector === ".modal") return [elements.get("#v3-quantity-modal"), elements.get("#payment-confirmation-modal")];
+            if (selector === ".modal-backdrop") return modalState.quantityBackdropActive ? [modalBackdrop] : [];
             return [];
         },
         addEventListener() {},
@@ -297,9 +316,28 @@ function createHarness({
             return 1;
         },
         jQuery() {
+            const element = arguments[0];
             return {
                 one() {},
-                modal() {},
+                modal(action) {
+                    if (element?.id !== "v3-quantity-modal") return;
+                    if (action === "show") {
+                        modalState.quantityBackdropActive = true;
+                        element.classList.add("show");
+                        document.body.classList.add("modal-open");
+                    }
+                    if (action === "hide") {
+                        if (simulateQuantityBackdropRace) {
+                            modalState.quantityBackdropActive = true;
+                            element.classList.add("show");
+                            document.body.classList.add("modal-open");
+                            return;
+                        }
+                        modalState.quantityBackdropActive = false;
+                        element.classList.remove("show");
+                        document.body.classList.remove("modal-open");
+                    }
+                },
             };
         },
         FinalPos: {
@@ -311,7 +349,9 @@ function createHarness({
                 feedback.push({ message, tone });
             },
             openConfirmation() {
-                return stateContext.canConfirmDelivery?.();
+                if (!stateContext.canConfirmDelivery?.()) return false;
+                modalState.confirmationOpened += 1;
+                return true;
             },
             showSuccess() {},
         },
@@ -354,6 +394,12 @@ function createHarness({
         productCard,
         state: stateContext.state,
         context: stateContext,
+        modalState,
+        async clickSubmit() {
+            if (modalState.quantityBackdropActive) return false;
+            await elements.get("#v3-submit").dispatch("click");
+            return true;
+        },
         window,
     };
 }
@@ -482,4 +528,22 @@ test("invalid delivery date clears the hidden ISO value and blocks confirmation"
 
     assert.equal(hidden.value, "2026-08-05");
     assert.equal(harness.context.canConfirmDelivery(), true);
+});
+
+test("delivery confirmation survives a quick submit after the quantity modal closes", async () => {
+    const harness = createHarness({
+        simulateQuantityBackdropRace: true,
+        addresses: [{ id: 101, address: "Only site", delivery_zone: activeZone }],
+    });
+
+    harness.context.setDeliveryType("delivery");
+    await harness.context.setCustomer("7");
+    await harness.productCard.dispatch("click");
+    await harness.elements.get("#v3-quantity-confirm").dispatch("click");
+
+    const clickDelivered = await harness.clickSubmit();
+
+    assert.equal(clickDelivered, true);
+    assert.equal(harness.modalState.quantityBackdropActive, false);
+    assert.equal(harness.modalState.confirmationOpened, 1);
 });

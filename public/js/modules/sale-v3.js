@@ -193,6 +193,22 @@
         window.jQuery($("#v3-quantity-modal")).modal("show");
     }
 
+    function closeQuantityModal() {
+        const modal = $("#v3-quantity-modal");
+        if (!modal) return;
+        window.jQuery(modal).modal("hide");
+        modal.classList.remove("show");
+        if (modal.style) modal.style.display = "none";
+        modal.setAttribute("aria-hidden", "true");
+
+        const anotherModalIsOpen = Array.from(document.querySelectorAll(".modal"))
+            .some((candidate) => candidate !== modal && candidate.classList.contains("show"));
+        if (!anotherModalIsOpen) {
+            document.body?.classList.remove("modal-open");
+            document.querySelectorAll(".modal-backdrop").forEach((backdrop) => backdrop.remove());
+        }
+    }
+
     function confirmQuantity() {
         const qty = Number($("#v3-quantity-input").value);
         if (!Number.isFinite(qty) || qty < 0) { $("#v3-quantity-error").textContent = "จำนวนไม่ถูกต้อง"; return; }
@@ -200,7 +216,7 @@
         if (qty > Number(product.stock_qty)) { $("#v3-quantity-error").textContent = `สต็อกคงเหลือ ${money(product.stock_qty)}`; return; }
         if (existingIndex >= 0) { if (qty === 0) state.cart.splice(existingIndex, 1); else { state.cart[existingIndex].qty = qty; const currentItem = state.cart[existingIndex]; currentItem.qty = qty; const systemPrice = unitPrice(currentItem.unit, qty, currentItem.product); if (currentItem.priceWasEdited) currentItem.originalPrice = systemPrice; else currentItem.price = systemPrice; } }
         else if (qty > 0) add(product, unitId, qty);
-        render(); window.jQuery($("#v3-quantity-modal")).modal("hide");
+        render(); closeQuantityModal();
     }
 
     function sameZone(left, right) { return String(left?.id || "") === String(right?.id || ""); }
