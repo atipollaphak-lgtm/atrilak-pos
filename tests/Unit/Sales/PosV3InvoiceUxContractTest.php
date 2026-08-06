@@ -83,7 +83,7 @@ class PosV3InvoiceUxContractTest extends TestCase
             '/function init\(\) \{\s*sanitizeZoneOptions\(\);\s*refreshPricingContext\(\);\s*render\(\);/s',
             $sale
         );
-        $this->assertStringContainsString('label.textContent = `${money(unitPrice(unitFor(product), 1, product))} บาท`', $sale);
+        $this->assertStringContainsString('label.textContent = money(unitPrice(unitFor(product), 1, product))', $sale);
         $this->assertStringContainsString('selling_price: Number(item.price).toFixed(2)', $sale);
     }
 

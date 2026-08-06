@@ -158,6 +158,8 @@ function zoneOption(zone) {
 function createHarness({
     addresses = [],
     zones = [],
+    addressLoadError = null,
+    addressLoadDeferred = null,
     simulateQuantityBackdropRace = false,
     product = {
         id: 1,
@@ -201,6 +203,8 @@ function createHarness({
             category: "",
         },
     });
+    const productPrice = new FakeElement();
+    productCard.querySelector = (selector) => selector === ".v3-product-price" ? productPrice : null;
 
     function add(selector, element = new FakeElement()) {
         element.id = selector.replace(/^#/, "");
@@ -226,6 +230,7 @@ function createHarness({
         "#v3-subtotal",
         "#v3-total",
         "#v3-customer-address",
+        "#v3-zone-status",
         "#v3-delivery-date",
         "#v3-delivery-date-display",
         "#v3-sale-date-display",
@@ -238,6 +243,7 @@ function createHarness({
         "#v3-quantity-modal",
         "#v3-quantity-title",
         "#v3-quantity-stock",
+        "#v3-quantity-sale-availability",
         "#v3-quantity-unit",
         "#v3-quantity-price",
         "#v3-quantity-total",
@@ -367,6 +373,8 @@ function createHarness({
         PosDate: {},
         ZonePricingMath: null,
         fetch: async (url) => {
+            if (addressLoadDeferred) await addressLoadDeferred;
+            if (addressLoadError) throw addressLoadError;
             const customerId = String(url).split("/").at(-2);
             return {
                 ok: true,
@@ -392,6 +400,7 @@ function createHarness({
         feedback,
         priceZoneSelect,
         productCard,
+        productPrice,
         state: stateContext.state,
         context: stateContext,
         modalState,
@@ -413,22 +422,47 @@ const activeZone = {
     minimum_profit: 0,
 };
 
-test("multiple addresses show an address picker without auto-selecting the first address", async () => {
+test("multiple addresses automatically select the address marked as default", async () => {
     const harness = createHarness({
         addresses: [
-            { id: 101, address: "First site", delivery_zone: activeZone },
-            { id: 102, address: "Second site", delivery_zone: { ...activeZone, id: 2, name: "Second Zone" } },
+            { id: 101, address: "First site", is_default: false, delivery_zone: activeZone },
+            { id: 102, address: "Default site", is_default: true, delivery_zone: { ...activeZone, id: 2, name: "Default Zone" } },
         ],
+        zones: [activeZone, { ...activeZone, id: 2, name: "Default Zone" }],
     });
 
     harness.context.setDeliveryType("delivery");
     await harness.context.setCustomer("7");
 
-    assert.equal(harness.context.state.addressId, "");
-    assert.equal(harness.context.state.address, null);
-    assert.equal(harness.addressSelect.value, "");
+    assert.equal(harness.context.state.addressId, "102");
+    assert.equal(harness.context.state.address.address, "Default site");
+    assert.equal(harness.context.state.zone.name, "Default Zone");
+    assert.equal(harness.addressSelect.value, "102");
     assert.equal(harness.addressPicker.hidden, false);
     assert.equal(harness.addressPicker.classList.contains("d-none"), false);
+});
+
+test("changing to a customer without a default address clears the previous address and zone", async () => {
+    const harness = createHarness({
+        addresses: [
+            { id: 201, address: "Site A", is_default: false, delivery_zone: activeZone },
+            { id: 202, address: "Site B", is_default: false, delivery_zone: { ...activeZone, id: 2, name: "Zone B" } },
+        ],
+        zones: [activeZone],
+    });
+    harness.context.setDeliveryType("delivery");
+    harness.context.state.addressId = "99";
+    harness.context.state.address = { id: 99, address: "Previous site", delivery_zone: activeZone };
+    harness.context.state.zone = activeZone;
+    harness.context.state.draftZone = activeZone;
+
+    await harness.context.setCustomer("7");
+
+    assert.equal(harness.context.state.addressId, "");
+    assert.equal(harness.context.state.address, null);
+    assert.equal(harness.context.state.zone, null);
+    assert.equal(harness.context.state.draftZone, null);
+    assert.equal(harness.priceZoneSelect.value, "");
 });
 
 test("one address is selected automatically and remains visible in the customer summary", async () => {
@@ -444,7 +478,7 @@ test("one address is selected automatically and remains visible in the customer 
     assert.equal(harness.addressPicker.hidden, true);
 });
 
-test("selecting an active delivery zone reprices the real cart flow", async () => {
+test("the price zone mirrors the selected address and cannot override it", async () => {
     const secondZone = {
         ...activeZone,
         id: 2,
@@ -452,42 +486,250 @@ test("selecting an active delivery zone reprices the real cart flow", async () =
         price_markup_percent: 20,
     };
     const harness = createHarness({
+        addresses: [{ id: 101, address: "Active site", is_default: true, delivery_zone: activeZone }],
         zones: [activeZone, secondZone],
     });
 
     harness.context.setDeliveryType("delivery");
-    harness.priceZoneSelect.value = String(activeZone.id);
-    harness.priceZoneSelect.selectedOptions = [harness.priceZoneSelect.options[0]];
-    await harness.priceZoneSelect.dispatch("change");
+    await harness.context.setCustomer("7");
     await harness.productCard.dispatch("click");
     harness.elements.get("#v3-quantity-input").value = "2";
     await harness.elements.get("#v3-quantity-confirm").dispatch("click");
 
     assert.equal(harness.context.state.cart[0].price, 100);
 
+    assert.equal(harness.priceZoneSelect.value, String(activeZone.id));
+    assert.equal(harness.priceZoneSelect.disabled, true);
+
     harness.priceZoneSelect.value = String(secondZone.id);
     harness.priceZoneSelect.selectedOptions = [harness.priceZoneSelect.options[1]];
     await harness.priceZoneSelect.dispatch("change");
 
-    assert.equal(harness.context.state.cart[0].price, 120);
-    assert.equal(harness.elements.get("#v3-total").textContent, "240.00");
+    assert.equal(harness.context.state.zone.id, activeZone.id);
+    assert.equal(harness.context.state.cart[0].price, 100);
+    assert.equal(harness.elements.get("#v3-total").textContent, "200.00");
 });
 
-test("inactive delivery zones cannot be selected or used for confirmation", async () => {
+test("an address with an inactive delivery zone cannot be used for confirmation", async () => {
     const inactiveZone = { ...activeZone, id: 9, name: "Inactive Zone", active: false };
-    const harness = createHarness({ zones: [inactiveZone] });
-
-    assert.equal(harness.priceZoneSelect.options[0].disabled, true);
-    assert.equal(harness.priceZoneSelect.options[0].hidden, true);
+    const harness = createHarness({
+        addresses: [{ id: 901, address: "Inactive site", is_default: true, delivery_zone: inactiveZone }],
+        zones: [inactiveZone],
+    });
 
     harness.context.setDeliveryType("delivery");
-    harness.priceZoneSelect.value = String(inactiveZone.id);
-    harness.priceZoneSelect.selectedOptions = [harness.priceZoneSelect.options[0]];
-    await harness.priceZoneSelect.dispatch("change");
+    await harness.context.setCustomer("7");
 
     assert.equal(harness.context.state.zone, null);
     assert.equal(harness.context.state.draftZone, null);
+    assert.equal(harness.addressSelect.value, "");
     assert.equal(harness.context.canConfirmDelivery(), false);
+});
+
+test("an address loading failure clears zone state and reports a recoverable error", async () => {
+    const harness = createHarness({
+        zones: [activeZone],
+        addressLoadError: new Error("network unavailable"),
+    });
+    harness.context.setDeliveryType("delivery");
+    harness.context.state.address = { id: 99, delivery_zone: activeZone };
+    harness.context.state.addressId = "99";
+    harness.context.state.zone = activeZone;
+    harness.context.state.draftZone = activeZone;
+
+    await harness.context.setCustomer("7");
+
+    assert.equal(harness.context.state.address, null);
+    assert.equal(harness.context.state.addressId, "");
+    assert.equal(harness.context.state.zone, null);
+    assert.equal(harness.context.state.draftZone, null);
+    assert.equal(harness.context.state.addressLoading, false);
+    assert.equal(
+        harness.feedback.some((entry) => entry.tone === "error" && /โหลดที่อยู่และโซนไม่สำเร็จ/.test(entry.message)),
+        true,
+    );
+    assert.equal(harness.context.canConfirmDelivery(), false);
+});
+
+test("address loading exposes a pending state until the response is ready", async () => {
+    let release;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const harness = createHarness({
+        addresses: [{ id: 101, address: "Only site", is_default: true, delivery_zone: activeZone }],
+        zones: [activeZone],
+        addressLoadDeferred: pending,
+    });
+
+    const load = harness.context.setCustomer("7");
+    await Promise.resolve();
+
+    assert.equal(harness.context.state.addressLoading, true);
+    assert.equal(harness.addressSelect.disabled, true);
+    assert.match(harness.elements.get("#v3-zone-status").textContent, /กำลังโหลด/);
+
+    release();
+    await load;
+    assert.equal(harness.context.state.addressLoading, false);
+});
+
+test("changing address reprices both the product card and cart", async () => {
+    const markupZone = { ...activeZone, id: 2, name: "Markup Zone", price_markup_percent: 20 };
+    const harness = createHarness({
+        addresses: [
+            { id: 101, address: "Base site", is_default: true, delivery_zone: activeZone },
+            { id: 102, address: "Markup site", is_default: false, delivery_zone: markupZone },
+        ],
+        zones: [activeZone, markupZone],
+    });
+    harness.context.setDeliveryType("delivery");
+    await harness.context.setCustomer("7");
+    await harness.productCard.dispatch("click");
+    await harness.elements.get("#v3-quantity-confirm").dispatch("click");
+
+    harness.context.setAddress("102");
+    await Promise.resolve();
+
+    assert.equal(harness.context.state.zone.id, 2);
+    assert.equal(harness.context.state.cart[0].price, 120);
+    assert.equal(harness.productPrice.textContent, "120.00");
+});
+
+test("sale quantity is converted to base quantity before checking stock", async () => {
+    const harness = createHarness({
+        product: {
+            id: 1,
+            name: "Converted Product",
+            unit: "piece",
+            stock_qty: 10,
+            price: 400,
+            rounding_unit: 1,
+            rounding_direction: "nearest",
+            productUnits: [{
+                id: 11,
+                selling_price: 400,
+                conversion_rate: 4,
+                is_sale_unit: true,
+                unit: { name: "box" },
+                price_tiers: [],
+            }],
+        },
+    });
+    await harness.productCard.dispatch("click");
+    assert.equal(
+        harness.elements.get("#v3-quantity-sale-availability").textContent,
+        "ขายได้สูงสุด 2.50 box · 1 box = 4.00 piece",
+    );
+    harness.elements.get("#v3-quantity-input").value = "3";
+
+    await harness.elements.get("#v3-quantity-confirm").dispatch("click");
+
+    assert.equal(harness.context.state.cart.length, 0);
+    assert.match(harness.elements.get("#v3-quantity-error").textContent, /10\.00 piece/);
+});
+
+test("repeated adds cannot exceed aggregate base stock", async () => {
+    const harness = createHarness({
+        product: {
+            id: 1,
+            name: "Converted Product",
+            unit: "piece",
+            stock_qty: 10,
+            price: 400,
+            rounding_unit: 1,
+            rounding_direction: "nearest",
+            productUnits: [{
+                id: 11,
+                selling_price: 400,
+                conversion_rate: 4,
+                is_sale_unit: true,
+                unit: { name: "box" },
+                price_tiers: [],
+            }],
+        },
+    });
+
+    await harness.productCard.dispatch("click");
+    harness.elements.get("#v3-quantity-input").value = "2";
+    await harness.elements.get("#v3-quantity-confirm").dispatch("click");
+
+    await harness.productCard.dispatch("click");
+    harness.elements.get("#v3-quantity-input").value = "1";
+    await harness.elements.get("#v3-quantity-confirm").dispatch("click");
+
+    assert.equal(harness.context.state.cart[0].qty, 2);
+    assert.match(harness.elements.get("#v3-quantity-error").textContent, /10\.00 piece/);
+});
+
+test("editing one sale unit cannot exceed aggregate base stock across units", async () => {
+    const product = {
+        id: 1,
+        name: "Multi-unit Product",
+        unit: "piece",
+        stock_qty: 10,
+        price: 100,
+        rounding_unit: 1,
+        rounding_direction: "nearest",
+        productUnits: [],
+    };
+    const boxUnit = {
+        id: 11,
+        selling_price: 400,
+        conversion_rate: 4,
+        is_sale_unit: true,
+        unit: { name: "box" },
+        price_tiers: [],
+    };
+    const pieceUnit = {
+        id: 12,
+        selling_price: 100,
+        conversion_rate: 1,
+        is_sale_unit: false,
+        unit: { name: "piece" },
+        price_tiers: [],
+    };
+    product.productUnits = [boxUnit, pieceUnit];
+    const harness = createHarness({ product });
+    harness.context.state.cart = [
+        { productId: 1, product, unit: boxUnit, qty: 2, price: 400 },
+        { productId: 1, product, unit: pieceUnit, qty: 1, price: 100 },
+    ];
+    harness.context.render();
+
+    const quantityInput = {
+        value: "3",
+        dataset: { index: "1" },
+        matches(selector) { return selector === ".v3-cart-quantity"; },
+        closest() {
+            return { querySelector() { return { textContent: "" }; } };
+        },
+    };
+    await harness.elements.get("#v3-cart-items").dispatch("input", { target: quantityInput });
+
+    assert.equal(harness.context.state.cart[1].qty, 1);
+});
+
+test("stale address responses cannot repopulate a reset sale", async () => {
+    let release;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const harness = createHarness({
+        addresses: [{ id: 101, address: "Only site", is_default: true, delivery_zone: activeZone }],
+        addressLoadDeferred: pending,
+    });
+
+    const load = harness.context.setCustomer("7");
+    await Promise.resolve();
+    harness.context.state.customerId = "";
+    harness.context.state.addressId = "";
+    harness.context.state.address = null;
+    harness.context.state.addresses = [];
+
+    release();
+    await load;
+
+    assert.deepEqual(harness.context.state.addresses, []);
+    assert.equal(harness.context.state.addressId, "");
+    assert.equal(harness.context.state.address, null);
+    assert.equal(harness.addressSelect.value, "");
 });
 
 test("delivery confirmation requires a customer, address, active zone, and valid date", async () => {

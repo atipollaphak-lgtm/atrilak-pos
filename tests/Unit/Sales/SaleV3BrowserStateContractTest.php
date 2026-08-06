@@ -20,7 +20,8 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('await context.setCustomer', $final);
         $this->assertStringContainsString("context.state.draftZone = null;\n        context.state.zone = null;\n        context.customerSelect.dispatchEvent", $final);
         $this->assertStringContainsString('context.setDeliveryType(hold.delivery_type)', $final);
-        $this->assertStringContainsString("const pickupSuffix = context.state.deliveryType === 'pickup' && option ? ' (รับเอง)' : ''", $final);
+        $this->assertStringContainsString("$('#v3-customer-summary')", $final);
+        $this->assertStringNotContainsString('pickupSuffix', $final);
         $this->assertStringContainsString('filterCustomers();', $final);
     }
 
@@ -53,20 +54,22 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringNotContainsString('restore.dataset.action = "restore"', $sale);
     }
 
-    public function test_delivery_draft_keeps_preview_zone_and_requires_explicit_multiple_address_selection(): void
+    public function test_delivery_draft_derives_zone_from_address_and_requires_explicit_multiple_address_selection(): void
     {
         $sale = $this->source('public/js/modules/sale-v3.js');
+        $customer = $this->source('resources/views/sales-v3/partials/customer-bar.blade.php');
         $navigation = $this->source('resources/views/sales-v3/partials/product-navigation.blade.php');
 
         $this->assertStringContainsString('state.draftZone', $sale);
         $this->assertStringContainsString('state.addresses.length === 1', $sale);
         $this->assertStringContainsString('state.addresses.length > 1', $sale);
-        $this->assertStringContainsString('confirmZoneChange', $sale);
+        $this->assertStringContainsString('const defaultAddress = state.addresses.find', $sale);
         $this->assertStringContainsString('const nextZone = nextAddress?.delivery_zone || null', $sale);
-        $this->assertStringContainsString('state.address ? (state.address.delivery_zone || null)', $sale);
+        $this->assertStringContainsString('state.zone = state.deliveryType === "delivery" ? nextZone : null', $sale);
         $this->assertStringContainsString('state.deliveryFeeEdited = false', $sale);
-        $this->assertStringContainsString('v3-price-zone-select', $navigation);
-        $this->assertStringContainsString('deliveryZones', $navigation);
+        $this->assertStringContainsString('id="v3-price-zone-select"', $customer);
+        $this->assertStringContainsString('aria-label="โซนราคาตามที่อยู่ลูกค้า" disabled', $customer);
+        $this->assertStringNotContainsString('v3-price-zone-select', $navigation);
     }
 
     public function test_quantity_modal_exposes_touch_controls_and_price_context(): void
@@ -79,6 +82,47 @@ class SaleV3BrowserStateContractTest extends TestCase
         }
 
         $this->assertStringContainsString('syncQuantityPreview', $sale);
+    }
+
+    public function test_mobile_customer_identity_and_address_remain_visible_without_ellipsis(): void
+    {
+        $css = $this->source('public/css/sale-v3.css');
+        $mobileStart = strpos($css, '@media (max-width:575px)');
+
+        $this->assertNotFalse($mobileStart);
+
+        $mobileCss = substr($css, $mobileStart);
+        $expectedMobileRule = implode(chr(10), [
+            '.pos-v3-customer-summary,',
+            '    .pos-v3-customer-line {',
+            '        overflow:visible;',
+            '        text-overflow:clip;',
+            '        white-space:normal;',
+            '        overflow-wrap:anywhere;',
+            '    }',
+        ]);
+        $this->assertStringContainsString(
+            $expectedMobileRule,
+            $mobileCss
+        );
+    }
+
+    public function test_customer_identity_and_address_do_not_hide_phone_or_address_on_desktop(): void
+    {
+        $css = $this->source('public/css/sale-v3.css');
+        $mobileStart = strpos($css, '@media (max-width:575px)');
+
+        $this->assertNotFalse($mobileStart);
+
+        $baseCss = substr($css, 0, $mobileStart);
+        $this->assertStringContainsString(
+            '.pos-v3-customer-summary { display:block; overflow:visible; font-size:17px; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }',
+            $baseCss
+        );
+        $this->assertStringContainsString(
+            '.pos-v3-customer-line { display:block; margin-top:3px; overflow:visible; color:var(--pos-muted); font-size:12px; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }',
+            $baseCss
+        );
     }
 
     public function test_unit_price_is_inline_editable_without_opening_a_price_popup(): void

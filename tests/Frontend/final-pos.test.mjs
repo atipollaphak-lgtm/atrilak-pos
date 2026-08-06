@@ -52,6 +52,14 @@ class FakeElement {
         return this.dispatch(event.type);
     }
 
+    setAttribute(name, value) {
+        this[name] = String(value);
+    }
+
+    removeAttribute(name) {
+        delete this[name];
+    }
+
     querySelectorAll(selector) {
         if (selector === "[data-resume-hold]") {
             return this.resumeButton ? [this.resumeButton] : [];
@@ -81,6 +89,8 @@ function createHarness(hold) {
     const deliveryDate = new FakeElement({ value: "2026-07-30" });
     const pickup = new FakeElement({ checked: false });
     const discount = new FakeElement({ value: "0.00" });
+    const customerDetails = new FakeElement();
+    customerDetails.classList.add("disabled");
     const elements = new Map([
         ["#v3-hold-list", holdList],
         ["#v3-delivery-date", deliveryDate],
@@ -88,6 +98,8 @@ function createHarness(hold) {
         ["#v3-discount", discount],
         ["#v3-customer-name", new FakeElement()],
         ["#v3-customer-phone", new FakeElement()],
+        ["#v3-customer-summary", new FakeElement()],
+        ["#v3-customer-details", customerDetails],
         ["#final-payment-status", new FakeElement()],
         ["#final-payment-title", new FakeElement()],
         ["#final-payment-subtitle", new FakeElement()],
@@ -172,6 +184,7 @@ function createHarness(hold) {
                 holdStoreUrl: "/holds",
                 holdUrlTemplate: "/holds/__HOLD__",
                 documentUrlTemplate: "/sales/__SALE__/invoice-v2",
+                customerShowUrlTemplate: "/customers/__CUSTOMER__",
                 saleDate: "2026-07-30",
             },
         },
@@ -183,6 +196,10 @@ function createHarness(hold) {
                 value: String(hold.customer_delivery_address_id),
                 textContent: "TEST address",
             }];
+            if (hold.current_address_zone) {
+                state.zone = hold.current_address_zone;
+                state.draftZone = hold.current_address_zone;
+            }
         },
         render() {},
         total() { return "0.00"; },
@@ -205,6 +222,38 @@ function createHarness(hold) {
         state,
     };
 }
+
+test("selected customer summary combines name and phone without pickup copy", () => {
+    const harness = createHarness({
+        id: 30,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        items: [],
+    });
+    harness.customerSelect.value = "12";
+    harness.customerSelect.selectedOptions = [{
+        value: "12",
+        dataset: { name: "Builder One", phone: "0800000001" },
+    }];
+    harness.state.deliveryType = "pickup";
+
+    harness.finalPos.syncCustomerDisplay();
+
+    assert.equal(
+        harness.elements.get("#v3-customer-summary").textContent,
+        "Builder One (0800000001)",
+    );
+    assert.doesNotMatch(
+        harness.elements.get("#v3-customer-summary").textContent,
+        /รับเอง/,
+    );
+    assert.equal(
+        harness.elements.get("#v3-customer-details").href,
+        "/customers/12",
+    );
+    assert.equal(harness.elements.get("#v3-customer-details").ariaDisabled, "false");
+    assert.equal(harness.elements.get("#v3-customer-details").classList.contains("disabled"), false);
+});
 
 async function openAndResume(harness) {
     const previousCart = harness.state.cart;
@@ -230,6 +279,7 @@ test("resume restores the complete hold context without consuming it before paym
         delivery_zone_markup_percent_snapshot: "5.00",
         delivery_zone_rounding_increment_snapshot: "0.25",
         delivery_zone_minimum_profit_snapshot: "100.00",
+        current_address_zone: { id: 11, name: "CURRENT address zone", active: true },
         customer: { name: "TEST customer" },
         items: [{
             product_id: 1,
@@ -254,7 +304,7 @@ test("resume restores the complete hold context without consuming it before paym
     assert.equal(harness.state.note, "TEST hold note");
     assert.equal(harness.state.discount, 10);
     assert.equal(harness.state.deliveryFee, 0);
-    assert.equal(harness.state.zone.name, "TEST zone");
+    assert.equal(harness.state.zone.name, "CURRENT address zone");
     assert.equal(harness.state.cart.length, 1);
     assert.equal(harness.state.cart[0].qty, 3);
     assert.equal(harness.state.holdBillId, 7);

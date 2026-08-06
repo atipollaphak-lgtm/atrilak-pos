@@ -88,9 +88,24 @@
         if (!context) return;
         const option = context.customerSelect.selectedOptions[0];
         const customerName = option?.dataset.name || 'ลูกค้าทั่วไป';
-        const pickupSuffix = context.state.deliveryType === 'pickup' && option ? ' (รับเอง)' : '';
-        $('#v3-customer-name').textContent = `${customerName}${pickupSuffix}`;
-        $('#v3-customer-phone').innerHTML = `<i class="fas fa-phone"></i> ${escapeHtml(option?.dataset.phone || 'ไม่ระบุข้อมูลลูกค้า')}`;
+        const customerPhone = String(option?.dataset.phone || '').trim();
+        const customerId = String(context.customerSelect.value || option?.value || '').trim();
+        const summary = customerId && customerPhone ? `${customerName} (${customerPhone})` : customerName;
+        const summaryElement = $('#v3-customer-summary');
+        if (summaryElement) summaryElement.textContent = summary;
+        const legacyName = $('#v3-customer-name');
+        if (legacyName) legacyName.textContent = customerName;
+        const legacyPhone = $('#v3-customer-phone');
+        if (legacyPhone) legacyPhone.innerHTML = `<i class="fas fa-phone"></i> ${escapeHtml(customerPhone || 'ไม่ระบุข้อมูลลูกค้า')}`;
+
+        const details = $('#v3-customer-details');
+        if (details) {
+            details.href = customerId ? context.root.dataset.customerShowUrlTemplate.replace('__CUSTOMER__', customerId) : '#';
+            details.ariaDisabled = customerId ? 'false' : 'true';
+            details.tabIndex = customerId ? 0 : -1;
+            details.classList.toggle('disabled', !customerId);
+            details.classList.toggle('is-disabled', !customerId);
+        }
     }
 
     function clearCustomer() {
@@ -155,6 +170,7 @@
         context.state.deliveryType = 'pickup';
         context.state.address = null;
         context.state.addresses = [];
+        context.state.addressLoading = false;
         context.state.draftZone = null;
         context.state.zone = null;
         context.state.deliveryFee = 0;
@@ -299,8 +315,6 @@
             priceWasEdited: item.price_override_flag === true || item.price_override_flag === 1 || item.price_override_flag === '1',
             priceChangedSinceHold: false,
         }));
-        context.state.zone = hold.delivery_zone_id ? { id: hold.delivery_zone_id, name: hold.delivery_zone_name_snapshot, price_markup_percent: hold.delivery_zone_markup_percent_snapshot, rounding_increment: hold.delivery_zone_rounding_increment_snapshot, minimum_profit: hold.delivery_zone_minimum_profit_snapshot, active: true } : null;
-        context.state.draftZone = context.state.zone;
         context.state.discount = Number(hold.discount || 0);
         context.state.deliveryFee = hold.delivery_type === 'pickup' ? 0 : Number(hold.delivery_fee || 0);
         context.state.deliveryFeeEdited = hold.delivery_type !== 'pickup';
