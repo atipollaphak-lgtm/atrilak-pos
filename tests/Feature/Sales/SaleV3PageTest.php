@@ -38,7 +38,11 @@ class SaleV3PageTest extends TestCase
             ->assertSee('aria-pressed="true"', false)
             ->assertSee('data-backdrop="static"', false)
             ->assertSee('data-keyboard="false"', false)
-            ->assertSee('data-tax-number="0100000000001"', false);
+            ->assertSee('data-tax-number="0100000000001"', false)
+            ->assertSee('/sales-v3/customers', false)
+            ->assertSee('v3-open-customer-create', false)
+            ->assertSee('v3-new-customer-branch-number', false)
+            ->assertSee('v3-price-zone-select', false);
 
         $this->get('/sales-v2')->assertOk();
     }

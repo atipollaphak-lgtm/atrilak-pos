@@ -2,23 +2,25 @@
     <div class="pos-v3-cart-date">
         <div class="v3-sale-date-summary">
             <span>วันที่ขาย</span>
-            <strong id="v3-sale-date-display">{{ now()->toDateString() }}</strong>
+            <strong id="v3-sale-date-display">{{ now()->format('d/m/Y') }}</strong>
             <small>ระบบกำหนดเมื่อรับชำระ</small>
         </div>
         <div class="v3-delivery-date-field">
-            <label for="v3-delivery-date">วันที่จัดส่ง</label>
-            <input id="v3-delivery-date" type="date" value="{{ now()->toDateString() }}">
+            <label for="v3-delivery-date-display">วันที่จัดส่ง</label>
+            <input id="v3-delivery-date" type="hidden" value="{{ now()->toDateString() }}">
+            <input id="v3-delivery-date-display" type="text" value="{{ now()->format('d/m/Y') }}" placeholder="วว/ดด/ปปปป" inputmode="numeric" autocomplete="off" aria-describedby="v3-delivery-date-help">
+            <small id="v3-delivery-date-help" class="text-muted">รูปแบบ วว/ดด/ปปปป</small>
         </div>
         <button id="v3-clear-cart" type="button" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash-alt mr-1"></i>ล้างตะกร้า</button>
         <button id="v3-new-bill" type="button" class="d-none">บิลใหม่</button>
     </div>
     <div id="v3-action-feedback" class="pos-v3-feedback d-none" role="status" aria-live="polite"></div>
     <div class="pos-v3-cart-controls">
+        <button id="v3-pickup-button" type="button" class="btn btn-primary active is-selected" aria-pressed="true">
+            <i class="fas fa-store mr-2"></i><span class="fulfillment-check" aria-hidden="true">✓</span><span class="fulfillment-label">รับเอง (รับเอง)</span>
+        </button>
         <button id="v3-delivery" type="button" class="btn btn-outline-success" aria-pressed="false">
             <i class="fas fa-truck mr-2"></i><span class="fulfillment-check" aria-hidden="true" hidden>✓</span><span class="fulfillment-label">จัดส่ง</span>
-        </button>
-        <button id="v3-pickup-button" type="button" class="btn btn-primary active is-selected" aria-pressed="true">
-            <i class="fas fa-store mr-2"></i><span class="fulfillment-check" aria-hidden="true">✓</span><span class="fulfillment-label">รับเอง</span>
         </button>
     </div>
     <div class="v3-cart-table-head"><span>จำนวน</span><span>สินค้า</span><span>ราคาต่อหน่วย</span><span>รวม</span><span aria-hidden="true"></span></div>

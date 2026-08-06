@@ -31,11 +31,17 @@ class CommercialDocumentService
             'current_page' => 1,
             'total_pages' => 1,
             'show_tax_information' => $definition['show_tax_information'],
-            'customer_address' => $this->resolveCustomerAddress($sale),
+            'customer_address' => $this->resolveCustomerAddress(
+                $sale,
+                $documentType === 'tax-invoice'
+            ),
         ];
     }
 
-    private function resolveCustomerAddress(Sale $sale): string
+    private function resolveCustomerAddress(
+        Sale $sale,
+        bool $invoiceAddressOnly = false
+    ): string
     {
         $customer = $sale->relationLoaded('customer')
             ? $sale->getRelation('customer')
@@ -60,6 +66,19 @@ class CommercialDocumentService
             : $deliveryAddresses->first(
                 fn ($address): bool => (bool) $address->is_default
             );
+
+        if ($invoiceAddressOnly) {
+            foreach ([
+                $sale->customer_address_snapshot,
+                $customer?->address,
+            ] as $address) {
+                if (is_string($address) && trim($address) !== '') {
+                    return $address;
+                }
+            }
+
+            return '-';
+        }
 
         $deliverySources = $sale->delivery_type === 'pickup'
             ? []

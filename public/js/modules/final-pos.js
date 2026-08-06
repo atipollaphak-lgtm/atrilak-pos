@@ -1,6 +1,8 @@
 (function () {
     let context = null;
     let holding = false;
+    const printedDocuments = new Set();
+    let printing = false;
 
     const $ = (selector) => document.querySelector(selector);
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
@@ -43,6 +45,7 @@
         $('#v3-open-customer-search')?.addEventListener('click', () => window.jQuery('#customer-search-modal').modal('show'));
         $('#v3-clear-customer')?.addEventListener('click', clearCustomer);
         $('#v3-customer-search')?.addEventListener('input', filterCustomers);
+        filterCustomers();
         document.querySelectorAll('[data-customer-select]').forEach((button) => button.addEventListener('click', () => selectCustomer(button.closest('[data-customer-row]'))));
         document.querySelectorAll('[data-customer-expand]').forEach((button) => button.addEventListener('click', () => expandCustomer(button.closest('[data-customer-row]'))));
         document.querySelectorAll('[data-final-action="holds"]').forEach((button) => button.addEventListener('click', () => {
@@ -72,24 +75,77 @@
             resetSale();
             window.jQuery('#payment-confirmation-modal').modal('hide');
         });
-        $('#final-print-documents')?.addEventListener('click', printDocuments);
+        $('#final-print-delivery')?.addEventListener('click', () => printDocument('delivery-note'));
+        $('#final-print-tax')?.addEventListener('click', () => printDocument('tax-invoice'));
+        document.querySelectorAll('#v3-open-customer-create, #v3-open-customer-create-from-search, #v3-open-customer-create-from-bar, #v3-customer-empty-create').forEach((button) => button.addEventListener('click', openCustomerCreate));
+        $('#v3-customer-create-form')?.addEventListener('submit', createCustomer);
         if (document.createElement) {
             ensurePaymentMethodSummary();
-            ensureDocumentButtons();
         }
     }
 
     function syncCustomerDisplay() {
         if (!context) return;
         const option = context.customerSelect.selectedOptions[0];
-        $('#v3-customer-name').textContent = option?.dataset.name || 'ลูกค้าทั่วไป';
+        const customerName = option?.dataset.name || 'ลูกค้าทั่วไป';
+        const pickupSuffix = context.state.deliveryType === 'pickup' && option ? ' (รับเอง)' : '';
+        $('#v3-customer-name').textContent = `${customerName}${pickupSuffix}`;
         $('#v3-customer-phone').innerHTML = `<i class="fas fa-phone"></i> ${escapeHtml(option?.dataset.phone || 'ไม่ระบุข้อมูลลูกค้า')}`;
     }
 
     function clearCustomer() {
         context.customerSelect.value = '';
+        context.state.draftZone = null;
+        context.state.zone = null;
         context.customerSelect.dispatchEvent(new Event('change'));
         syncCustomerDisplay();
+    }
+
+    function openCustomerCreate() {
+        $('#v3-customer-create-form')?.reset?.();
+        $('#v3-customer-create-error')?.classList.add('d-none');
+        window.jQuery('#customer-search-modal').modal('hide');
+        window.jQuery('#v3-customer-create-modal').modal('show');
+    }
+
+    async function createCustomer(event) {
+        event.preventDefault();
+        const form = event.target;
+        const submit = $('#v3-customer-create-submit');
+        const errorBox = $('#v3-customer-create-error');
+        if (submit) submit.disabled = true;
+        errorBox?.classList.add('d-none');
+        try {
+            const response = await fetch(context.root.dataset.customerStoreUrl, {
+                method: 'POST',
+                headers: jsonHeaders(),
+                body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success || !data.customer) throw new Error(data.message || 'บันทึกลูกค้าไม่สำเร็จ');
+            const customer = data.customer;
+            const option = document.createElement('option');
+            option.value = String(customer.id);
+            option.textContent = customer.name;
+            option.dataset.name = customer.name || '';
+            option.dataset.phone = customer.phone || '';
+            option.dataset.taxNumber = customer.tax_number || '';
+            option.dataset.branchType = customer.branch_type || '';
+            option.dataset.branchNumber = customer.branch_number || '';
+            option.dataset.customerAddress = customer.address || '';
+            option.dataset.addressCount = String(customer.delivery_addresses?.length || 0);
+            context.customerSelect.append(option);
+            await context.setCustomer(customer.id, customer.delivery_addresses?.length === 1 ? customer.delivery_addresses[0].id : null);
+            window.jQuery('#v3-customer-create-modal').modal('hide');
+            showFeedback(`เลือกลูกค้า ${customer.name} แล้ว`);
+        } catch (error) {
+            if (errorBox) {
+                errorBox.textContent = error.message || 'บันทึกลูกค้าไม่สำเร็จ';
+                errorBox.classList.remove('d-none');
+            }
+        } finally {
+            if (submit) submit.disabled = false;
+        }
     }
 
     function resetSale() {
@@ -98,6 +154,8 @@
         context.state.addressId = '';
         context.state.deliveryType = 'pickup';
         context.state.address = null;
+        context.state.addresses = [];
+        context.state.draftZone = null;
         context.state.zone = null;
         context.state.deliveryFee = 0;
         context.state.deliveryFeeEdited = false;
@@ -110,17 +168,20 @@
         context.addressSelect.disabled = true;
         const date = deliveryDateField();
         if (date) date.value = saleDate();
-        $('#v3-sale-date-display').textContent = saleDate();
+        $('#v3-delivery-date-display').value = window.PosDate?.formatDisplay(saleDate()) || saleDate();
+        $('#v3-sale-date-display').textContent = window.PosDate?.formatDisplay(saleDate()) || saleDate();
         $('#v3-pickup').checked = true;
         $('#v3-discount').value = '0.00';
         context.payment?.reset?.();
         updatePaymentMethodSummary(null);
+        printedDocuments.clear();
+        ['delivery', 'tax'].forEach((suffix) => { const button = $(`#final-print-${suffix}`); if (button) button.disabled = true; });
         context.render();
         syncCustomerDisplay();
     }
 
     function filterCustomers() {
-        const keyword = ($('#v3-customer-search').value || '').toLowerCase();
+        const keyword = ($('#v3-customer-search')?.value || '').toLowerCase();
         let visible = 0;
         document.querySelectorAll('[data-customer-row]').forEach((row) => {
             const show = row.dataset.search.includes(keyword);
@@ -222,7 +283,8 @@
         if (hold.customer_delivery_address_id) context.setAddress(hold.customer_delivery_address_id);
         const date = deliveryDateField();
         if (date) date.value = hold.delivery_type === 'pickup' ? saleDate() : (hold.delivery_date || hold.sale_date || date.value);
-        $('#v3-sale-date-display').textContent = saleDate();
+        $('#v3-delivery-date-display').value = window.PosDate?.formatDisplay(date?.value) || date?.value || '';
+        $('#v3-sale-date-display').textContent = window.PosDate?.formatDisplay(saleDate()) || saleDate();
         context.state.cart = (hold.items || []).map((item) => ({
             key: `${item.product.id}:${item.product_unit_id || 'base'}`,
             productId: item.product.id,
@@ -238,6 +300,7 @@
             priceChangedSinceHold: false,
         }));
         context.state.zone = hold.delivery_zone_id ? { id: hold.delivery_zone_id, name: hold.delivery_zone_name_snapshot, price_markup_percent: hold.delivery_zone_markup_percent_snapshot, rounding_increment: hold.delivery_zone_rounding_increment_snapshot, minimum_profit: hold.delivery_zone_minimum_profit_snapshot, active: true } : null;
+        context.state.draftZone = context.state.zone;
         context.state.discount = Number(hold.discount || 0);
         context.state.deliveryFee = hold.delivery_type === 'pickup' ? 0 : Number(hold.delivery_fee || 0);
         context.state.deliveryFeeEdited = hold.delivery_type !== 'pickup';
@@ -259,17 +322,23 @@
         const taxToggle = $('#final-print-tax');
         const help = $('#final-tax-help');
         if (!taxToggle) return;
-        const taxNumber = String(option?.dataset.taxNumber || '').trim();
-        const ready = taxNumber !== '';
+        const missing = [];
+        if (!String(option?.dataset.name || '').trim()) missing.push('ชื่อลูกค้า');
+        if (!String(option?.dataset.taxNumber || '').trim()) missing.push('เลขประจำตัวผู้เสียภาษี');
+        const invoiceAddress = option?.dataset.customerAddress || '';
+        if (!String(invoiceAddress).trim()) missing.push('ที่อยู่ใบกำกับภาษี');
+        if (option?.dataset.branchType === 'สาขา' && !String(option?.dataset.branchNumber || '').trim()) missing.push('เลขสาขา');
+        const ready = missing.length === 0;
         taxToggle.disabled = !ready;
         if (!ready) taxToggle.checked = false;
         if (help) {
-            help.textContent = ready ? '' : 'ลูกค้านี้ยังไม่มีเลขประจำตัวผู้เสียภาษี';
+            help.textContent = ready ? '' : `ยังพิมพ์ใบกำกับภาษีไม่ได้: ข้อมูลไม่ครบ (${missing.join(', ')})`;
             help.classList.toggle('d-none', ready);
         }
     }
 
     function openConfirmation() {
+        if (context.canConfirmDelivery && !context.canConfirmDelivery()) return;
         const modal = $('#payment-confirmation-modal');
         modal?.classList.remove('has-documents');
         $('#final-payment-close')?.classList.remove('d-none');
@@ -277,24 +346,33 @@
         $('#final-payment-status')?.classList.add('d-none');
         $('#final-confirm-payment')?.classList.remove('d-none');
         $('#final-edit-items')?.classList.remove('d-none');
-        $('#final-print-documents').disabled = true;
-        $('#final-finish-payment').disabled = true;
+        const deliveryPrintButton = $('#final-print-delivery');
+        const taxPrintButton = $('#final-print-tax');
+        const finishButton = $('#final-finish-payment');
+        if (deliveryPrintButton) deliveryPrintButton.disabled = true;
+        if (taxPrintButton) taxPrintButton.disabled = true;
+        if (finishButton) finishButton.disabled = true;
         $('#final-preview-sale-no').textContent = 'รอออกเลขที่บิล';
         context.payment?.reset?.();
         updatePaymentMethodSummary(null);
 
         const currentSaleDate = saleDate();
-        const pickup = $('#v3-pickup')?.checked;
+        const pickup = context.state.deliveryType === 'pickup';
+        $('#final-payment-title').textContent = pickup ? 'ยืนยันการชำระเงิน' : 'ยืนยันการจัดส่ง';
+        $('#final-payment-subtitle').textContent = pickup ? 'ตรวจสอบรายการสินค้าและยอดรวมก่อนยืนยันการชำระเงิน' : 'ตรวจสอบรายการสินค้า ที่อยู่ และยอดรวมก่อนยืนยันการจัดส่ง';
+        const confirmButton = $('#final-confirm-payment');
+        if (confirmButton) confirmButton.innerHTML = `<i class="fas fa-check mr-2"></i>${pickup ? 'ยืนยันการชำระเงิน' : 'ยืนยันการจัดส่ง'}`;
         const date = deliveryDateField();
         const selectedDeliveryDate = pickup ? currentSaleDate : (date?.value || '-');
-        const address = context.addressSelect.selectedOptions[0];
-        $('#final-preview-bill-date').textContent = currentSaleDate;
-        $('#final-preview-address').textContent = pickup ? 'รับสินค้าเองที่ร้าน' : (address?.textContent || 'ยังไม่ได้เลือกที่อยู่จัดส่ง');
-        $('#final-preview-fulfillment').textContent = pickup ? 'รับเอง' : 'จัดส่ง';
+        const displayDate = (value) => window.PosDate?.formatDisplay(value) || value || '-';
+        const address = context.state.address;
+        $('#final-preview-bill-date').textContent = displayDate(currentSaleDate);
+        $('#final-preview-address').textContent = pickup ? 'รับสินค้าเองที่ร้าน' : (address?.address || address?.label || 'ยังไม่ได้เลือกที่อยู่จัดส่ง');
+        $('#final-preview-fulfillment').textContent = pickup ? 'รับเอง (รับเอง)' : 'จัดส่ง';
         $('#final-preview-zone').textContent = pickup ? 'ไม่มีค่าส่ง' : (context.state.zone?.name ? `โซนจัดส่ง: ${context.state.zone.name}` : 'ยังไม่ได้เลือกโซน');
         $('#final-preview-date-label').textContent = pickup ? 'วันที่รับสินค้า' : 'วันที่จัดส่ง';
-        $('#final-preview-date').textContent = selectedDeliveryDate;
-        $('#final-preview-items').innerHTML = context.state.cart.map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.unitName)}</td><td>${item.qty}</td><td>${money(item.price)}</td><td>${money(item.qty * item.price)}</td></tr>`).join('');
+        $('#final-preview-date').textContent = displayDate(selectedDeliveryDate);
+        $('#final-preview-items').innerHTML = context.state.cart.map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(item.name)}</td><td>${item.qty} ${escapeHtml(item.unitName)}</td><td>${money(item.qty * item.price)}</td></tr>`).join('');
         $('#final-preview-item-count').textContent = `${context.state.cart.length} รายการ`;
         $('#final-preview-subtotal').textContent = money(context.state.cart.reduce((sum, item) => sum + item.qty * item.price, 0));
         $('#final-preview-discount').textContent = money(context.state.discount);
@@ -331,15 +409,25 @@
     function showSuccess(data) {
         updatePaymentMethodSummary(data);
         context.lastSaleId = data.sale_id;
+        const delivery = context.state.deliveryType === 'delivery';
+        const status = $('#final-payment-status');
+        if (status) status.textContent = delivery ? 'ยืนยันการจัดส่ง' : 'ชำระเงินเรียบร้อยแล้ว';
+        status?.classList.toggle('is-delivery', delivery);
+        $('#final-payment-title').textContent = delivery ? 'ยืนยันการจัดส่ง' : 'ชำระเงินเรียบร้อยแล้ว';
+        $('#final-payment-subtitle').textContent = delivery ? 'ยืนยันการจัดส่ง' : 'บันทึกการขายและการชำระเงินเรียบร้อยแล้ว';
         $('#final-payment-close')?.classList.add('d-none');
-        $('#final-payment-status')?.classList.remove('d-none');
+        status?.classList.remove('d-none');
         $('#final-preview-sale-no').textContent = `เลขที่บิล ${data.sale_no || '-'}`;
         $('#final-confirm-payment')?.classList.add('d-none');
         $('#final-edit-items')?.classList.add('d-none');
         $('#final-document-panel')?.classList.remove('d-none');
         $('#payment-confirmation-modal')?.classList.add('has-documents');
-        $('#final-print-documents').disabled = false;
-        $('#final-finish-payment').disabled = false;
+        printedDocuments.clear();
+        const deliveryButton = $('#final-print-delivery');
+        if (deliveryButton) deliveryButton.disabled = false;
+        updateTaxInvoiceAvailability(context.customerSelect.selectedOptions[0]);
+        const finishButton = $('#final-finish-payment');
+        if (finishButton) finishButton.disabled = false;
         window.jQuery('#payment-confirmation-modal').modal('show');
     }
 
@@ -367,45 +455,23 @@
         confirm.parentElement?.insertBefore(summary, confirm);
     }
 
-    function printDocuments() {
-        const saleId = context.lastSaleId;
-        ['delivery-note', 'tax-invoice']
-            .filter((type) => type === 'delivery-note'
-                ? $('#final-print-delivery').checked
-                : $('#final-print-tax').checked && !$('#final-print-tax').disabled)
-            .forEach((type) => window.open(`${context.root.dataset.documentUrlTemplate.replace('__SALE__', saleId)}?document_type=${type}`, '_blank', 'noopener'));
-    }
-
     function printDocument(type, preview = false) {
         const saleId = context.lastSaleId;
-        if (!saleId) return;
+        const button = type === 'delivery-note' ? $('#final-print-delivery') : $('#final-print-tax');
+        if (!saleId || printing || printedDocuments.has(type) || (type === 'tax-invoice' && button?.disabled)) return;
         const base = context.root.dataset.documentUrlTemplate.replace('__SALE__', saleId);
         const query = `?document_type=${type}${preview ? '&preview=1' : ''}`;
-        window.open(`${base}${query}`, '_blank', 'noopener');
-    }
-
-    function ensureDocumentButtons() {
-        const panel = $('#final-document-panel');
-        const print = $('#final-print-documents');
-        if (!panel || !print || !document.createElement || panel.querySelector?.('[data-final-document-actions]')) return;
-        const actions = document.createElement('div');
-        actions.dataset.finalDocumentActions = '1';
-        actions.className = 'final-document-actions';
-        [['delivery-note', 'พิมพ์ใบส่งของ'], ['tax-invoice', 'พิมพ์ใบกำกับภาษี']].forEach(([type, label]) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'btn btn-outline-primary';
-            button.textContent = label;
-            button.addEventListener('click', () => printDocument(type));
-            actions.append(button);
-        });
-        const preview = document.createElement('button');
-        preview.type = 'button';
-        preview.className = 'btn btn-outline-secondary';
-        preview.textContent = 'ดูตัวอย่าง';
-        preview.addEventListener('click', () => printDocument('delivery-note', true));
-        actions.append(preview);
-        panel.insertBefore(actions, print);
+        printing = true;
+        if (button) button.disabled = true;
+        const popup = window.open(`${base}${query}`, '_blank', 'noopener');
+        if (!popup) {
+            if (button) button.disabled = false;
+            printing = false;
+            showFeedback('เบราว์เซอร์บล็อกหน้าพิมพ์ กรุณาอนุญาต pop-up แล้วลองใหม่', 'error');
+            return;
+        }
+        printedDocuments.add(type);
+        window.setTimeout(() => { printing = false; }, 250);
     }
 
     window.FinalPos = { configure, openConfirmation, showSuccess, syncCustomerDisplay, resetSale, showFeedback };

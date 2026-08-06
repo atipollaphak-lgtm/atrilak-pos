@@ -65,6 +65,59 @@ class UnitRouteAccessTest extends TestCase
         $this->assertRoleCanManageUnits('owner');
     }
 
+    public function test_managers_can_create_units_without_submitting_a_code(): void
+    {
+        $manager = User::factory()->create(['role' => 'manager']);
+
+        $this->actingAs($manager)
+            ->post(route('units.store'), [
+                'name' => 'Generated unit',
+                'short_name' => 'GEN',
+                'active' => true,
+                'sort_order' => 10,
+            ])
+            ->assertRedirect(route('units.index'));
+
+        $unit = Unit::query()->where('name', 'Generated unit')->firstOrFail();
+
+        $this->assertMatchesRegularExpression('/^UNT-\d{6}$/', $unit->code);
+
+        $this->actingAs($manager)
+            ->post(route('units.store'), [
+                'name' => 'Generated unit two',
+                'short_name' => 'GEN2',
+                'active' => true,
+                'sort_order' => 20,
+            ])
+            ->assertRedirect(route('units.index'));
+
+        $secondUnit = Unit::query()->where('name', 'Generated unit two')->firstOrFail();
+
+        $this->assertNotSame($unit->code, $secondUnit->code);
+    }
+
+    public function test_edit_cannot_replace_an_existing_unit_code(): void
+    {
+        $manager = User::factory()->create(['role' => 'manager']);
+        $unit = Unit::query()->create($this->unitData('LEGACY'));
+
+        $this->actingAs($manager)
+            ->put(route('units.update', $unit), [
+                'code' => 'FORGED',
+                'name' => 'Renamed unit',
+                'short_name' => 'REN',
+                'active' => true,
+                'sort_order' => 30,
+            ])
+            ->assertRedirect(route('units.index'));
+
+        $this->assertDatabaseHas('units', [
+            'id' => $unit->id,
+            'code' => 'LEGACY',
+            'name' => 'Renamed unit',
+        ]);
+    }
+
     public function test_unit_route_names_and_urls_remain_compatible(): void
     {
         $unit = new Unit(['id' => 42]);
@@ -106,14 +159,14 @@ class UnitRouteAccessTest extends TestCase
             ->assertOk();
 
         $this->actingAs($user)
-            ->post(route('units.store'), $this->unitData(strtoupper(substr($role, 0, 3))))
+            ->post(route('units.store'), $this->unitDataWithoutCode(strtoupper(substr($role, 0, 3))))
             ->assertRedirect(route('units.index'));
 
         $unitToUpdate = Unit::query()->create($this->unitData('UP1'));
         $this->actingAs($user)
             ->put(route('units.update', $unitToUpdate), $this->unitData('UP2'))
             ->assertRedirect(route('units.index'));
-        $this->assertDatabaseHas('units', ['id' => $unitToUpdate->id, 'code' => 'UP2']);
+        $this->assertDatabaseHas('units', ['id' => $unitToUpdate->id, 'code' => 'UP1']);
 
         $unitToDelete = Unit::query()->create($this->unitData('DEL'));
         $this->actingAs($user)
@@ -142,6 +195,16 @@ class UnitRouteAccessTest extends TestCase
             'code' => $code,
             'name' => 'Unit '.$code,
             'short_name' => $code,
+            'active' => true,
+            'sort_order' => 10,
+        ];
+    }
+
+    private function unitDataWithoutCode(string $nameSuffix): array
+    {
+        return [
+            'name' => 'Unit '.$nameSuffix,
+            'short_name' => $nameSuffix,
             'active' => true,
             'sort_order' => 10,
         ];

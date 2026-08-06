@@ -19,7 +19,10 @@ class CustomerDeliveryAddressService
                 $customer->deliveryAddresses()->update(['is_default' => false]);
             }
 
-            return $customer->deliveryAddresses()->create($this->values($customer, $data, $isPrimary));
+            $address = $customer->deliveryAddresses()->create($this->values($customer, $data, $isPrimary));
+            $this->syncCustomerInvoiceAddress($customer, $address, $isPrimary);
+
+            return $address;
         });
     }
 
@@ -34,6 +37,7 @@ class CustomerDeliveryAddressService
             }
 
             $address->update($this->values($customer, $data, $isPrimary));
+            $this->syncCustomerInvoiceAddress($customer, $address, $isPrimary);
 
             return $address->fresh();
         });
@@ -45,6 +49,7 @@ class CustomerDeliveryAddressService
             $this->assertBelongsTo($customer, $address);
             $customer->deliveryAddresses()->update(['is_default' => false]);
             $address->update(['is_default' => true]);
+            $this->syncCustomerInvoiceAddress($customer, $address, true);
         });
     }
 
@@ -65,7 +70,9 @@ class CustomerDeliveryAddressService
             $address->delete();
 
             if ($wasPrimary) {
-                $customer->deliveryAddresses()->oldest('id')->first()?->update(['is_default' => true]);
+                $replacement = $customer->deliveryAddresses()->oldest('id')->first();
+                $replacement?->update(['is_default' => true]);
+                $customer->update(['address' => $replacement?->address]);
             }
         });
     }
@@ -90,6 +97,16 @@ class CustomerDeliveryAddressService
     {
         if ((int) $address->customer_id !== (int) $customer->id) {
             abort(404);
+        }
+    }
+
+    private function syncCustomerInvoiceAddress(
+        Customer $customer,
+        CustomerDeliveryAddress $address,
+        bool $isPrimary
+    ): void {
+        if ($isPrimary) {
+            $customer->update(['address' => $address->address]);
         }
     }
 }

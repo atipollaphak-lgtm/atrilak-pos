@@ -41,17 +41,12 @@
                 @csrf
 
                 <div class="row">
-                    <div class="col-md-2">
-                        <label>รหัส</label>
-                        <input type="text" name="code" class="form-control" placeholder="BAG" required>
-                    </div>
-
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label>ชื่อหน่วย</label>
                         <input type="text" name="name" class="form-control" placeholder="ถุง" required>
                     </div>
 
-                    <div class="col-md-2">
+                    <div class="col-md-3">
                         <label>ชื่อย่อ</label>
                         <input type="text" name="short_name" class="form-control" placeholder="ถุง" required>
                     </div>
@@ -74,6 +69,10 @@
                         </button>
                     </div>
                 </div>
+
+                <small class="form-text text-muted mt-2">
+                    รหัสหน่วยจะถูกสร้างอัตโนมัติเมื่อบันทึก
+                </small>
             </form>
         </div>
     </div>
@@ -109,8 +108,8 @@
                                 </td>
 
                                 <td>
-                                    <input type="text" name="code" value="{{ $unit->code }}" class="form-control"
-                                        required>
+                                    <input type="text" value="{{ $unit->code }}" class="form-control" readonly
+                                        aria-label="รหัสหน่วย">
                                 </td>
 
                                 <td>
