@@ -11,9 +11,12 @@
             <button id="v3-clear-customer" type="button" class="btn btn-outline-danger"><i class="fas fa-trash"></i>ล้างลูกค้า</button>
         </div>
     </div>
+    <div id="v3-address-picker" class="pos-v3-address-picker d-none px-3 pb-3" hidden>
+        <label for="v3-address-id" class="small font-weight-bold mb-1">เลือกที่อยู่จัดส่ง</label>
+        <select id="v3-address-id" class="form-control" disabled><option value="">เลือกลูกค้าก่อน</option></select>
+    </div>
     <div class="d-none">
         <select id="v3-customer-id" class="form-control"><option value="">ลูกค้าทั่วไป</option>@foreach ($customers as $customer)<option value="{{ $customer->id }}" data-name="{{ $customer->name }}" data-phone="{{ $customer->phone }}" data-tax-number="{{ $customer->tax_number ?? '' }}" data-branch-type="{{ $customer->branch_type ?? '' }}" data-branch-number="{{ $customer->branch_number ?? '' }}" data-customer-address="{{ $customer->address ?? '' }}" data-address-count="{{ $customer->delivery_addresses_count }}">{{ $customer->name }}</option>@endforeach</select>
-        <select id="v3-address-id" class="form-control" disabled><option value="">เลือกลูกค้าก่อน</option></select>
         <select id="v3-technician-id" class="form-control"><option value="">ไม่ระบุ</option>@foreach ($technicians as $technician)<option value="{{ $technician->id }}">{{ $technician->name }}</option>@endforeach</select>
         <input id="v3-pickup" type="checkbox"><span id="v3-address-text"></span><span id="v3-address-zone"></span><span id="v3-address-fee"></span>
     </div>

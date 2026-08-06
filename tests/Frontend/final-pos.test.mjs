@@ -137,8 +137,9 @@ function createHarness(hold) {
         },
         alert(message) { alerts.push(message); },
         confirm() { return true; },
+        setTimeout(callback) { callback(); return 1; },
         jQuery() { return { modal() {} }; },
-        open(url) { openedUrls.push(url); },
+        open(url) { openedUrls.push(url); return {}; },
         async fetch(url, options = {}) {
             requests.push({ url, method: options.method || "GET" });
             if (url === "/holds" && options.method === "POST") {
@@ -531,6 +532,49 @@ test("tax invoice printing stays disabled when customer tax data is incomplete",
     assert.equal(harness.elements.get("#final-print-tax").disabled, true);
     assert.match(harness.elements.get("#final-tax-help").textContent, /ที่อยู่ใบกำกับภาษี/);
     assert.match(harness.elements.get("#final-tax-help").textContent, /เลขสาขา/);
+});
+
+test("tax invoice printing stays disabled when only the delivery address is present", () => {
+    const harness = createHarness({
+        id: 13,
+        customer_id: 14,
+        customer_delivery_address_id: 36,
+        items: [],
+    });
+    harness.state.deliveryType = "delivery";
+    harness.state.address = { address: "TEST delivery-only address" };
+    harness.customerSelect.selectedOptions = [{
+        dataset: {
+            name: "TEST customer with delivery address only",
+            taxNumber: "0100000000001",
+            customerAddress: "",
+            branchType: "à¸ªà¸³à¸™à¸±à¸à¸‡à¸²à¸™à¹ƒà¸«à¸à¹ˆ",
+        },
+    }];
+
+    harness.finalPos.showSuccess({ sale_id: 58, sale_no: "SAL-TEST-58" });
+
+    assert.equal(harness.elements.get("#final-print-tax").disabled, true);
+    assert.notEqual(harness.elements.get("#final-tax-help").textContent, "");
+});
+
+test("successful document popup prevents duplicate printing", async () => {
+    const harness = createHarness({
+        id: 14,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        items: [],
+    });
+
+    harness.finalPos.showSuccess({ sale_id: 59, sale_no: "SAL-TEST-59" });
+    await harness.elements.get("#final-print-delivery").dispatch("click");
+    await harness.elements.get("#final-print-delivery").dispatch("click");
+
+    assert.deepEqual(
+        harness.openedUrls,
+        ["/sales/59/invoice-v2?document_type=delivery-note"],
+    );
+    assert.equal(harness.elements.get("#final-print-delivery").disabled, true);
 });
 
 test("success modal uses the server payment snapshot for cash, PromptPay, and mixed payments", () => {

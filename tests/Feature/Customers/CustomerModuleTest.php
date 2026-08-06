@@ -170,5 +170,6 @@ class CustomerModuleTest extends TestCase
 
         $this->assertFalse($first->fresh()->is_default);
         $this->assertTrue($second->fresh()->is_default);
+        $this->assertSame('B', $customer->fresh()->address);
     }
 }

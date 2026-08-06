@@ -80,7 +80,7 @@ class PosV3InvoiceUxContractTest extends TestCase
         $sale = $this->source('public/js/modules/sale-v3.js');
 
         $this->assertMatchesRegularExpression(
-            '/function init\(\) \{\s*refreshPricingContext\(\);\s*render\(\);/s',
+            '/function init\(\) \{\s*sanitizeZoneOptions\(\);\s*refreshPricingContext\(\);\s*render\(\);/s',
             $sale
         );
         $this->assertStringContainsString('label.textContent = `${money(unitPrice(unitFor(product), 1, product))} บาท`', $sale);

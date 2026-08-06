@@ -325,7 +325,7 @@
         const missing = [];
         if (!String(option?.dataset.name || '').trim()) missing.push('ชื่อลูกค้า');
         if (!String(option?.dataset.taxNumber || '').trim()) missing.push('เลขประจำตัวผู้เสียภาษี');
-        const invoiceAddress = option?.dataset.customerAddress || context?.state?.address?.address || '';
+        const invoiceAddress = option?.dataset.customerAddress || '';
         if (!String(invoiceAddress).trim()) missing.push('ที่อยู่ใบกำกับภาษี');
         if (option?.dataset.branchType === 'สาขา' && !String(option?.dataset.branchNumber || '').trim()) missing.push('เลขสาขา');
         const ready = missing.length === 0;

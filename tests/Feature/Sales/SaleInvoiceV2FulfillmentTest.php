@@ -171,6 +171,44 @@ class SaleInvoiceV2FulfillmentTest extends TestCase
         $this->assertStringNotContainsString('Selected Live Delivery Address', $html);
     }
 
+    public function test_tax_invoice_uses_customer_invoice_address_instead_of_delivery_address(): void
+    {
+        $customer = Customer::make([
+            'address' => 'Customer Invoice Address',
+        ]);
+        $deliveryAddress = CustomerDeliveryAddress::make([
+            'address' => 'Selected Delivery Site Address',
+            'is_default' => true,
+        ]);
+
+        $sale = Sale::make([
+            'sale_no' => 'SAL-TAX-INVOICE-ADDRESS',
+            'sale_date' => '2026-07-26',
+            'delivery_type' => 'delivery',
+            'customer_address_snapshot' => 'Snapshot Invoice Address',
+            'delivery_full_address_snapshot' => 'Snapshot Delivery Address',
+            'delivery_fee' => '0.00',
+            'discount' => '0.00',
+            'total_amount' => '15.00',
+        ]);
+        $sale->setRelation('customer', $customer);
+        $sale->setRelation('customerDeliveryAddress', $deliveryAddress);
+
+        $document = app(CommercialDocumentService::class)
+            ->buildSaleDocument($sale, 'tax-invoice');
+
+        $this->assertSame('Snapshot Invoice Address', $document['customer_address']);
+
+        $html = view('sales.invoice_v2', [
+            'sale' => $sale,
+            'setting' => null,
+            'document' => $document,
+        ])->render();
+
+        $this->assertStringContainsString('Snapshot Invoice Address', $html);
+        $this->assertStringNotContainsString('Snapshot Delivery Address', $html);
+    }
+
     public function test_sale_document_falls_back_to_customer_default_delivery_address(): void
     {
         $defaultAddress = CustomerDeliveryAddress::make([
