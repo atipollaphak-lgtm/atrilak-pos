@@ -1,14 +1,24 @@
 <section class="pos-v3-customer card">
     <div class="card-body pos-v3-customer-panel">
-        <div class="flex-grow-1">
-            <h4 id="v3-customer-name" class="mb-1">ลูกค้าทั่วไป</h4>
-            <div id="v3-customer-phone" class="pos-v3-customer-line"><i class="fas fa-phone"></i> ไม่ระบุข้อมูลลูกค้า</div>
-            <div id="v3-customer-address" class="pos-v3-customer-line"><i class="fas fa-map-marker-alt"></i> เลือกที่อยู่จัดส่งเพื่อเริ่มคำนวณโซน</div>
+        <div class="pos-v3-customer-summary-wrap">
+            <strong id="v3-customer-summary" class="pos-v3-customer-summary">ลูกค้าทั่วไป</strong>
+            <span id="v3-customer-address" class="pos-v3-customer-line">เลือกที่อยู่จัดส่งเพื่อเริ่มคำนวณโซน</span>
+        </div>
+        <div class="pos-v3-price-zone-control">
+            <label for="v3-price-zone-select">โซนราคา</label>
+            <select id="v3-price-zone-select" class="form-control form-control-sm" aria-label="โซนราคาตามที่อยู่ลูกค้า" disabled>
+                <option value="">รอเลือกที่อยู่</option>
+                @foreach ($deliveryZones as $zone)
+                    <option value="{{ $zone->id }}" data-zone='@json($zone)'>{{ $zone->name }}</option>
+                @endforeach
+            </select>
+            <span id="v3-zone-status" class="sr-only" role="status" aria-live="polite"></span>
         </div>
         <div class="pos-v3-customer-actions">
-            <button id="v3-open-customer-search" type="button" class="btn btn-outline-success"><i class="fas fa-search"></i>ค้นหาลูกค้า</button>
-            <button id="v3-open-customer-create-from-bar" type="button" class="btn btn-outline-primary"><i class="fas fa-user-plus"></i>เพิ่มลูกค้าใหม่</button>
-            <button id="v3-clear-customer" type="button" class="btn btn-outline-danger"><i class="fas fa-trash"></i>ล้างลูกค้า</button>
+            <a id="v3-customer-details" class="btn btn-outline-primary disabled" href="#" target="_blank" rel="noopener" aria-label="ดูข้อมูลลูกค้า" title="ดูข้อมูลลูกค้า" aria-disabled="true" tabindex="-1"><i class="fas fa-eye" aria-hidden="true"></i></a>
+            <button id="v3-open-customer-search" type="button" class="btn btn-outline-primary" aria-label="ค้นหาลูกค้า" title="ค้นหาลูกค้า"><i class="fas fa-search" aria-hidden="true"></i></button>
+            <button id="v3-open-customer-create-from-bar" type="button" class="btn btn-outline-primary" aria-label="เพิ่มลูกค้า" title="เพิ่มลูกค้า"><i class="fas fa-user-plus" aria-hidden="true"></i></button>
+            <button id="v3-clear-customer" type="button" class="btn btn-outline-danger" aria-label="ล้างลูกค้า" title="ล้างลูกค้า"><i class="fas fa-times" aria-hidden="true"></i></button>
         </div>
     </div>
     <div id="v3-address-picker" class="pos-v3-address-picker d-none px-3 pb-3" hidden>
