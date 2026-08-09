@@ -34,6 +34,7 @@
         @include('sales-v3.partials.sale-history-modal')
         @include('sales-v3.partials.final-payment-modal')
         @include('sales-v3.partials.customer-create-modal')
+        @include('sales-v3.partials.zone-mismatch-modal')
     </div>
 @stop
 

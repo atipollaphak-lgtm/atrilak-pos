@@ -19,6 +19,10 @@ class Sale extends Model
         'customer_id',
         'customer_delivery_address_id',
         'technician_id',
+        'pricing_zone_id',
+        'pricing_zone_name_snapshot',
+        'pricing_zone_markup_percent_snapshot',
+        'pricing_zone_rounding_increment_snapshot',
         'sale_date',
         'delivery_date',
         'total_amount',
@@ -66,10 +70,15 @@ class Sale extends Model
             'revision' => 'integer',
             'voided_at' => 'datetime',
             'delivery_date' => 'date:Y-m-d',
+            'total_amount' => 'decimal:2',
+            'delivery_fee' => 'decimal:2',
+            'discount' => 'decimal:2',
             'cash_amount' => 'decimal:2',
             'promptpay_amount' => 'decimal:2',
             'received_amount' => 'decimal:2',
             'change_amount' => 'decimal:2',
+            'pricing_zone_markup_percent_snapshot' => 'decimal:2',
+            'pricing_zone_rounding_increment_snapshot' => 'decimal:2',
             'delivery_zone_markup_percent_snapshot' => 'decimal:2',
             'delivery_zone_rounding_increment_snapshot' => 'decimal:2',
             'delivery_zone_minimum_profit_snapshot' => 'decimal:2',
@@ -84,6 +93,11 @@ class Sale extends Model
     public function customerDeliveryAddress()
     {
         return $this->belongsTo(CustomerDeliveryAddress::class);
+    }
+
+    public function pricingZone()
+    {
+        return $this->belongsTo(DeliveryZone::class, 'pricing_zone_id');
     }
 
     public function items()

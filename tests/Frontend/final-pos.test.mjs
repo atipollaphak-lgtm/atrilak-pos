@@ -118,14 +118,14 @@ function createHarness(hold) {
     const state = {
         cart: [{ key: "old", name: "old" }],
         address: null,
-        zone: null,
+        pricingZone: null,
+        deliveryZone: null,
         deliveryFee: 0,
         deliveryFeeEdited: false,
         discount: 0,
         note: "",
         deliveryType: "pickup",
         addresses: [],
-        draftZone: null,
     };
 
     addressSelect.addEventListener("change", () => {
@@ -153,7 +153,11 @@ function createHarness(hold) {
         jQuery() { return { modal() {} }; },
         open(url) { openedUrls.push(url); return {}; },
         async fetch(url, options = {}) {
-            requests.push({ url, method: options.method || "GET" });
+            requests.push({
+                url,
+                method: options.method || "GET",
+                body: options.body ? JSON.parse(options.body) : null,
+            });
             if (url === "/holds" && options.method === "POST") {
                 return response(201, {
                     success: true,
@@ -197,8 +201,7 @@ function createHarness(hold) {
                 textContent: "TEST address",
             }];
             if (hold.current_address_zone) {
-                state.zone = hold.current_address_zone;
-                state.draftZone = hold.current_address_zone;
+                state.deliveryZone = hold.current_address_zone;
             }
         },
         render() {},
@@ -279,6 +282,17 @@ test("resume restores the complete hold context without consuming it before paym
         delivery_zone_markup_percent_snapshot: "5.00",
         delivery_zone_rounding_increment_snapshot: "0.25",
         delivery_zone_minimum_profit_snapshot: "100.00",
+        pricing_zone_id: 5,
+        pricing_zone_name_snapshot: "HELD pricing zone",
+        pricing_zone_markup_percent_snapshot: "10.00",
+        pricing_zone_rounding_increment_snapshot: "1.00",
+        pricing_zone: {
+            id: 5,
+            name: "HELD pricing zone",
+            price_markup_percent: "10.00",
+            rounding_increment: "1.00",
+            active: true,
+        },
         current_address_zone: { id: 11, name: "CURRENT address zone", active: true },
         customer: { name: "TEST customer" },
         items: [{
@@ -304,7 +318,8 @@ test("resume restores the complete hold context without consuming it before paym
     assert.equal(harness.state.note, "TEST hold note");
     assert.equal(harness.state.discount, 10);
     assert.equal(harness.state.deliveryFee, 0);
-    assert.equal(harness.state.zone.name, "CURRENT address zone");
+    assert.equal(harness.state.deliveryZone.name, "CURRENT address zone");
+    assert.equal(harness.state.pricingZone.name, "HELD pricing zone");
     assert.equal(harness.state.cart.length, 1);
     assert.equal(harness.state.cart[0].qty, 3);
     assert.equal(harness.state.holdBillId, 7);
@@ -435,6 +450,46 @@ test("rapid repeated hold clicks create only one persistent hold", async () => {
         harness.requests.filter((request) => request.method === "POST").length,
         1,
     );
+});
+
+test("holding a pickup bill sends pricing context without delivery context", async () => {
+    const harness = createHarness({
+        id: 14,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        items: [],
+    });
+    harness.pickup.checked = true;
+    harness.state.deliveryType = "pickup";
+    harness.state.pricingZone = {
+        id: 8,
+        name: "Quote zone",
+        price_markup_percent: "10.00",
+        rounding_increment: "1.00",
+    };
+    harness.state.deliveryZone = {
+        id: 9,
+        name: "Address zone",
+        price_markup_percent: "0.00",
+        rounding_increment: "0.25",
+        minimum_profit: "100.00",
+    };
+    harness.state.cart = [{
+        productId: 1,
+        productUnitId: 2,
+        qty: 1,
+        price: 110,
+        priceWasEdited: false,
+        priceChangedSinceHold: false,
+    }];
+
+    await harness.holdsButton.dispatch("click");
+
+    const payload = harness.requests.find((request) => request.method === "POST").body;
+    assert.equal(payload.pricing_zone_id, 8);
+    assert.equal(payload.pricing_zone_name_snapshot, "Quote zone");
+    assert.equal(payload.delivery_zone_id, null);
+    assert.equal(payload.delivery_zone_name_snapshot, null);
 });
 
 test("finish resets the next bill and confirmation restores its actions", async () => {

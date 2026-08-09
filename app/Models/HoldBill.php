@@ -14,6 +14,10 @@ class HoldBill extends Model
         'customer_id',
         'customer_delivery_address_id',
         'delivery_zone_id',
+        'pricing_zone_id',
+        'pricing_zone_name_snapshot',
+        'pricing_zone_markup_percent_snapshot',
+        'pricing_zone_rounding_increment_snapshot',
         'delivery_zone_name_snapshot',
         'delivery_zone_markup_percent_snapshot',
         'delivery_zone_rounding_increment_snapshot',
@@ -35,6 +39,8 @@ class HoldBill extends Model
             'discount' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
+            'pricing_zone_markup_percent_snapshot' => 'decimal:2',
+            'pricing_zone_rounding_increment_snapshot' => 'decimal:2',
             'delivery_zone_markup_percent_snapshot' => 'decimal:2',
             'delivery_zone_rounding_increment_snapshot' => 'decimal:2',
             'delivery_zone_minimum_profit_snapshot' => 'decimal:2',
@@ -59,6 +65,11 @@ class HoldBill extends Model
     public function deliveryZone(): BelongsTo
     {
         return $this->belongsTo(DeliveryZone::class);
+    }
+
+    public function pricingZone(): BelongsTo
+    {
+        return $this->belongsTo(DeliveryZone::class, 'pricing_zone_id');
     }
 
     public function user(): BelongsTo

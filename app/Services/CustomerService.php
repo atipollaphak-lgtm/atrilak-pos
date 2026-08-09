@@ -22,8 +22,10 @@ class CustomerService
                 'active' => true,
             ]);
 
-            $primaryAddress = $this->savePrimaryAddress($customer, $data);
-            $customer->update(['address' => $primaryAddress->address]);
+            if ($this->hasPrimaryAddressData($data)) {
+                $primaryAddress = $this->savePrimaryAddress($customer, $data);
+                $customer->update(['address' => $primaryAddress->address]);
+            }
 
             return $customer->fresh();
         });
@@ -87,6 +89,19 @@ class CustomerService
         $address->update($values);
 
         return $address;
+    }
+
+    private function hasPrimaryAddressData(array $data): bool
+    {
+        foreach (['address', 'delivery_zone_id', 'address_name', 'receiver_name', 'receiver_phone'] as $field) {
+            $value = $data[$field] ?? null;
+
+            if ($value !== null && (! is_string($value) || trim($value) !== '')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function nextCode(): string

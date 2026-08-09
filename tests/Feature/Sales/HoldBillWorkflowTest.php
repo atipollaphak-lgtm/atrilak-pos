@@ -156,6 +156,65 @@ class HoldBillWorkflowTest extends TestCase
         $this->assertDatabaseCount('sales', 1);
     }
 
+    public function test_pickup_hold_persists_explicit_pricing_zone_for_resume_without_delivery_fee(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        [$product, $productUnit] = $this->productWithUnit();
+        $pricingZone = DeliveryZone::query()->create([
+            'name' => 'โซนเสนอราคา',
+            'price_markup_percent' => '10.00',
+            'rounding_increment' => '1.00',
+            'minimum_profit' => '0.00',
+            'active' => true,
+        ]);
+
+        $created = $this->actingAs($cashier)->postJson('/sales-v3/hold-bills', [
+            'sale_date' => '2026-07-29',
+            'delivery_type' => 'pickup',
+            'pricing_zone_id' => $pricingZone->id,
+            'total_amount' => '110.00',
+            'items' => [[
+                'product_id' => $product->id,
+                'product_unit_id' => $productUnit->id,
+                'qty' => '1.00',
+                'selling_price' => '110.00',
+            ]],
+        ])->assertCreated();
+
+        $holdId = $created->json('hold_bill.id');
+
+        $this->assertDatabaseHas('hold_bills', [
+            'id' => $holdId,
+            'delivery_type' => 'pickup',
+            'pricing_zone_id' => $pricingZone->id,
+            'pricing_zone_name_snapshot' => 'โซนเสนอราคา',
+            'pricing_zone_markup_percent_snapshot' => '10.00',
+            'pricing_zone_rounding_increment_snapshot' => '1.00',
+            'delivery_fee' => '0.00',
+        ]);
+        $this->assertDatabaseHas('hold_bill_items', [
+            'hold_bill_id' => $holdId,
+            'selling_price' => '110.00',
+            'price_override_flag' => false,
+        ]);
+
+        $payload = $this->salePayload($product, $productUnit, $holdId);
+        $payload['items'][0]['selling_price'] = '110.00';
+        $payload['cash_amount'] = '110.00';
+        $payload['received_amount'] = '110.00';
+        $payload['idempotency_key'] = '90000000-0000-4000-8000-000000000003';
+
+        $this->actingAs($cashier)
+            ->postJson('/sales-v3/store', $payload)
+            ->assertOk();
+
+        $sale = Sale::query()->sole();
+        $this->assertSame('pickup', $sale->delivery_type);
+        $this->assertEquals('0.00', $sale->delivery_fee);
+        $this->assertSame($pricingZone->id, $sale->pricing_zone_id);
+        $this->assertSame('110.00', $sale->items()->sole()->selling_price);
+    }
+
     public function test_failed_sale_keeps_the_resumed_hold_recoverable(): void
     {
         $cashier = User::factory()->create(['role' => 'cashier']);

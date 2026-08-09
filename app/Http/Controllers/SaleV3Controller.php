@@ -45,6 +45,7 @@ class SaleV3Controller extends Controller
                 'hold_bill_id' => $validated['hold_bill_id'] ?? null,
                 'customer_id' => $validated['customer_id'] ?? null,
                 'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
+                'pricing_zone_id' => $validated['pricing_zone_id'] ?? null,
                 'technician_id' => $validated['technician_id'] ?? null,
                 'sale_date' => now()->toDateString(),
                 'delivery_date' => $validated['delivery_date'] ?? null,

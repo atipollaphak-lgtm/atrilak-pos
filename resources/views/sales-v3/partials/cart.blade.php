@@ -17,7 +17,7 @@
     <div id="v3-action-feedback" class="pos-v3-feedback d-none" role="status" aria-live="polite"></div>
     <div class="pos-v3-cart-controls">
         <button id="v3-pickup-button" type="button" class="btn btn-primary active is-selected" aria-pressed="true">
-            <i class="fas fa-store mr-2"></i><span class="fulfillment-check" aria-hidden="true">✓</span><span class="fulfillment-label">รับเอง (รับเอง)</span>
+            <i class="fas fa-store mr-2"></i><span class="fulfillment-check" aria-hidden="true">✓</span><span class="fulfillment-label">รับเอง</span>
         </button>
         <button id="v3-delivery" type="button" class="btn btn-outline-success" aria-pressed="false">
             <i class="fas fa-truck mr-2"></i><span class="fulfillment-check" aria-hidden="true" hidden>✓</span><span class="fulfillment-label">จัดส่ง</span>

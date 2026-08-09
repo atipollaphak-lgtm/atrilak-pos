@@ -91,6 +91,10 @@ trait CreatesBusinessRuleTestSchema
             $table->decimal('delivery_zone_markup_percent_snapshot', 5, 2)->nullable();
             $table->decimal('delivery_zone_rounding_increment_snapshot', 4, 2)->nullable();
             $table->decimal('delivery_zone_minimum_profit_snapshot', 12, 2)->nullable();
+            $table->unsignedBigInteger('pricing_zone_id')->nullable();
+            $table->string('pricing_zone_name_snapshot')->nullable();
+            $table->decimal('pricing_zone_markup_percent_snapshot', 5, 2)->nullable();
+            $table->decimal('pricing_zone_rounding_increment_snapshot', 4, 2)->nullable();
             $table->unsignedBigInteger('technician_id')->nullable();
             $table->date('sale_date');
             $table->date('delivery_date')->nullable();

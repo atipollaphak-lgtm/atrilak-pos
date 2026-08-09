@@ -18,7 +18,8 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('setCustomer', $final);
         $this->assertStringContainsString('setDeliveryType', $final);
         $this->assertStringContainsString('await context.setCustomer', $final);
-        $this->assertStringContainsString("context.state.draftZone = null;\n        context.state.zone = null;\n        context.customerSelect.dispatchEvent", $final);
+        $this->assertStringContainsString("context.state.pricingZone = null;\n        context.state.deliveryZone = null;", $final);
+        $this->assertStringContainsString("context.customerSelect.dispatchEvent(new Event('change'))", $final);
         $this->assertStringContainsString('context.setDeliveryType(hold.delivery_type)', $final);
         $this->assertStringContainsString("$('#v3-customer-summary')", $final);
         $this->assertStringNotContainsString('pickupSuffix', $final);
@@ -35,6 +36,7 @@ class SaleV3BrowserStateContractTest extends TestCase
 
         $this->assertStringContainsString('customer_id: state.customerId || null', $payload);
         $this->assertStringContainsString('customer_delivery_address_id: state.addressId || null', $payload);
+        $this->assertStringContainsString('pricing_zone_id: state.pricingZone?.id || null', $payload);
         $this->assertStringContainsString('delivery_type: state.deliveryType', $payload);
         $this->assertStringNotContainsString('customer_id: $("#v3-customer-id").value', $payload);
         $this->assertStringNotContainsString('delivery_type: $("#v3-pickup").checked', $payload);
@@ -54,21 +56,23 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringNotContainsString('restore.dataset.action = "restore"', $sale);
     }
 
-    public function test_delivery_draft_derives_zone_from_address_and_requires_explicit_multiple_address_selection(): void
+    public function test_pricing_and_delivery_zones_are_separate_and_address_selection_remains_explicit(): void
     {
         $sale = $this->source('public/js/modules/sale-v3.js');
         $customer = $this->source('resources/views/sales-v3/partials/customer-bar.blade.php');
         $navigation = $this->source('resources/views/sales-v3/partials/product-navigation.blade.php');
 
-        $this->assertStringContainsString('state.draftZone', $sale);
+        $this->assertStringContainsString('state.pricingZone', $sale);
+        $this->assertStringContainsString('state.deliveryZone', $sale);
         $this->assertStringContainsString('state.addresses.length === 1', $sale);
         $this->assertStringContainsString('state.addresses.length > 1', $sale);
         $this->assertStringContainsString('const defaultAddress = state.addresses.find', $sale);
         $this->assertStringContainsString('const nextZone = nextAddress?.delivery_zone || null', $sale);
-        $this->assertStringContainsString('state.zone = state.deliveryType === "delivery" ? nextZone : null', $sale);
+        $this->assertStringContainsString('state.deliveryZone = nextZone', $sale);
         $this->assertStringContainsString('state.deliveryFeeEdited = false', $sale);
         $this->assertStringContainsString('id="v3-price-zone-select"', $customer);
-        $this->assertStringContainsString('aria-label="โซนราคาตามที่อยู่ลูกค้า" disabled', $customer);
+        $this->assertStringContainsString('aria-label="โซนราคาสำหรับคำนวณราคา"', $customer);
+        $this->assertStringNotContainsString('aria-label="โซนราคาสำหรับคำนวณราคา" disabled', $customer);
         $this->assertStringNotContainsString('v3-price-zone-select', $navigation);
     }
 

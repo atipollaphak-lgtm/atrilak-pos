@@ -6,8 +6,8 @@
         </div>
         <div class="pos-v3-price-zone-control">
             <label for="v3-price-zone-select">โซนราคา</label>
-            <select id="v3-price-zone-select" class="form-control form-control-sm" aria-label="โซนราคาตามที่อยู่ลูกค้า" disabled>
-                <option value="">รอเลือกที่อยู่</option>
+            <select id="v3-price-zone-select" class="form-control form-control-sm" aria-label="โซนราคาสำหรับคำนวณราคา">
+                <option value="">เลือกโซนราคา</option>
                 @foreach ($deliveryZones as $zone)
                     <option value="{{ $zone->id }}" data-zone='@json($zone)'>{{ $zone->name }}</option>
                 @endforeach

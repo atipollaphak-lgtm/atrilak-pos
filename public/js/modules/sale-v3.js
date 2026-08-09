@@ -2,7 +2,7 @@
     const root = document.getElementById("pos-v3");
     if (!root) return;
 
-    const state = { cart: [], customerId: "", addressId: "", deliveryType: "pickup", address: null, addresses: [], addressLoading: false, draftZone: null, zone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "" };
+    const state = { cart: [], customerId: "", addressId: "", deliveryType: "pickup", address: null, addresses: [], addressLoading: false, pricingZone: null, deliveryZone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "" };
     let addressLoadSequence = 0;
     const $ = (selector) => document.querySelector(selector);
     const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -10,7 +10,7 @@
     const deliveryDateField = () => $("#v3-delivery-date") || $("#v3-sale-date");
     const todayForSale = () => root.dataset.saleDate || new Date().toISOString().slice(0, 10);
     const resetDeliveryDate = () => { const field = deliveryDateField(); if (field) field.value = todayForSale(); const display = $("#v3-delivery-date-display"); if (display && window.PosDate) display.value = window.PosDate.formatDisplay(todayForSale()); $("#v3-sale-date-display").textContent = window.PosDate ? window.PosDate.formatDisplay(todayForSale()) : todayForSale(); };
-    const effectiveZone = () => state.deliveryType === "delivery" ? state.zone : null;
+    const effectiveZone = () => state.pricingZone;
     const zoneIsActive = (zone) => Boolean(zone && (zone.active === true || zone.active === 1 || zone.active === "1"));
     const deliveryDateIsValid = () => {
         const hidden = deliveryDateField();
@@ -27,9 +27,9 @@
     const availableSaleQuantity = (product, unit) => Math.floor(((Number(product.stock_qty || 0) / conversionRateFor(unit)) + Number.EPSILON) * 100) / 100;
     const cartBaseStock = (product, excludedIndex = -1) => state.cart.reduce((totalStock, item, index) => index === excludedIndex || String(item.productId) !== String(product.id) ? totalStock : totalStock + requiredBaseStock(item.qty, item.unit), 0);
     const roundPrice = (value, product) => { const unit = Number(product.rounding_unit || 5); const direction = product.rounding_direction || "up"; const quotient = value / unit; const rounded = direction === "down" ? Math.floor(quotient) : direction === "nearest" ? Math.round(quotient) : Math.ceil(quotient); return rounded * unit; };
-    const unitPrice = (unit, qty, product) => { const tierPrice = (unit.price_tiers || []).reduce((price, tier) => Number(qty) >= Number(tier.min_qty) ? (tier.fixed_price !== null && tier.fixed_price !== "" ? Number(tier.fixed_price) : Number(unit.selling_price) * (1 - Number(tier.discount_percent || 0) / 100)) : price, Number(unit.selling_price || product.price || 0)); const zone = effectiveZone(); const delivery = zoneIsActive(zone); const roundingIncrement = product.category_rounding_override || zone?.rounding_increment || "0.25"; if (delivery && window.ZonePricingMath) return Number(window.ZonePricingMath.ceilAfterMarkup(tierPrice, zone.price_markup_percent || 0, roundingIncrement)); const markup = delivery ? Number(zone.price_markup_percent || 0) : 0; return roundPrice(tierPrice * (1 + markup / 100), product); };
+    const unitPrice = (unit, qty, product) => { const tierPrice = (unit.price_tiers || []).reduce((price, tier) => Number(qty) >= Number(tier.min_qty) ? (tier.fixed_price !== null && tier.fixed_price !== "" ? Number(tier.fixed_price) : Number(unit.selling_price) * (1 - Number(tier.discount_percent || 0) / 100)) : price, Number(unit.selling_price || product.price || 0)); const zone = effectiveZone(); if (zoneIsActive(zone) && window.ZonePricingMath) { const roundingIncrement = product.category_rounding_override || zone?.rounding_increment || "0.25"; return Number(window.ZonePricingMath.ceilAfterMarkup(tierPrice, zone.price_markup_percent || 0, roundingIncrement)); } return roundPrice(tierPrice, product); };
     const total = () => state.cart.reduce((sum, item) => sum + Number(item.qty) * Number(item.price), 0) + state.deliveryFee - state.discount;
-    function updateDeliveryPreview() { if (state.deliveryType === "pickup") { state.deliveryFee = 0; return; } if (state.deliveryFeeEdited) return; if (!state.zone) { state.deliveryFee = 0; return; } const profit = state.cart.reduce((sum, item) => sum + Number(item.qty) * (Number(item.price) - Number(item.product.cost_price || 0) * Number(item.unit.conversion_rate || 1)), 0) - state.discount; state.deliveryFee = Math.max(0, Number(state.zone.minimum_profit || 0) - profit); }
+    function updateDeliveryPreview() { if (state.deliveryType === "pickup") { state.deliveryFee = 0; return; } if (state.deliveryFeeEdited) return; if (!state.deliveryZone) { state.deliveryFee = 0; return; } const profit = state.cart.reduce((sum, item) => sum + Number(item.qty) * (Number(item.price) - Number(item.product.cost_price || 0) * Number(item.unit.conversion_rate || 1)), 0) - state.discount; state.deliveryFee = Math.max(0, Number(state.deliveryZone.minimum_profit || 0) - profit); }
     function syncCartTotals() { updateDeliveryPreview(); $("#v3-cart-count").textContent = state.cart.length; $("#v3-delivery-fee").value = money(state.deliveryFee); $("#v3-subtotal").textContent = money(state.cart.reduce((sum, item) => sum + item.qty * item.price, 0)); $("#v3-total").textContent = money(total()); }
 
     function add(product, unitId = null, qty = 1) {
@@ -48,17 +48,19 @@
 
     function repriceCart() { state.cart.forEach((item) => { const systemPrice = unitPrice(item.unit, item.qty, item.product); if (item.priceWasEdited) item.originalPrice = systemPrice; else item.price = systemPrice; }); }
 
+    function markPricingContextChanged() { if (!state.holdBillId) return; state.cart.forEach((item) => { item.priceChangedSinceHold = true; }); }
+
     function ensurePriceMetadata() { state.cart.forEach((item) => { if (!Object.prototype.hasOwnProperty.call(item, "priceWasEdited")) item.priceWasEdited = false; if (!Object.prototype.hasOwnProperty.call(item, "originalPrice")) item.originalPrice = null; if (!Object.prototype.hasOwnProperty.call(item, "priceChangedSinceHold")) item.priceChangedSinceHold = false; }); }
 
     function refreshPricingContext() {
         repriceCart();
         document.querySelectorAll(".v3-product-card").forEach((card) => { const product = JSON.parse(card.dataset.product); const label = card.querySelector(".v3-product-price"); if (label) label.textContent = money(unitPrice(unitFor(product), 1, product)); });
-        const zone = effectiveZone();
-        const zoneLabel = $("#v3-address-zone"); if (zoneLabel) zoneLabel.textContent = zone?.name ? `โซนจัดส่ง: ${zone.name} +${money(zone.price_markup_percent || 0)}%` : "โซนจัดส่ง: -";
-        const addressZone = state.address?.delivery_zone || null;
-        const zoneSelect = $("#v3-price-zone-select"); if (zoneSelect) { zoneSelect.disabled = true; zoneSelect.value = zoneIsActive(addressZone) ? String(addressZone.id) : ""; }
+        const pricingZone = state.pricingZone;
+        const deliveryZone = state.deliveryZone;
+        const zoneLabel = $("#v3-address-zone"); if (zoneLabel) zoneLabel.textContent = pricingZone?.name ? `โซนราคาสำหรับคำนวณ: ${pricingZone.name} +${money(pricingZone.price_markup_percent || 0)}%` : "โซนราคาสำหรับคำนวณ: -";
+        const zoneSelect = $("#v3-price-zone-select"); if (zoneSelect) { zoneSelect.disabled = false; zoneSelect.value = zoneIsActive(pricingZone) ? String(pricingZone.id) : ""; }
         const zoneStatus = $("#v3-zone-status");
-        if (zoneStatus) zoneStatus.textContent = state.addressLoading ? "กำลังโหลดที่อยู่และโซน..." : addressZone?.name ? `โซนตามที่อยู่: ${addressZone.name}` : state.customerId ? "ยังไม่ได้เลือกที่อยู่หรือไม่พบโซน" : "เลือกลูกค้าเพื่อโหลดโซน";
+        if (zoneStatus) zoneStatus.textContent = state.addressLoading ? "กำลังโหลดที่อยู่..." : pricingZone?.name ? `โซนราคาที่เลือก: ${pricingZone.name}${deliveryZone?.name && !sameZone(pricingZone, deliveryZone) ? ` · โซนจัดส่ง: ${deliveryZone.name}` : ""}` : "ยังไม่ได้เลือกโซนราคา";
     }
 
     function syncFulfillmentUi() {
@@ -161,7 +163,7 @@
         $("#v3-delivery-fee").value = money(state.deliveryFee);
         $("#v3-total").textContent = money(total());
         const selectedAddress = state.address;
-        const zoneName = effectiveZone()?.name || "";
+        const zoneName = state.pricingZone?.name || "";
         const addressText = selectedAddress ? addressLabel(selectedAddress) : (state.addresses.length > 1 ? `มี ${state.addresses.length} ที่อยู่ — กรุณาเลือก` : "เลือกที่อยู่จัดส่งเพื่อเริ่มคำนวณโซน");
         const delivery = state.deliveryType === "delivery";
         const fulfillmentText = delivery ? `จัดส่ง · ค่าส่ง ${money(state.deliveryFee)} บาท` : "รับเอง · ค่าส่ง 0.00 บาท";
@@ -245,32 +247,63 @@
 
     function sameZone(left, right) { return String(left?.id || "") === String(right?.id || ""); }
 
-    function confirmZoneChange(nextZone, reason = "โซนจัดส่ง") {
+    let zoneMismatchRequest = null;
+
+    function finishZoneMismatch(confirmed) {
+        const request = zoneMismatchRequest;
+        zoneMismatchRequest = null;
+        if (!request) return;
+        if (confirmed) {
+            state.pricingZone = request.nextZone;
+            markPricingContextChanged();
+            repriceCart();
+            refreshPricingContext();
+            render();
+        }
+        window.jQuery($("#v3-zone-mismatch-modal")).modal("hide");
+        request.resolve(confirmed);
+    }
+
+    function askZoneMismatch(nextZone) {
+        if (!nextZone || sameZone(state.pricingZone, nextZone) || !state.cart.length) return Promise.resolve(true);
+        const before = state.cart.map((item) => Number(item.price));
+        const previousZone = state.pricingZone;
+        state.pricingZone = nextZone;
+        const preview = state.cart.map((item) => unitPrice(item.unit, item.qty, item.product));
+        state.pricingZone = previousZone;
+        const changed = before.some((price, index) => Math.abs(price - Number(preview[index] || 0)) > 0.005);
+        if (!changed) return Promise.resolve(true);
+
+        const message = $("#v3-zone-mismatch-message");
+        if (message) message.textContent = `ที่อยู่จัดส่งอยู่ในโซน ${nextZone.name || nextZone.id} แต่ราคาที่เสนอใช้อยู่โซน ${state.pricingZone?.name || "ที่เลือกไว้"} ต้องการคำนวณราคาตามโซนที่อยู่ใหม่หรือไม่?`;
+        const modal = $("#v3-zone-mismatch-modal");
+        window.jQuery(modal).one("hidden.bs.modal", () => finishZoneMismatch(false));
+        window.jQuery(modal).modal("show");
+        return new Promise((resolve) => {
+            zoneMismatchRequest = { nextZone, resolve };
+        });
+    }
+
+    function applyPricingZone(nextZone) {
         if (nextZone && !zoneIsActive(nextZone)) {
-            window.FinalPos?.showFeedback("โซนจัดส่งนี้ปิดใช้งานอยู่ กรุณาเลือกโซนอื่น", "error");
+            window.FinalPos?.showFeedback("โซนราคานี้ปิดใช้งานอยู่ กรุณาเลือกโซนอื่น", "error");
             return false;
         }
-        const previousZone = state.zone;
-        if (sameZone(previousZone, nextZone)) return true;
-        const before = state.cart.map((item) => Number(item.price));
-        state.zone = nextZone || null;
-        const preview = state.cart.map((item) => unitPrice(item.unit, item.qty, item.product));
-        state.zone = previousZone;
-        const changed = before.some((price, index) => Math.abs(price - Number(preview[index] || 0)) > 0.005);
-        if (changed && state.cart.length && !window.confirm(`${reason}ใหม่อาจเปลี่ยนราคาสินค้าทั้งตะกร้า ต้องการดำเนินการต่อหรือไม่?`)) return false;
-        state.zone = nextZone || null;
+        state.pricingZone = nextZone || null;
+        markPricingContextChanged();
         repriceCart();
+        refreshPricingContext();
+        render();
         return true;
     }
 
-    function applyAddressSelection(addressId) {
+    async function applyAddressSelection(addressId, confirmMismatch = state.deliveryType === "delivery") {
         const nextAddress = state.addresses.find((address) => String(address.id) === String(addressId));
         const nextZone = nextAddress?.delivery_zone || null;
         if (nextZone && !zoneIsActive(nextZone)) {
             state.addressId = "";
             state.address = null;
-            state.zone = null;
-            state.draftZone = null;
+            state.deliveryZone = null;
             $("#v3-address-id").value = "";
             window.FinalPos?.showFeedback("ที่อยู่นี้ใช้โซนจัดส่งที่ปิดใช้งาน กรุณาเลือกที่อยู่อื่น", "error");
             refreshPricingContext();
@@ -279,8 +312,13 @@
         }
         state.addressId = nextAddress ? String(nextAddress.id) : "";
         state.address = nextAddress || null;
-        state.zone = state.deliveryType === "delivery" ? nextZone : null;
-        state.draftZone = nextZone;
+        state.deliveryZone = nextZone || null;
+        if (nextZone && state.deliveryType === "delivery" && !state.pricingZone) {
+            state.pricingZone = nextZone;
+            markPricingContextChanged();
+        } else if (nextZone && confirmMismatch && state.deliveryType === "delivery" && !sameZone(state.pricingZone, nextZone)) {
+            if (await askZoneMismatch(nextZone)) state.pricingZone = nextZone;
+        }
         state.deliveryFee = 0;
         state.deliveryFeeEdited = false;
         refreshPricingContext();
@@ -301,8 +339,7 @@
         state.address = null;
         state.addresses = [];
         state.addressLoading = Boolean(id);
-        state.zone = null;
-        state.draftZone = null;
+        state.deliveryZone = null;
         const addressPicker = $("#v3-address-picker");
         if (addressPicker) {
             addressPicker.hidden = true;
@@ -346,7 +383,7 @@
         const selected = preferred || defaultAddress || onlyAddress;
         if (selected) {
             select.value = String(selected.id);
-            applyAddressSelection(selected.id);
+            applyAddressSelection(selected.id, false);
         } else {
             select.value = "";
             refreshPricingContext();
@@ -355,12 +392,13 @@
     }
 
     async function setCustomer(customerId, preferredAddressId = null) { await loadAddresses(customerId, preferredAddressId); }
-    function setAddress(addressId) { $("#v3-address-id").value = addressId ? String(addressId) : ""; $("#v3-address-id").dispatchEvent(new Event("change")); }
+    function setAddress(addressId) { $("#v3-address-id").value = addressId ? String(addressId) : ""; return $("#v3-address-id").dispatchEvent(new Event("change")); }
     function setDeliveryType(deliveryType) {
         const next = deliveryType === "pickup" ? "pickup" : "delivery";
         state.deliveryType = next;
-        const candidateZone = state.address?.delivery_zone || null;
-        state.zone = next === "delivery" && zoneIsActive(candidateZone) ? candidateZone : null;
+        if (next === "delivery" && !state.pricingZone && zoneIsActive(state.deliveryZone)) {
+            state.pricingZone = state.deliveryZone;
+        }
         if (next === "pickup") state.deliveryFee = 0;
         state.deliveryFeeEdited = false;
         $("#v3-pickup").checked = next === "pickup";
@@ -370,14 +408,14 @@
     function canConfirmDelivery() {
         if (state.deliveryType !== "delivery") return true;
         if (state.addressLoading) { window.FinalPos?.showFeedback("กรุณารอให้โหลดที่อยู่และโซนเสร็จก่อน", "error"); return false; }
-        if (state.zone?.id && !zoneIsActive(state.zone)) { window.FinalPos?.showFeedback("ที่อยู่จัดส่งนี้ไม่มีโซนจัดส่งที่ใช้งานอยู่", "error"); return false; }
+        if (state.deliveryZone?.id && !zoneIsActive(state.deliveryZone)) { window.FinalPos?.showFeedback("ที่อยู่จัดส่งนี้ไม่มีโซนจัดส่งที่ใช้งานอยู่", "error"); return false; }
         if (!deliveryDateIsValid()) { window.FinalPos?.showFeedback("กรุณากรอกวันที่จัดส่งให้ถูกต้องก่อนยืนยัน", "error"); return false; }
         if (!state.customerId) { window.FinalPos?.showFeedback("กรุณาเลือกลูกค้าก่อนยืนยันการจัดส่ง", "error"); return false; }
         if (!state.addressId || !state.address) { window.FinalPos?.showFeedback("กรุณาเลือกที่อยู่จัดส่งก่อนยืนยันการจัดส่ง", "error"); return false; }
-        if (!state.zone?.id) { window.FinalPos?.showFeedback("ที่อยู่จัดส่งนี้ยังไม่มีโซนจัดส่ง กรุณาเลือกที่อยู่หรือกำหนดโซนก่อนยืนยัน", "error"); return false; }
+        if (!state.deliveryZone?.id) { window.FinalPos?.showFeedback("ที่อยู่จัดส่งนี้ยังไม่มีโซนจัดส่ง กรุณาเลือกที่อยู่หรือกำหนดโซนก่อนยืนยัน", "error"); return false; }
         return true;
     }
-    function buildPayload(payment) { return { hold_bill_id: state.holdBillId, customer_id: state.customerId || null, customer_delivery_address_id: state.addressId || null, technician_id: $("#v3-technician-id").value || null, delivery_date: state.deliveryType === "delivery" ? (deliveryDateField()?.value || null) : null, delivery_type: state.deliveryType, delivery_fee: state.deliveryFee.toFixed(2), discount: state.discount.toFixed(2), notes: state.note || null, items: state.cart.map((item) => ({ product_id: item.productId, product_unit_id: item.productUnitId, qty: item.qty, selling_price: Number(item.price).toFixed(2), price_was_edited: Boolean(item.priceWasEdited), price_changed_since_hold: Boolean(item.priceChangedSinceHold) })), ...payment }; }
+    function buildPayload(payment) { return { hold_bill_id: state.holdBillId, customer_id: state.customerId || null, customer_delivery_address_id: state.addressId || null, pricing_zone_id: state.pricingZone?.id || null, technician_id: $("#v3-technician-id").value || null, delivery_date: state.deliveryType === "delivery" ? (deliveryDateField()?.value || null) : null, delivery_type: state.deliveryType, delivery_fee: state.deliveryFee.toFixed(2), discount: state.discount.toFixed(2), notes: state.note || null, items: state.cart.map((item) => ({ product_id: item.productId, product_unit_id: item.productUnitId, qty: item.qty, selling_price: Number(item.price).toFixed(2), price_was_edited: Boolean(item.priceWasEdited), price_changed_since_hold: Boolean(item.priceChangedSinceHold) })), ...payment }; }
 
     function sanitizeZoneOptions() {
         const select = $("#v3-price-zone-select");
@@ -398,7 +436,10 @@
 
     function init() {
         sanitizeZoneOptions(); refreshPricingContext(); render(); filterProducts();
-        $("#v3-address-id").addEventListener("change", (event) => { if (!applyAddressSelection(event.target.value || "")) event.target.value = state.addressId || ""; });
+        $("#v3-address-id").addEventListener("change", async (event) => { if (!await applyAddressSelection(event.target.value || "")) event.target.value = state.addressId || ""; });
+        $("#v3-price-zone-select").addEventListener("change", (event) => { const option = event.target.selectedOptions[0]; let zone = null; try { zone = option?.dataset.zone ? JSON.parse(option.dataset.zone) : null; } catch { zone = null; } applyPricingZone(zone); });
+        $("#v3-zone-mismatch-confirm")?.addEventListener("click", () => finishZoneMismatch(true));
+        $("#v3-zone-mismatch-cancel")?.addEventListener("click", () => finishZoneMismatch(false));
         $("#v3-pickup").addEventListener("change", () => setDeliveryType($("#v3-pickup").checked ? "pickup" : "delivery"));
         $("#v3-product-search").addEventListener("input", filterProducts); $("#v3-stock-only").addEventListener("change", filterProducts); $("#v3-customer-id").addEventListener("change", loadAddresses);
         $("#v3-delivery-date-display")?.addEventListener("input", (event) => { const iso = window.PosDate?.toIso(event.target.value); const help = $("#v3-delivery-date-help"); if (iso) { $("#v3-delivery-date").value = iso; event.target.classList.remove("is-invalid"); if (help) help.textContent = `วันที่จัดส่ง: ${window.PosDate.formatDisplay(iso)}`; } else { $("#v3-delivery-date").value = ""; event.target.classList.add("is-invalid"); if (help) help.textContent = "กรุณากรอกวันที่เป็น วว/ดด/ปปปป"; } });
