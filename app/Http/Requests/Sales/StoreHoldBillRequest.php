@@ -6,6 +6,7 @@ use App\Models\CustomerDeliveryAddress;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class StoreHoldBillRequest extends FormRequest
@@ -21,6 +22,11 @@ class StoreHoldBillRequest extends FormRequest
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'customer_delivery_address_id' => ['nullable', 'integer', 'exists:customer_delivery_addresses,id'],
             'delivery_zone_id' => ['nullable', 'integer', 'exists:delivery_zones,id'],
+            'pricing_zone_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('delivery_zones', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
             'delivery_zone_name_snapshot' => ['nullable', 'string', 'max:255'],
             'delivery_zone_markup_percent_snapshot' => ['nullable', 'numeric', 'min:0'],
             'delivery_zone_rounding_increment_snapshot' => ['nullable', 'numeric', 'min:0'],

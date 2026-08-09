@@ -92,6 +92,83 @@ class SaleV3PriceOverrideTest extends TestCase
         $this->assertFalse($item->price_override_flag);
     }
 
+    public function test_v3_pickup_uses_explicit_pricing_zone_without_delivery_fee(): void
+    {
+        $product = $this->product('Pickup pricing zone product');
+        $product->update([
+            'selling_price' => '205.00',
+            'rounding_unit' => '1.00',
+            'rounding_direction' => 'up',
+        ]);
+        $zone = DeliveryZone::query()->create([
+            'name' => 'Pickup quote zone',
+            'price_markup_percent' => '10.00',
+            'minimum_profit' => '100.00',
+            'rounding_increment' => '1.00',
+            'active' => true,
+        ]);
+
+        $payload = $this->payload($product, '226.00', false);
+        $payload['pricing_zone_id'] = $zone->id;
+
+        $this->postJson(route('sales.v3.store'), $payload)->assertOk();
+
+        $sale = Sale::query()->sole();
+        $item = $sale->items()->sole();
+
+        $this->assertSame('pickup', $sale->delivery_type);
+        $this->assertEquals('0.00', $sale->delivery_fee);
+        $this->assertNull($sale->delivery_zone_id);
+        $this->assertSame('226.00', $item->selling_price);
+        $this->assertNull($item->original_price);
+        $this->assertFalse($item->price_override_flag);
+    }
+
+    public function test_v3_delivery_keeps_pricing_zone_separate_from_delivery_zone(): void
+    {
+        $product = $this->product('Separate pricing and delivery zone product');
+        $deliveryZone = DeliveryZone::query()->create([
+            'name' => 'Actual delivery zone',
+            'price_markup_percent' => '0.00',
+            'minimum_profit' => '0.00',
+            'rounding_increment' => '0.25',
+            'active' => true,
+        ]);
+        $pricingZone = DeliveryZone::query()->create([
+            'name' => 'Quoted pricing zone',
+            'price_markup_percent' => '20.00',
+            'minimum_profit' => '999.00',
+            'rounding_increment' => '1.00',
+            'active' => true,
+        ]);
+        $customer = Customer::query()->create(['name' => 'Separate zones customer']);
+        $address = CustomerDeliveryAddress::query()->create([
+            'customer_id' => $customer->id,
+            'delivery_zone_id' => $deliveryZone->id,
+            'name' => 'Actual delivery address',
+        ]);
+
+        $payload = $this->payload($product, '120.00', false);
+        $payload['delivery_type'] = 'delivery';
+        $payload['customer_id'] = $customer->id;
+        $payload['customer_delivery_address_id'] = $address->id;
+        $payload['pricing_zone_id'] = $pricingZone->id;
+        $payload['cash_amount'] = '120.00';
+        $payload['received_amount'] = '120.00';
+
+        $this->postJson(route('sales.v3.store'), $payload)->assertOk();
+
+        $sale = Sale::query()->sole();
+        $item = $sale->items()->sole();
+
+        $this->assertSame($deliveryZone->id, $sale->delivery_zone_id);
+        $this->assertSame($pricingZone->id, $sale->pricing_zone_id);
+        $this->assertSame('Actual delivery zone', $sale->delivery_zone_name_snapshot);
+        $this->assertSame('Quoted pricing zone', $sale->pricing_zone_name_snapshot);
+        $this->assertEquals('0.00', $sale->delivery_fee);
+        $this->assertSame('120.00', $item->selling_price);
+    }
+
     public function test_v3_uses_payment_date_for_sale_date_and_keeps_delivery_date_separate(): void
     {
         Carbon::setTestNow('2026-08-05 10:00:00');

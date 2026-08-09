@@ -64,7 +64,11 @@ class SaleV3PageTest extends TestCase
         $this->assertStringContainsString('data-customer-show-url-template=', $html);
         $this->assertStringContainsString('id="v3-customer-summary"', $html);
         $this->assertStringContainsString('id="v3-price-zone-select"', $html);
-        $this->assertMatchesRegularExpression('/id="v3-price-zone-select"[^>]*disabled/', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="v3-price-zone-select"[^>]*disabled/', $html);
+        $this->assertStringContainsString('class="fulfillment-label">รับเอง</span>', $html);
+        $this->assertStringNotContainsString('รับเอง (รับเอง)', $html);
+        $this->assertStringContainsString('เลือกโซนราคา', $html);
+        $this->assertStringContainsString('id="v3-zone-mismatch-modal"', $html);
 
         foreach (['ดูข้อมูลลูกค้า', 'ค้นหาลูกค้า', 'เพิ่มลูกค้า', 'ล้างลูกค้า'] as $label) {
             $this->assertMatchesRegularExpression(

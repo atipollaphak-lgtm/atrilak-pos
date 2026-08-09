@@ -108,6 +108,42 @@ class CustomerModuleTest extends TestCase
         $this->assertSame('POS address', Customer::query()->where('name', 'POS Builder')->firstOrFail()->address);
     }
 
+    public function test_pos_customer_create_can_omit_address_and_zone(): void
+    {
+        $response = $this->postJson(route('sales.v3.customers.store'), [
+            'name' => 'POS Name Only Customer',
+            'phone' => '0800000011',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('customer.name', 'POS Name Only Customer')
+            ->assertJsonPath('customer.address', null)
+            ->assertJsonPath('customer.delivery_addresses', []);
+
+        $this->assertDatabaseHas('customers', [
+            'name' => 'POS Name Only Customer',
+            'address' => null,
+        ]);
+        $this->assertDatabaseCount('customer_delivery_addresses', 0);
+    }
+
+    public function test_pos_customer_create_can_save_an_address_without_a_zone(): void
+    {
+        $response = $this->postJson(route('sales.v3.customers.store'), [
+            'name' => 'POS Address Without Zone',
+            'address' => 'ยังไม่ทราบโซน',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('customer.delivery_addresses.0.address', 'ยังไม่ทราบโซน')
+            ->assertJsonPath('customer.delivery_addresses.0.delivery_zone_id', null);
+
+        $this->assertDatabaseHas('customer_delivery_addresses', [
+            'address' => 'ยังไม่ทราบโซน',
+            'delivery_zone_id' => null,
+        ]);
+    }
+
     public function test_customer_form_identifies_the_tax_number_field_correctly(): void
     {
         $this->get(route('customers.create'))

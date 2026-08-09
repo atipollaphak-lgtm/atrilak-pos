@@ -150,6 +150,12 @@ class SaleService
                     if (! array_key_exists('delivery_date', $data)) {
                         $data['delivery_date'] = $holdBill->delivery_date;
                     }
+
+                    if (! array_key_exists('pricing_zone_id', $data)
+                        || $data['pricing_zone_id'] === null
+                        || $data['pricing_zone_id'] === '') {
+                        $data['pricing_zone_id'] = $holdBill->pricing_zone_id;
+                    }
                 }
 
                 $items = $data['items'] ?? [];
@@ -305,10 +311,13 @@ class SaleService
         $items = collect($resolvedLines)
             ->map(fn ($line): array => $line->toArray())
             ->all();
-        [$zone, $address] = $this->resolveZoneContext($data);
+        [$deliveryZone, $address] = $this->resolveZoneContext($data);
         $pickup = ($data['delivery_type'] ?? 'delivery') === 'pickup';
-        $effectiveRoundingIncrement = null;
-        $items = collect($items)->map(function (array $item, int $index) use (&$effectiveRoundingIncrement, $data, $lockedProducts, $zone, $pickup): array {
+        $pricingZoneId = $this->nullableId($data['pricing_zone_id'] ?? null);
+        $pricingZone = $this->resolvePricingZoneContext($data, $deliveryZone);
+        $pricingPickup = $pricingZone === null;
+        $pricingRoundingIncrement = null;
+        $items = collect($items)->map(function (array $item, int $index) use (&$pricingRoundingIncrement, $data, $lockedProducts, $pricingZone, $pricingPickup, $pickup): array {
             $holdSnapshot = $data['hold_price_snapshots'][$index] ?? null;
             $priceChangedSinceHold = filter_var(
                 $item['price_changed_since_hold'] ?? false,
@@ -330,8 +339,8 @@ class SaleService
                 $product = $lockedProducts->get((int) $item['product_id']);
                 $product?->loadMissing('category');
                 $unit = $product?->productUnits?->firstWhere('id', $item['product_unit_id'] ?? null);
-                $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $zone, $pickup);
-                $effectiveRoundingIncrement ??= $pricing['rounding_increment'];
+                $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $pricingZone, $pricingPickup);
+                $pricingRoundingIncrement ??= $pricing['rounding_increment'];
 
                 return [
                     ...$item,
@@ -342,8 +351,8 @@ class SaleService
             $product = $lockedProducts->get((int) $item['product_id']);
             $product?->loadMissing('category');
             $unit = $product?->productUnits?->firstWhere('id', $item['product_unit_id'] ?? null);
-            $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $zone, $pickup);
-            $effectiveRoundingIncrement ??= $pricing['rounding_increment'];
+            $pricing = $this->zonePricingService->priceLine($item, $product, $unit, $pricingZone, $pricingPickup);
+            $pricingRoundingIncrement ??= $pricing['rounding_increment'];
             $priceWasEdited = filter_var(
                 $item['price_was_edited'],
                 FILTER_VALIDATE_BOOLEAN
@@ -373,9 +382,9 @@ class SaleService
         $minimumProfit = '0.00';
         $deliveryZoneId = null;
         $deliveryAddressId = $data['customer_delivery_address_id'] ?? null;
-        if ($deliveryType === 'delivery' && $zone !== null) {
-            $minimumProfit = $this->saleValidationService->money($zone->minimum_profit);
-            $deliveryZoneId = $zone->id;
+        if ($deliveryType === 'delivery' && $deliveryZone !== null) {
+            $minimumProfit = $this->saleValidationService->money($deliveryZone->minimum_profit);
+            $deliveryZoneId = $deliveryZone->id;
         }
 
         $rawProductProfit = $this->saleDecimalService->sumMoney(
@@ -392,7 +401,7 @@ class SaleService
         );
         $deliveryFee = $this->zonePricingService->deliveryFee(
             $productProfitAfterDiscount,
-            $zone,
+            $deliveryZone,
             $pickup
         );
 
@@ -433,12 +442,25 @@ class SaleService
         $sale->delivery_type = $deliveryType;
         $sale->discount = $discount;
         $sale->delivery_zone_id = $deliveryZoneId;
-        $sale->delivery_zone_name_snapshot = $zone?->name;
-        $sale->delivery_zone_markup_percent_snapshot = $zone?->price_markup_percent;
+        $sale->delivery_zone_name_snapshot = $deliveryZone?->name;
+        $sale->delivery_zone_markup_percent_snapshot = $deliveryZone?->price_markup_percent;
+        // Keep the legacy snapshot aligned with the effective selling-price rounding.
+        // The new pricing-zone snapshot below carries the separated pricing context.
+        $legacyRoundingIncrement = $pricingZone === null
+            ? null
+            : ($pricingRoundingIncrement ?? $pricingZone->rounding_increment);
         $sale->delivery_zone_rounding_increment_snapshot = $pickup
             ? null
-            : ($effectiveRoundingIncrement ?? $zone?->rounding_increment);
-        $sale->delivery_zone_minimum_profit_snapshot = $zone?->minimum_profit;
+            : $legacyRoundingIncrement;
+        $sale->delivery_zone_minimum_profit_snapshot = $deliveryZone?->minimum_profit;
+        $sale->pricing_zone_id = $pricingZoneId;
+        $sale->pricing_zone_name_snapshot = $pricingZoneId === null ? null : $pricingZone?->name;
+        $sale->pricing_zone_markup_percent_snapshot = $pricingZoneId === null
+            ? null
+            : $pricingZone?->price_markup_percent;
+        $sale->pricing_zone_rounding_increment_snapshot = $pricingZoneId === null || $pricingZone === null
+            ? null
+            : ($pricingRoundingIncrement ?? $pricingZone->rounding_increment);
         $sale->notes = $data['notes'] ?? null;
 
         if ($payment !== null) {
@@ -499,6 +521,32 @@ class SaleService
         }
 
         return [$zone, $address];
+    }
+
+    private function resolvePricingZoneContext(
+        array $data,
+        ?DeliveryZone $deliveryZone
+    ): ?DeliveryZone {
+        $pricingZoneId = $data['pricing_zone_id'] ?? null;
+
+        if ($pricingZoneId === null || $pricingZoneId === '') {
+            return ($data['delivery_type'] ?? 'delivery') === 'delivery'
+                ? $deliveryZone
+                : null;
+        }
+
+        $pricingZone = DeliveryZone::query()
+            ->whereKey($pricingZoneId)
+            ->where('active', true)
+            ->first();
+
+        if ($pricingZone === null) {
+            throw new DomainException(
+                'โซนราคาที่เลือกไม่พร้อมใช้งาน กรุณาเลือกโซนราคาใหม่ก่อนบันทึกบิล'
+            );
+        }
+
+        return $pricingZone;
     }
 
     private function assertQuotationFinancialConsistency(
@@ -674,6 +722,12 @@ class SaleService
                 'customer_delivery_address_id' => $data['customer_delivery_address_id']
                     ?? $lockedSale->customer_delivery_address_id,
             ]);
+            if ($lockedSale->pricing_zone_id !== null) {
+                $priceZone = $this->resolvePricingZoneContext(
+                    ['pricing_zone_id' => $lockedSale->pricing_zone_id],
+                    $priceZone
+                );
+            }
             $resolvedItems = collect(
                 $this->productUnitConversionService->resolveLines(
                     $newItemsForStock,
@@ -920,7 +974,7 @@ class SaleService
             'unit_code_snapshot',
         ];
 
-        $pickup = ($data['delivery_type'] ?? $sale->delivery_type) === 'pickup';
+        $pricingPickup = $priceZone === null;
 
         $lines = collect($submittedItems)->map(function (
             array $submittedItem,
@@ -931,7 +985,7 @@ class SaleService
             $snapshotColumns,
             $lockedProducts,
             $priceZone,
-            $pickup,
+            $pricingPickup,
             &$retainedIds,
             &$commissionAffected
         ): array {
@@ -997,7 +1051,7 @@ class SaleService
                     $product,
                     $productUnit,
                     $priceZone,
-                    $pickup
+                    $pricingPickup
                 );
                 $priceSnapshot = $this->salePriceSnapshotService->snapshot(
                     $systemPrice,

@@ -14,6 +14,7 @@ class SaleIdempotencyService
         $payload = [
             'customer_id' => $this->normalizeId($data['customer_id'] ?? null),
             'customer_delivery_address_id' => $this->normalizeId($data['customer_delivery_address_id'] ?? null),
+            'pricing_zone_id' => $this->normalizeId($data['pricing_zone_id'] ?? null),
             'technician_id' => $this->normalizeId($data['technician_id'] ?? null),
             'sale_date' => (string) $data['sale_date'],
             'delivery_date' => $data['delivery_date'] ?? null,

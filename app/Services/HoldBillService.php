@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\CustomerDeliveryAddress;
+use App\Models\DeliveryZone;
 use App\Models\HoldBill;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\User;
 use App\Services\Sales\SalePriceSnapshotService;
+use DomainException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -22,24 +24,46 @@ class HoldBillService
         return DB::transaction(function () use ($data, $user): HoldBill {
             $priceSnapshotService = $this->salePriceSnapshotService
                 ?? app(SalePriceSnapshotService::class);
-            $zone = ($data['delivery_type'] ?? 'pickup') === 'delivery'
+            $pricingZoneId = $data['pricing_zone_id'] ?? null;
+            $hasExplicitPricingZone = $pricingZoneId !== null && $pricingZoneId !== '';
+            $deliveryZone = ($data['delivery_type'] ?? 'pickup') === 'delivery'
                 ? CustomerDeliveryAddress::query()
                     ->with('deliveryZone')
                     ->find($data['customer_delivery_address_id'] ?? null)
                     ?->deliveryZone
                 : null;
+            $pricingZone = $hasExplicitPricingZone
+                ? DeliveryZone::query()
+                    ->whereKey($pricingZoneId)
+                    ->where('active', true)
+                    ->first()
+                : (($data['delivery_type'] ?? 'pickup') === 'delivery' ? $deliveryZone : null);
+
+            if ($hasExplicitPricingZone && $pricingZone === null) {
+                throw new DomainException('โซนราคาที่เลือกไม่พร้อมใช้งาน กรุณาเลือกโซนราคาใหม่ก่อนพักบิล');
+            }
+
+            $pickup = ($data['delivery_type'] ?? 'pickup') === 'pickup';
             $holdBill = HoldBill::query()->create([
                 'hold_no' => null,
                 'user_id' => $user->getKey(),
                 'customer_id' => $data['customer_id'] ?? null,
                 'customer_delivery_address_id' => $data['customer_delivery_address_id'] ?? null,
-                'delivery_zone_id' => $data['delivery_zone_id'] ?? null,
-                'delivery_zone_name_snapshot' => $data['delivery_zone_name_snapshot'] ?? null,
-                'delivery_zone_markup_percent_snapshot' => $data['delivery_zone_markup_percent_snapshot'] ?? null,
-                'delivery_zone_rounding_increment_snapshot' => $data['delivery_zone_rounding_increment_snapshot'] ?? null,
-                'delivery_zone_minimum_profit_snapshot' => $data['delivery_zone_minimum_profit_snapshot'] ?? null,
+                'delivery_zone_id' => $deliveryZone?->id,
+                'delivery_zone_name_snapshot' => $deliveryZone?->name,
+                'delivery_zone_markup_percent_snapshot' => $deliveryZone?->price_markup_percent,
+                'delivery_zone_rounding_increment_snapshot' => $pickup ? null : $deliveryZone?->rounding_increment,
+                'delivery_zone_minimum_profit_snapshot' => $deliveryZone?->minimum_profit,
+                'pricing_zone_id' => $hasExplicitPricingZone ? $pricingZone?->id : null,
+                'pricing_zone_name_snapshot' => $hasExplicitPricingZone ? $pricingZone?->name : null,
+                'pricing_zone_markup_percent_snapshot' => $hasExplicitPricingZone
+                    ? $pricingZone?->price_markup_percent
+                    : null,
+                'pricing_zone_rounding_increment_snapshot' => $hasExplicitPricingZone
+                    ? $pricingZone?->rounding_increment
+                    : null,
                 'sale_date' => $data['sale_date'],
-                'delivery_date' => ($data['delivery_type'] ?? 'pickup') === 'pickup'
+                'delivery_date' => $pickup
                     ? null
                     : ($data['delivery_date'] ?? null),
                 'delivery_type' => $data['delivery_type'],
@@ -68,8 +92,8 @@ class HoldBillService
                         $item,
                         $product,
                         $productUnit,
-                        $zone,
-                        ($data['delivery_type'] ?? 'pickup') === 'pickup'
+                        $pricingZone,
+                        $pricingZone === null
                     ),
                     (string) $item['selling_price'],
                     filter_var(
@@ -96,14 +120,19 @@ class HoldBillService
                 'hold_no' => 'HLD-'.date('Ymd', strtotime($data['sale_date'])).'-'.str_pad((string) $holdBill->getKey(), 4, '0', STR_PAD_LEFT),
             ]);
 
-            return $holdBill->fresh(['items', 'customer', 'customerDeliveryAddress.deliveryZone']);
+            return $holdBill->fresh([
+                'items',
+                'customer',
+                'customerDeliveryAddress.deliveryZone',
+                'pricingZone',
+            ]);
         });
     }
 
     public function list(array $filters = []): Collection
     {
         return HoldBill::query()
-            ->with(['items', 'customer', 'customerDeliveryAddress.deliveryZone'])
+            ->with(['items', 'customer', 'customerDeliveryAddress.deliveryZone', 'pricingZone'])
             ->when($filters['search'] ?? null, function ($query, string $search): void {
                 $query->where(function ($query) use ($search): void {
                     $query->where('hold_no', 'like', '%'.$search.'%')
@@ -119,7 +148,13 @@ class HoldBillService
     public function findForResume(int $id): HoldBill
     {
         return HoldBill::query()
-            ->with(['items.product', 'items.productUnit.unit', 'customer', 'customerDeliveryAddress.deliveryZone'])
+            ->with([
+                'items.product',
+                'items.productUnit.unit',
+                'customer',
+                'customerDeliveryAddress.deliveryZone',
+                'pricingZone',
+            ])
             ->findOrFail($id);
     }
 

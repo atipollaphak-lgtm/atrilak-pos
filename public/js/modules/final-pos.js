@@ -110,8 +110,6 @@
 
     function clearCustomer() {
         context.customerSelect.value = '';
-        context.state.draftZone = null;
-        context.state.zone = null;
         context.customerSelect.dispatchEvent(new Event('change'));
         syncCustomerDisplay();
     }
@@ -171,8 +169,8 @@
         context.state.address = null;
         context.state.addresses = [];
         context.state.addressLoading = false;
-        context.state.draftZone = null;
-        context.state.zone = null;
+        context.state.pricingZone = null;
+        context.state.deliveryZone = null;
         context.state.deliveryFee = 0;
         context.state.deliveryFeeEdited = false;
         context.state.discount = 0;
@@ -239,14 +237,20 @@
         try {
             const pickup = $('#v3-pickup').checked;
             const date = deliveryDateField();
+            const pricingZone = context.state.pricingZone;
+            const deliveryZone = pickup ? null : context.state.deliveryZone;
             const payload = {
                 customer_id: context.customerSelect.value || null,
                 customer_delivery_address_id: context.addressSelect.value || null,
-                delivery_zone_id: context.state.zone?.id || null,
-                delivery_zone_name_snapshot: context.state.zone?.name || null,
-                delivery_zone_markup_percent_snapshot: context.state.zone?.price_markup_percent || null,
-                delivery_zone_rounding_increment_snapshot: context.state.zone?.rounding_increment || null,
-                delivery_zone_minimum_profit_snapshot: context.state.zone?.minimum_profit || null,
+                pricing_zone_id: pricingZone?.id || null,
+                pricing_zone_name_snapshot: pricingZone?.name || null,
+                pricing_zone_markup_percent_snapshot: pricingZone?.price_markup_percent || null,
+                pricing_zone_rounding_increment_snapshot: pricingZone?.rounding_increment || null,
+                delivery_zone_id: deliveryZone?.id || null,
+                delivery_zone_name_snapshot: deliveryZone?.name || null,
+                delivery_zone_markup_percent_snapshot: deliveryZone?.price_markup_percent || null,
+                delivery_zone_rounding_increment_snapshot: deliveryZone?.rounding_increment || null,
+                delivery_zone_minimum_profit_snapshot: deliveryZone?.minimum_profit || null,
                 sale_date: saleDate(),
                 delivery_date: pickup ? null : (date?.value || null),
                 delivery_type: pickup ? 'pickup' : 'delivery',
@@ -294,9 +298,33 @@
             return alert('ไม่สามารถโหลดพักบิลได้ เนื่องจากมีสินค้าหรือหน่วยสินค้าที่ถูกลบหรือปิดใช้งาน');
         }
 
+        const heldPricingZone = hold.pricing_zone || (hold.pricing_zone_id ? {
+            id: hold.pricing_zone_id,
+            name: hold.pricing_zone_name_snapshot,
+            price_markup_percent: hold.pricing_zone_markup_percent_snapshot,
+            rounding_increment: hold.pricing_zone_rounding_increment_snapshot,
+            active: true,
+        } : null);
+        const heldDeliveryZone = hold.delivery_type === 'delivery'
+            ? (hold.delivery_zone || hold.customer_delivery_address?.delivery_zone || (hold.delivery_zone_id ? {
+            id: hold.delivery_zone_id,
+            name: hold.delivery_zone_name_snapshot,
+            price_markup_percent: hold.delivery_zone_markup_percent_snapshot,
+            rounding_increment: hold.delivery_zone_rounding_increment_snapshot,
+            minimum_profit: hold.delivery_zone_minimum_profit_snapshot,
+            active: true,
+        } : null))
+            : null;
+        context.state.pricingZone = heldPricingZone;
+        if (heldDeliveryZone) context.state.deliveryZone = heldDeliveryZone;
         context.setDeliveryType(hold.delivery_type);
         await context.setCustomer(hold.customer_id ? String(hold.customer_id) : '', hold.customer_delivery_address_id ? String(hold.customer_delivery_address_id) : null);
-        if (hold.customer_delivery_address_id) context.setAddress(hold.customer_delivery_address_id);
+        if (hold.customer_delivery_address_id
+            && context.addressSelect.value !== String(hold.customer_delivery_address_id)) {
+            await context.setAddress(hold.customer_delivery_address_id);
+        }
+        context.state.pricingZone = heldPricingZone;
+        if (heldDeliveryZone) context.state.deliveryZone = heldDeliveryZone;
         const date = deliveryDateField();
         if (date) date.value = hold.delivery_type === 'pickup' ? saleDate() : (hold.delivery_date || hold.sale_date || date.value);
         $('#v3-delivery-date-display').value = window.PosDate?.formatDisplay(date?.value) || date?.value || '';
@@ -382,8 +410,8 @@
         const address = context.state.address;
         $('#final-preview-bill-date').textContent = displayDate(currentSaleDate);
         $('#final-preview-address').textContent = pickup ? 'รับสินค้าเองที่ร้าน' : (address?.address || address?.label || 'ยังไม่ได้เลือกที่อยู่จัดส่ง');
-        $('#final-preview-fulfillment').textContent = pickup ? 'รับเอง (รับเอง)' : 'จัดส่ง';
-        $('#final-preview-zone').textContent = pickup ? 'ไม่มีค่าส่ง' : (context.state.zone?.name ? `โซนจัดส่ง: ${context.state.zone.name}` : 'ยังไม่ได้เลือกโซน');
+        $('#final-preview-fulfillment').textContent = pickup ? 'รับเอง' : 'จัดส่ง';
+        $('#final-preview-zone').textContent = pickup ? 'ไม่มีค่าส่ง' : (context.state.deliveryZone?.name ? `โซนจัดส่ง: ${context.state.deliveryZone.name}` : 'ยังไม่ได้เลือกโซน');
         $('#final-preview-date-label').textContent = pickup ? 'วันที่รับสินค้า' : 'วันที่จัดส่ง';
         $('#final-preview-date').textContent = displayDate(selectedDeliveryDate);
         $('#final-preview-items').innerHTML = context.state.cart.map((item, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(item.name)}</td><td>${item.qty} ${escapeHtml(item.unitName)}</td><td>${money(item.qty * item.price)}</td></tr>`).join('');
