@@ -36,8 +36,8 @@ class SaleV3PageTest extends TestCase
             ->assertSee('id="v3-hold-bill"', false)
             ->assertSee('id="v3-delivery"', false)
             ->assertSee('id="v3-pickup-button"', false)
-            ->assertSee('aria-pressed="false"', false)
-            ->assertSee('aria-pressed="true"', false)
+            ->assertSee('id="v3-delivery" type="button" class="btn btn-primary active is-selected" aria-pressed="true"', false)
+            ->assertSee('id="v3-pickup-button" type="button" class="btn btn-outline-primary" aria-pressed="false"', false)
             ->assertSee('data-backdrop="static"', false)
             ->assertSee('data-keyboard="false"', false)
             ->assertSee('data-tax-number="0100000000001"', false)
@@ -65,12 +65,28 @@ class SaleV3PageTest extends TestCase
         $this->assertStringContainsString('id="v3-customer-summary"', $html);
         $this->assertStringContainsString('id="v3-price-zone-select"', $html);
         $this->assertDoesNotMatchRegularExpression('/id="v3-price-zone-select"[^>]*disabled/', $html);
-        $this->assertStringContainsString('class="fulfillment-label">รับเอง</span>', $html);
+        $this->assertStringContainsString('class="fulfillment-label">จัดส่ง</span>', $html);
         $this->assertStringNotContainsString('รับเอง (รับเอง)', $html);
         $this->assertStringContainsString('เลือกโซนราคา', $html);
         $this->assertStringContainsString('id="v3-zone-mismatch-modal"', $html);
+        $this->assertStringContainsString('id="v3-more-menu"', $html);
+        $this->assertStringContainsString('ข้อมูลจัดส่งยังไม่ครบ', $html);
+        $this->assertStringContainsString('เลือกลูกค้าและที่อยู่', $html);
+        $this->assertStringContainsString('แก้ไขข้อมูลจัดส่ง', $html);
+        $this->assertStringContainsString('role="dialog"', $html);
+        $this->assertStringContainsString('aria-labelledby="v3-delivery-editor-title"', $html);
+        $this->assertStringContainsString('id="v3-address-retry"', $html);
+        $this->assertStringContainsString('id="v3-customer-search"', $html);
+        $this->assertStringContainsString('aria-label="ค้นหาชื่อลูกค้า รหัส หรือเบอร์โทร"', $html);
+        $this->assertStringContainsString('id="v3-delivery-context-status" class="pos-v3-context-state is-incomplete" role="status" aria-live="polite"', $html);
+        $this->assertStringNotContainsString('<button type="button" class="sr-only" data-customer-expand>', $html);
+        $this->assertMatchesRegularExpression(
+            '/class="pos-v3-state-adapters d-none"[\s\S]*id="v3-address-picker"/',
+            $html
+        );
+        $this->assertStringContainsString('>ลองใหม่</button>', $html);
 
-        foreach (['ดูข้อมูลลูกค้า', 'ค้นหาลูกค้า', 'เพิ่มลูกค้า', 'ล้างลูกค้า'] as $label) {
+        foreach (['ดูข้อมูลลูกค้า', 'แก้ไขข้อมูลจัดส่ง', 'เพิ่มลูกค้า', 'ล้างลูกค้า'] as $label) {
             $this->assertMatchesRegularExpression(
                 '/aria-label="'.preg_quote($label, '/').'"[^>]*title="'.preg_quote($label, '/').'"|title="'.preg_quote($label, '/').'"[^>]*aria-label="'.preg_quote($label, '/').'"/',
                 $html
@@ -78,6 +94,27 @@ class SaleV3PageTest extends TestCase
         }
 
         $this->assertStringNotContainsString('<span><i class="fas fa-boxes mr-2"></i>เลือกสินค้า</span>', $html);
+    }
+
+    public function test_more_menu_shows_store_settings_only_to_owner(): void
+    {
+        $cashierHtml = $this->actingAs(User::factory()->create(['role' => 'cashier']))
+            ->get(route('sales.v3'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('เพิ่มเติม', $cashierHtml);
+        $this->assertStringContainsString('ใบเสนอราคา', $cashierHtml);
+        $this->assertStringContainsString('ออกจากระบบ', $cashierHtml);
+        $this->assertStringNotContainsString(route('settings.index'), $cashierHtml);
+
+        $ownerHtml = $this->actingAs(User::factory()->create(['role' => 'owner']))
+            ->get(route('sales.v3'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString(route('settings.index'), $ownerHtml);
+        $this->assertStringContainsString('ตั้งค่าร้าน', $ownerHtml);
     }
 
     public function test_product_cards_render_stock_first_with_low_and_out_states_and_no_baht_suffix(): void

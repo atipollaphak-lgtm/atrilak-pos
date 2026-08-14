@@ -113,7 +113,8 @@ class FakeElement {
     }
 
     dispatchEvent(event) {
-        return this.dispatch(event.type, event);
+        this.dispatch(event.type, event);
+        return true;
     }
 
     querySelectorAll(selector) {
@@ -164,6 +165,9 @@ function createHarness({
     zones = [],
     addressLoadError = null,
     addressLoadDeferred = null,
+    saleSubmitDeferred = null,
+    saleSubmitStatus = 201,
+    saleSubmitSuccess = true,
     simulateQuantityBackdropRace = false,
     product = {
         id: 1,
@@ -264,6 +268,7 @@ function createHarness({
         "#v3-new-bill",
         "#v3-clear-cart",
         "#v3-submit",
+        "#final-confirm-payment",
         "#v3-action-feedback",
         "#v3-zone-mismatch-modal",
         "#v3-zone-mismatch-message",
@@ -309,6 +314,9 @@ function createHarness({
     };
 
     const feedback = [];
+    const deliveryEditorFocus = [];
+    let paymentSubmit = null;
+    let saleStoreRequests = 0;
     const stateContext = {};
     const window = {
         document,
@@ -367,6 +375,9 @@ function createHarness({
             showFeedback(message, tone) {
                 feedback.push({ message, tone });
             },
+            openDeliveryEditor(target) {
+                deliveryEditorFocus.push(target);
+            },
             openConfirmation() {
                 if (!stateContext.canConfirmDelivery?.()) return false;
                 modalState.confirmationOpened += 1;
@@ -375,17 +386,42 @@ function createHarness({
             showSuccess() {},
         },
         PosPayment: {
-            createController() {
+            createController(options) {
+                paymentSubmit = options.onConfirm;
                 return {
                     payload(payment) {
                         return payment || {};
                     },
                 };
             },
+            payload(payment) {
+                return payment || {};
+            },
+        },
+        SaleIntentStorage: {
+            createSubmissionGuard() {
+                return { start() { return true; }, release() {} };
+            },
+            createManager() {
+                return {
+                    async keyFor() { return { key: "sale-intent-test-key" }; },
+                    clear() {},
+                };
+            },
+            isDefinitiveClientError() { return false; },
         },
         PosDate: {},
         ZonePricingMath: null,
         fetch: async (url) => {
+            if (url === "/sales-v3") {
+                saleStoreRequests += 1;
+                if (saleSubmitDeferred) await saleSubmitDeferred;
+                return {
+                    ok: saleSubmitStatus >= 200 && saleSubmitStatus < 300,
+                    status: saleSubmitStatus,
+                    async json() { return { success: saleSubmitSuccess, sale_id: 1, sale_no: "SAL-TEST-1", message: "Test submit failed" }; },
+                };
+            }
             if (addressLoadDeferred) await addressLoadDeferred;
             if (addressLoadError) throw addressLoadError;
             const customerId = String(url).split("/").at(-2);
@@ -412,6 +448,7 @@ function createHarness({
         customerSelect,
         elements,
         feedback,
+        deliveryEditorFocus,
         priceZoneSelect,
         productCard,
         productPrice,
@@ -419,6 +456,8 @@ function createHarness({
         state: stateContext.state,
         context: stateContext,
         modalState,
+        get saleStoreRequests() { return saleStoreRequests; },
+        submit(payment = {}) { return paymentSubmit(payment); },
         async clickSubmit() {
             if (modalState.quantityBackdropActive) return false;
             await elements.get("#v3-submit").dispatch("click");
@@ -436,6 +475,14 @@ const activeZone = {
     rounding_increment: "0.25",
     minimum_profit: 0,
 };
+
+test("a new POS V3 draft starts in delivery mode", () => {
+    const harness = createHarness();
+
+    assert.equal(harness.context.state.deliveryType, "delivery");
+    assert.equal(harness.elements.get("#v3-pickup").checked, false);
+    assert.equal(harness.elements.get("#v3-delivery")["aria-pressed"], "true");
+});
 
 test("zone selector starts enabled and reprices pickup quotes without delivery fee", async () => {
     const quoteZone = {
@@ -473,6 +520,7 @@ test("zone selector starts enabled and reprices pickup quotes without delivery f
     await harness.productCard.dispatch("click");
     await harness.elements.get("#v3-quantity-confirm").dispatch("click");
 
+    harness.context.setDeliveryType("pickup");
     assert.equal(harness.context.state.deliveryType, "pickup");
     assert.equal(harness.context.state.pricingZone.id, 1);
     assert.equal(harness.context.state.cart[0].price, 226);
@@ -529,6 +577,43 @@ test("selecting a customer without addresses preserves the pricing zone and cart
     assert.equal(harness.context.state.addressId, "");
 });
 
+test("clearing a customer clears only delivery context and preserves manual bill pricing", async () => {
+    const harness = createHarness({ zones: [activeZone] });
+    const manualItem = {
+        key: "1:11",
+        product: harness.product,
+        productId: 1,
+        productUnitId: 11,
+        unit: harness.product.productUnits[0],
+        unitName: "piece",
+        name: "Manual Product",
+        qty: 1,
+        price: 777,
+        priceWasEdited: true,
+        originalPrice: 100,
+    };
+    harness.context.state.customerId = "7";
+    harness.context.state.addressId = "101";
+    harness.context.state.address = { id: 101, address: "Old site", delivery_zone: activeZone };
+    harness.context.state.addresses = [harness.context.state.address];
+    harness.context.state.deliveryZone = activeZone;
+    harness.context.state.pricingZone = activeZone;
+    harness.context.state.deliveryFee = 50;
+    harness.context.state.deliveryFeeEdited = true;
+    harness.context.state.cart = [manualItem];
+
+    await harness.context.setCustomer("");
+
+    assert.equal(harness.context.state.customerId, "");
+    assert.equal(harness.context.state.addressId, "");
+    assert.equal(harness.context.state.address, null);
+    assert.equal(harness.context.state.deliveryZone, null);
+    assert.equal(harness.context.state.deliveryFee, 0);
+    assert.equal(harness.context.state.pricingZone.id, activeZone.id);
+    assert.equal(harness.context.state.cart[0].price, 777);
+    assert.equal(harness.context.state.cart[0].priceWasEdited, true);
+});
+
 test("address zone mismatch asks before repricing and supports cancel then confirm", async () => {
     const zoneA = { ...activeZone, id: 1, name: "Zone A" };
     const zoneB = { ...activeZone, id: 2, name: "Zone B", price_markup_percent: 20 };
@@ -562,6 +647,7 @@ test("address zone mismatch asks before repricing and supports cancel then confi
     await harness.elements.get("#v3-zone-mismatch-cancel").dispatch("click");
     await pendingAddress;
     assert.equal(harness.context.state.pricingZone.id, 1);
+    assert.match(harness.elements.get("#v3-customer-address").innerHTML, /Zone B/);
     assert.equal(harness.context.state.cart[0].price, 100);
 
     const confirmedAddress = harness.context.setAddress("102");
@@ -572,7 +658,42 @@ test("address zone mismatch asks before repricing and supports cancel then confi
     assert.equal(harness.context.state.cart[0].price, 120);
 });
 
-test("multiple addresses automatically select the address marked as default", async () => {
+test("an address-zone change does not ask to reprice a fully manual-priced cart", async () => {
+    const zoneA = { ...activeZone, id: 1, name: "Zone A" };
+    const zoneB = { ...activeZone, id: 2, name: "Zone B", price_markup_percent: 20 };
+    const harness = createHarness({ zones: [zoneA, zoneB] });
+    harness.context.state.deliveryType = "delivery";
+    harness.context.state.pricingZone = zoneA;
+    harness.context.state.deliveryZone = zoneA;
+    harness.context.state.addresses = [
+        { id: 101, address: "Address A", delivery_zone: zoneA },
+        { id: 102, address: "Address B", delivery_zone: zoneB },
+    ];
+    harness.context.state.address = harness.context.state.addresses[0];
+    harness.context.state.addressId = "101";
+    harness.context.state.cart = [{
+        key: "1:11",
+        product: harness.product,
+        productId: 1,
+        productUnitId: 11,
+        unit: harness.product.productUnits[0],
+        unitName: "piece",
+        name: "Test Product",
+        qty: 1,
+        price: 777,
+        priceWasEdited: true,
+        originalPrice: 100,
+    }];
+
+    await harness.context.setAddress("102");
+
+    assert.equal(harness.modalState.zoneMismatchOpen, false);
+    assert.equal(harness.context.state.deliveryZone.id, 2);
+    assert.equal(harness.context.state.pricingZone.id, 2);
+    assert.equal(harness.context.state.cart[0].price, 777);
+});
+
+test("multiple addresses require an explicit selection even when one is marked default", async () => {
     const harness = createHarness({
         addresses: [
             { id: 101, address: "First site", is_default: false, delivery_zone: activeZone },
@@ -584,11 +705,11 @@ test("multiple addresses automatically select the address marked as default", as
     harness.context.setDeliveryType("delivery");
     await harness.context.setCustomer("7");
 
-    assert.equal(harness.context.state.addressId, "102");
-    assert.equal(harness.context.state.address.address, "Default site");
-    assert.equal(harness.context.state.deliveryZone.name, "Default Zone");
-    assert.equal(harness.context.state.pricingZone.name, "Default Zone");
-    assert.equal(harness.addressSelect.value, "102");
+    assert.equal(harness.context.state.addressId, "");
+    assert.equal(harness.context.state.address, null);
+    assert.equal(harness.context.state.deliveryZone, null);
+    assert.equal(harness.context.state.pricingZone, null);
+    assert.equal(harness.addressSelect.value, "");
     assert.equal(harness.addressPicker.hidden, false);
     assert.equal(harness.addressPicker.classList.contains("d-none"), false);
 });
@@ -678,7 +799,7 @@ test("an address with an inactive delivery zone cannot be used for confirmation"
     assert.equal(harness.context.canConfirmDelivery(), false);
 });
 
-test("an address loading failure clears zone state and reports a recoverable error", async () => {
+test("an address loading failure preserves pricing and cart state and reports a recoverable error", async () => {
     const harness = createHarness({
         zones: [activeZone],
         addressLoadError: new Error("network unavailable"),
@@ -688,6 +809,15 @@ test("an address loading failure clears zone state and reports a recoverable err
     harness.context.state.addressId = "99";
     harness.context.state.pricingZone = activeZone;
     harness.context.state.deliveryZone = activeZone;
+    harness.context.state.cart = [{
+        productId: harness.product.id,
+        product: harness.product,
+        unit: harness.product.productUnits[0],
+        qty: 1,
+        price: 777,
+        priceWasEdited: true,
+        originalPrice: 100,
+    }];
 
     await harness.context.setCustomer("7");
 
@@ -695,9 +825,10 @@ test("an address loading failure clears zone state and reports a recoverable err
     assert.equal(harness.context.state.addressId, "");
     assert.equal(harness.context.state.deliveryZone, null);
     assert.equal(harness.context.state.pricingZone.id, activeZone.id);
+    assert.equal(harness.context.state.cart[0].price, 777);
     assert.equal(harness.context.state.addressLoading, false);
     assert.equal(
-        harness.feedback.some((entry) => entry.tone === "error" && /โหลดที่อยู่และโซนไม่สำเร็จ/.test(entry.message)),
+        harness.feedback.some((entry) => entry.tone === "error" && entry.message === "โหลดที่อยู่ไม่สำเร็จ"),
         true,
     );
     assert.equal(harness.context.canConfirmDelivery(), false);
@@ -735,6 +866,7 @@ test("changing address reprices both the product card and cart", async () => {
     });
     harness.context.setDeliveryType("delivery");
     await harness.context.setCustomer("7");
+    await harness.context.setAddress("101");
     await harness.productCard.dispatch("click");
     await harness.elements.get("#v3-quantity-confirm").dispatch("click");
 
@@ -902,6 +1034,82 @@ test("delivery confirmation requires a customer, address, active zone, and valid
     harness.context.state.address = null;
     harness.context.state.addressId = "";
     assert.equal(harness.context.canConfirmDelivery(), false);
+});
+
+test("incomplete delivery recovery opens the editor at the missing point", () => {
+    const harness = createHarness();
+
+    assert.equal(harness.context.canConfirmDelivery(), false);
+    assert.deepEqual(harness.deliveryEditorFocus, ["customer"]);
+
+    harness.context.state.customerId = "7";
+    harness.customerSelect.value = "7";
+    assert.equal(harness.context.canConfirmDelivery(), false);
+    assert.deepEqual(harness.deliveryEditorFocus, ["customer", "address"]);
+});
+
+test("submission exposes a saving state and ignores a concurrent second submit", async () => {
+    let release;
+    const pending = new Promise((resolve) => { release = resolve; });
+    const harness = createHarness({ saleSubmitDeferred: pending });
+    harness.context.state.customerId = "7";
+    harness.context.state.addressId = "101";
+    harness.context.state.address = { id: 101, address: "Only site", delivery_zone: activeZone };
+    harness.context.state.deliveryZone = activeZone;
+    harness.context.state.pricingZone = activeZone;
+    harness.context.state.cart = [{
+        key: "1:11",
+        product: harness.product,
+        productId: 1,
+        productUnitId: 11,
+        unit: harness.product.productUnits[0],
+        unitName: "piece",
+        name: "Test Product",
+        qty: 1,
+        price: 100,
+        priceWasEdited: false,
+        originalPrice: null,
+    }];
+
+    const first = harness.submit({ payment_method: "cash" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(harness.context.state.submitting, true);
+    assert.equal(harness.elements.get("#v3-submit").disabled, true);
+    assert.equal(harness.elements.get("#v3-submit")["aria-busy"], "true");
+
+    await harness.submit({ payment_method: "cash" });
+    assert.equal(harness.saleStoreRequests, 1);
+
+    release();
+    await first;
+    assert.equal(harness.context.state.submitting, false);
+    assert.equal(harness.elements.get("#v3-submit").disabled, false);
+    assert.equal(harness.elements.get("#v3-submit")["aria-busy"], "false");
+});
+
+test("pickup submission restores the payment confirmation label after a failed request", async () => {
+    const harness = createHarness({ saleSubmitStatus: 500, saleSubmitSuccess: false });
+    harness.context.state.deliveryType = "pickup";
+    harness.elements.get("#v3-pickup").checked = true;
+    harness.context.state.cart = [{
+        key: "1:11",
+        product: harness.product,
+        productId: 1,
+        productUnitId: 11,
+        unit: harness.product.productUnits[0],
+        unitName: "piece",
+        name: "Test Product",
+        qty: 1,
+        price: 100,
+        priceWasEdited: false,
+        originalPrice: null,
+    }];
+
+    await assert.rejects(harness.submit({ payment_method: "cash" }));
+
+    assert.match(harness.elements.get("#final-confirm-payment").innerHTML, /ยืนยันการชำระเงิน/);
 });
 
 test("invalid delivery date clears the hidden ISO value and blocks confirmation", async () => {

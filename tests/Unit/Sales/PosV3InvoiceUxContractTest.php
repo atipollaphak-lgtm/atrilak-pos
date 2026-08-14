@@ -21,12 +21,12 @@ class PosV3InvoiceUxContractTest extends TestCase
 
     public function test_pos_v3_uses_display_dates_while_preserving_iso_request_values(): void
     {
-        $cart = $this->source('resources/views/sales-v3/partials/cart.blade.php');
+        $customerBar = $this->source('resources/views/sales-v3/partials/customer-bar.blade.php');
         $date = $this->source('public/js/modules/pos-date.js');
         $sale = $this->source('public/js/modules/sale-v3.js');
 
-        $this->assertStringContainsString('id="v3-delivery-date-display"', $cart);
-        $this->assertStringContainsString('id="v3-delivery-date" type="hidden"', $cart);
+        $this->assertStringContainsString('id="v3-delivery-date-display"', $customerBar);
+        $this->assertStringContainsString('id="v3-delivery-date" type="hidden"', $customerBar);
         $this->assertStringContainsString('formatDisplay', $date);
         $this->assertStringContainsString('toIso', $date);
         $this->assertStringContainsString('PosDate?.toIso', $sale);

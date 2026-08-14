@@ -2,14 +2,14 @@
     const root = document.getElementById("pos-v3");
     if (!root) return;
 
-    const state = { cart: [], customerId: "", addressId: "", deliveryType: "pickup", address: null, addresses: [], addressLoading: false, pricingZone: null, deliveryZone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "" };
+    const state = { cart: [], customerId: "", addressId: "", deliveryType: "delivery", address: null, addresses: [], addressLoading: false, addressLoadFailed: false, pricingZone: null, deliveryZone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "", submitting: false };
     let addressLoadSequence = 0;
     const $ = (selector) => document.querySelector(selector);
     const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
     const deliveryDateField = () => $("#v3-delivery-date") || $("#v3-sale-date");
     const todayForSale = () => root.dataset.saleDate || new Date().toISOString().slice(0, 10);
-    const resetDeliveryDate = () => { const field = deliveryDateField(); if (field) field.value = todayForSale(); const display = $("#v3-delivery-date-display"); if (display && window.PosDate) display.value = window.PosDate.formatDisplay(todayForSale()); $("#v3-sale-date-display").textContent = window.PosDate ? window.PosDate.formatDisplay(todayForSale()) : todayForSale(); };
+    const resetDeliveryDate = () => { const field = deliveryDateField(); if (field) field.value = todayForSale(); const formatted = window.PosDate?.formatDisplay(todayForSale()) || todayForSale(); const display = $("#v3-delivery-date-display"); if (display) display.value = formatted; const legacyDisplay = $("#v3-sale-date-display"); if (legacyDisplay) legacyDisplay.textContent = formatted; };
     const effectiveZone = () => state.pricingZone;
     const zoneIsActive = (zone) => Boolean(zone && (zone.active === true || zone.active === 1 || zone.active === "1"));
     const deliveryDateIsValid = () => {
@@ -86,8 +86,8 @@
 
         pickupButton?.classList.toggle("btn-primary", pickup);
         pickupButton?.classList.toggle("btn-outline-primary", !pickup);
-        deliveryButton?.classList.toggle("btn-success", !pickup);
-        deliveryButton?.classList.toggle("btn-outline-success", pickup);
+        deliveryButton?.classList.toggle("btn-primary", !pickup);
+        deliveryButton?.classList.toggle("btn-outline-primary", pickup);
         const feeInput = $("#v3-delivery-fee");
         feeInput?.parentElement?.classList.toggle("d-none", pickup);
         deliveryDateField()?.closest(".v3-delivery-date-field")?.classList.toggle("d-none", pickup);
@@ -163,14 +163,22 @@
         $("#v3-delivery-fee").value = money(state.deliveryFee);
         $("#v3-total").textContent = money(total());
         const selectedAddress = state.address;
-        const zoneName = state.pricingZone?.name || "";
-        const addressText = selectedAddress ? addressLabel(selectedAddress) : (state.addresses.length > 1 ? `มี ${state.addresses.length} ที่อยู่ — กรุณาเลือก` : "เลือกที่อยู่จัดส่งเพื่อเริ่มคำนวณโซน");
+        const zoneName = state.deliveryZone?.name || "";
+        const addressText = selectedAddress ? addressLabel(selectedAddress) : (state.addresses.length > 1 ? `มี ${state.addresses.length} ที่อยู่ — กรุณาเลือก` : "เลือกลูกค้าและที่อยู่");
         const delivery = state.deliveryType === "delivery";
         const fulfillmentText = delivery ? `จัดส่ง · ค่าส่ง ${money(state.deliveryFee)} บาท` : "รับเอง · ค่าส่ง 0.00 บาท";
         const fulfillmentClass = delivery ? "is-delivery" : "is-pickup";
         $("#v3-customer-address").innerHTML = `<i class="fas fa-map-marker-alt"></i> ${escapeHtml(addressText)}${zoneName ? ` <span class="badge badge-success ml-2">โซน: ${escapeHtml(zoneName)}</span>` : ""} <span id="v3-fulfillment-status" class="pos-v3-fulfillment-status ${fulfillmentClass} ml-2">${fulfillmentText}</span>`;
+        const deliveryContextStatus = $("#v3-delivery-context-status");
+        if (deliveryContextStatus) {
+            const complete = !delivery || Boolean(state.customerId && state.addressId && state.deliveryZone?.id && deliveryDateIsValid());
+            deliveryContextStatus.textContent = complete ? (delivery ? "ข้อมูลจัดส่งครบแล้ว" : "รับสินค้าเอง") : "ข้อมูลจัดส่งยังไม่ครบ";
+            deliveryContextStatus.classList.toggle("is-incomplete", !complete);
+            deliveryContextStatus.classList.toggle("is-complete", complete);
+        }
         syncNoteUi();
         window.FinalPos?.syncCustomerDisplay();
+        window.FinalPos?.syncDeliveryEditor?.();
     }
 
     function filterProducts() {
@@ -269,7 +277,7 @@
         const before = state.cart.map((item) => Number(item.price));
         const previousZone = state.pricingZone;
         state.pricingZone = nextZone;
-        const preview = state.cart.map((item) => unitPrice(item.unit, item.qty, item.product));
+        const preview = state.cart.map((item) => item.priceWasEdited ? Number(item.price) : unitPrice(item.unit, item.qty, item.product));
         state.pricingZone = previousZone;
         const changed = before.some((price, index) => Math.abs(price - Number(preview[index] || 0)) > 0.005);
         if (!changed) return Promise.resolve(true);
@@ -339,6 +347,7 @@
         state.address = null;
         state.addresses = [];
         state.addressLoading = Boolean(id);
+        state.addressLoadFailed = false;
         state.deliveryZone = null;
         const addressPicker = $("#v3-address-picker");
         if (addressPicker) {
@@ -358,13 +367,15 @@
             if (requestSequence !== addressLoadSequence || state.customerId !== id) return;
             state.addresses = Array.isArray(addresses) ? addresses : [];
             state.addressLoading = false;
+            state.addressLoadFailed = false;
         } catch (error) {
             if (requestSequence !== addressLoadSequence || state.customerId !== id) return;
             state.addressLoading = false;
+            state.addressLoadFailed = true;
             state.addresses = [];
             select.innerHTML = '<option value="">โหลดที่อยู่ไม่สำเร็จ</option>';
             select.disabled = true;
-            window.FinalPos?.showFeedback("โหลดที่อยู่และโซนไม่สำเร็จ กรุณาเลือกลูกค้าอีกครั้งเพื่อลองใหม่", "error");
+            window.FinalPos?.showFeedback("โหลดที่อยู่ไม่สำเร็จ", "error");
             refreshPricingContext();
             render();
             return;
@@ -378,9 +389,8 @@
         select.innerHTML = (state.addresses.length ? '<option value="">เลือกที่อยู่จัดส่ง</option>' : '<option value="">ลูกค้านี้ยังไม่มีที่อยู่จัดส่ง</option>') + state.addresses.map((address) => `<option value="${address.id}">${escapeHtml(addressLabel(address))}</option>`).join("");
         select.disabled = state.addresses.length === 0;
         const preferred = preferredAddressId && state.addresses.find((address) => String(address.id) === String(preferredAddressId));
-        const defaultAddress = state.addresses.find((address) => address.is_default === true || address.is_default === 1 || address.is_default === "1");
         const onlyAddress = state.addresses.length === 1 ? state.addresses[0] : null;
-        const selected = preferred || defaultAddress || onlyAddress;
+        const selected = preferred || onlyAddress;
         if (selected) {
             select.value = String(selected.id);
             applyAddressSelection(selected.id, false);
@@ -392,7 +402,11 @@
     }
 
     async function setCustomer(customerId, preferredAddressId = null) { await loadAddresses(customerId, preferredAddressId); }
-    function setAddress(addressId) { $("#v3-address-id").value = addressId ? String(addressId) : ""; return $("#v3-address-id").dispatchEvent(new Event("change")); }
+    function setAddress(addressId) {
+        const select = $("#v3-address-id");
+        select.value = addressId ? String(addressId) : "";
+        return applyAddressSelection(select.value || "");
+    }
     function setDeliveryType(deliveryType) {
         const next = deliveryType === "pickup" ? "pickup" : "delivery";
         state.deliveryType = next;
@@ -407,12 +421,13 @@
     }
     function canConfirmDelivery() {
         if (state.deliveryType !== "delivery") return true;
-        if (state.addressLoading) { window.FinalPos?.showFeedback("กรุณารอให้โหลดที่อยู่และโซนเสร็จก่อน", "error"); return false; }
-        if (state.deliveryZone?.id && !zoneIsActive(state.deliveryZone)) { window.FinalPos?.showFeedback("ที่อยู่จัดส่งนี้ไม่มีโซนจัดส่งที่ใช้งานอยู่", "error"); return false; }
-        if (!deliveryDateIsValid()) { window.FinalPos?.showFeedback("กรุณากรอกวันที่จัดส่งให้ถูกต้องก่อนยืนยัน", "error"); return false; }
-        if (!state.customerId) { window.FinalPos?.showFeedback("กรุณาเลือกลูกค้าก่อนยืนยันการจัดส่ง", "error"); return false; }
-        if (!state.addressId || !state.address) { window.FinalPos?.showFeedback("กรุณาเลือกที่อยู่จัดส่งก่อนยืนยันการจัดส่ง", "error"); return false; }
-        if (!state.deliveryZone?.id) { window.FinalPos?.showFeedback("ที่อยู่จัดส่งนี้ยังไม่มีโซนจัดส่ง กรุณาเลือกที่อยู่หรือกำหนดโซนก่อนยืนยัน", "error"); return false; }
+        const recover = (message, focusTarget) => { window.FinalPos?.showFeedback(message, "error"); window.FinalPos?.openDeliveryEditor?.(focusTarget); return false; };
+        if (state.addressLoading) return recover("กรุณารอให้โหลดที่อยู่และโซนเสร็จก่อน", "address");
+        if (state.deliveryZone?.id && !zoneIsActive(state.deliveryZone)) return recover("ที่อยู่จัดส่งนี้ไม่มีโซนจัดส่งที่ใช้งานอยู่", "address");
+        if (!deliveryDateIsValid()) { window.FinalPos?.showFeedback("กรุณากรอกวันที่จัดส่งให้ถูกต้องก่อนยืนยัน", "error"); $("#v3-delivery-date-display")?.focus(); return false; }
+        if (!state.customerId) return recover("กรุณาเลือกลูกค้าก่อนยืนยันการจัดส่ง", "customer");
+        if (!state.addressId || !state.address) return recover("กรุณาเลือกที่อยู่จัดส่งก่อนยืนยันการจัดส่ง", "address");
+        if (!state.deliveryZone?.id) return recover("ที่อยู่จัดส่งนี้ยังไม่มีโซนจัดส่ง กรุณาเลือกที่อยู่หรือกำหนดโซนก่อนยืนยัน", "address");
         return true;
     }
     function buildPayload(payment) { return { hold_bill_id: state.holdBillId, customer_id: state.customerId || null, customer_delivery_address_id: state.addressId || null, pricing_zone_id: state.pricingZone?.id || null, technician_id: $("#v3-technician-id").value || null, delivery_date: state.deliveryType === "delivery" ? (deliveryDateField()?.value || null) : null, delivery_type: state.deliveryType, delivery_fee: state.deliveryFee.toFixed(2), discount: state.discount.toFixed(2), notes: state.note || null, items: state.cart.map((item) => ({ product_id: item.productId, product_unit_id: item.productUnitId, qty: item.qty, selling_price: Number(item.price).toFixed(2), price_was_edited: Boolean(item.priceWasEdited), price_changed_since_hold: Boolean(item.priceChangedSinceHold) })), ...payment }; }
@@ -454,16 +469,28 @@
         $("#v3-cart-items").addEventListener("input", (event) => { if (!event.target.matches(".v3-cart-unit-price")) return; const index = Number(event.target.dataset.index); const item = state.cart[index]; if (!item || !commitUnitPrice(index, event.target.value)) return; const row = event.target.closest(".v3-cart-row"); row.querySelector(".v3-line-total").textContent = money(item.qty * item.price); syncCartTotals(); });
         $("#v3-cart-items").addEventListener("keydown", (event) => { if (!event.target.matches(".v3-cart-unit-price") || event.key !== "Enter") return; event.preventDefault(); const index = Number(event.target.dataset.index); commitUnitPrice(index, event.target.value); render(); });
         $("#v3-cart-items").addEventListener("change", (event) => { if (event.target.matches(".v3-cart-quantity")) { render(); return; } if (!event.target.matches(".v3-cart-unit-price")) return; const index = Number(event.target.dataset.index); const item = state.cart[index]; if (!item || !commitUnitPrice(index, event.target.value)) { render(); return; } render(); });
-        const openNoteEditor = () => { $("#v3-note-input").value = state.note; window.jQuery($("#v3-note-modal")).modal("show"); }; $("#v3-note-button").addEventListener("click", openNoteEditor); const noteStatus = $("#v3-note-status"); noteStatus?.addEventListener("click", () => { if (state.note) openNoteEditor(); }); noteStatus?.addEventListener("keydown", (event) => { if (state.note && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openNoteEditor(); } }); $("#v3-note-confirm").addEventListener("click", () => { state.note = $("#v3-note-input").value.trim(); syncNoteUi(); window.jQuery($("#v3-note-modal")).modal("hide"); }); $("#v3-new-bill").addEventListener("click", () => { if (!state.cart.length || confirm("ล้างตะกร้าและเริ่มบิลใหม่หรือไม่?")) { if (window.FinalPos?.resetSale) window.FinalPos.resetSale(); else { state.cart = []; state.discount = 0; state.note = ""; state.deliveryFee = 0; state.deliveryFeeEdited = false; state.holdBillId = null; resetDeliveryDate(); $("#v3-discount").value = "0.00"; render(); } $("#v3-product-search").focus(); } }); $("#v3-clear-cart").addEventListener("click", () => $("#v3-new-bill").click());
+        const openNoteEditor = () => { $("#v3-note-input").value = state.note; window.jQuery($("#v3-note-modal")).modal("show"); }; $("#v3-note-button").addEventListener("click", openNoteEditor); const noteStatus = $("#v3-note-status"); noteStatus?.addEventListener("click", () => { if (state.note) openNoteEditor(); }); noteStatus?.addEventListener("keydown", (event) => { if (state.note && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openNoteEditor(); } }); $("#v3-note-confirm").addEventListener("click", () => { state.note = $("#v3-note-input").value.trim(); syncNoteUi(); window.jQuery($("#v3-note-modal")).modal("hide"); }); $("#v3-new-bill").addEventListener("click", () => { if (!state.cart.length || confirm("ล้างตะกร้าและเริ่มบิลใหม่หรือไม่?")) { if (window.FinalPos?.resetSale) window.FinalPos.resetSale(); else { state.cart = []; state.discount = 0; state.note = ""; state.deliveryType = "delivery"; state.deliveryFee = 0; state.deliveryFeeEdited = false; state.holdBillId = null; resetDeliveryDate(); $("#v3-discount").value = "0.00"; render(); } $("#v3-product-search").focus(); } }); $("#v3-clear-cart").addEventListener("click", () => $("#v3-new-bill").click());
         const payment = PosPayment.createController({ getTotal: () => money(total()), onConfirm: submit }); window.FinalPos?.configure({ payment, state, total, render, loadAddresses, root, customerSelect: $("#v3-customer-id"), addressSelect: $("#v3-address-id"), setCustomer, setAddress, setDeliveryType, canConfirmDelivery }); $("#v3-submit").addEventListener("click", () => { if (!state.cart.length) return alert("กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ"); window.FinalPos?.openConfirmation(); if (!window.FinalPos) payment.open(); });
         $("#v3-product-search").addEventListener("keydown", (event) => { if (event.key !== "Enter") return; const term = event.target.value.trim().toLowerCase(); const card = [...document.querySelectorAll(".v3-product-card")].find((candidate) => { const p = JSON.parse(candidate.dataset.product); return String(p.barcode || "").toLowerCase() === term || p.productUnits?.some((u) => u.barcodes?.some((b) => String(b.barcode).toLowerCase() === term)); }); if (card) { openQuantity(JSON.parse(card.dataset.product)); event.target.value = ""; } });
         document.addEventListener("keydown", (event) => { if (event.key === "F2" || event.key === "F8") { event.preventDefault(); $("#v3-product-search").focus(); $("#v3-product-search").select(); } if (event.key === "F9") { event.preventDefault(); $("#v3-submit").click(); } if (event.key === "Escape" && !document.querySelector(".modal.show")) $("#v3-product-search").focus(); }); setInterval(() => { const clock = $("#pos-v3-clock"); if (clock) clock.textContent = new Date().toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }); }, 1000);
     }
 
     async function submit(payment) {
+        if (state.submitting) return;
         if (!canConfirmDelivery()) return;
         const guard = window.SaleIntentStorage.createSubmissionGuard(); if (!guard.start()) return; const payload = buildPayload(window.PosPayment.payload(payment)); const pending = window.SaleIntentStorage.createManager({ storageKey: "atrilak.pos.v3.pending-sale.v1" }); let intent = null;
-        try { intent = await pending.keyFor(payload); payload.idempotency_key = intent.key; const response = await fetch(root.dataset.storeUrl, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify(payload) }); const data = await response.json(); if (!response.ok || !data.success) throw Object.assign(new Error(data.message || "บันทึกการขายไม่สำเร็จ"), { status: response.status }); pending.clear(intent.key); state.cart = []; render(); window.FinalPos?.showSuccess(data); } catch (error) { if (intent && window.SaleIntentStorage.isDefinitiveClientError(error.status)) pending.clear(intent.key); throw error; } finally { guard.release(); }
+        const confirmationLabel = state.deliveryType === "pickup" ? "ยืนยันการชำระเงิน" : "ยืนยันการจัดส่ง";
+        const setSubmitting = (submitting) => {
+            state.submitting = submitting;
+            const submitButton = $("#v3-submit");
+            const confirmButton = $("#final-confirm-payment");
+            [submitButton, confirmButton].forEach((button) => { if (!button) return; button.disabled = submitting; button.setAttribute("aria-busy", submitting ? "true" : "false"); });
+            const submitLabel = submitButton?.querySelector("span");
+            if (submitLabel) submitLabel.textContent = submitting ? "กำลังบันทึก..." : "รับชำระเงิน (Enter)";
+            if (confirmButton) confirmButton.innerHTML = submitting ? '<i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>กำลังบันทึก...' : `<i class="fas fa-check mr-2"></i>${confirmationLabel}`;
+        };
+        setSubmitting(true);
+        try { intent = await pending.keyFor(payload); payload.idempotency_key = intent.key; const response = await fetch(root.dataset.storeUrl, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify(payload) }); const data = await response.json(); if (!response.ok || !data.success) throw Object.assign(new Error(data.message || "บันทึกการขายไม่สำเร็จ"), { status: response.status }); pending.clear(intent.key); state.cart = []; render(); window.FinalPos?.showSuccess(data); } catch (error) { if (intent && window.SaleIntentStorage.isDefinitiveClientError(error.status)) pending.clear(intent.key); throw error; } finally { setSubmitting(false); guard.release(); }
     }
 
     init();

@@ -94,6 +94,7 @@ function createHarness(hold) {
     const elements = new Map([
         ["#v3-hold-list", holdList],
         ["#v3-delivery-date", deliveryDate],
+        ["#v3-delivery-date-display", new FakeElement({ value: "30/07/2026" })],
         ["#v3-pickup", pickup],
         ["#v3-discount", discount],
         ["#v3-customer-name", new FakeElement()],
@@ -134,6 +135,7 @@ function createHarness(hold) {
 
     const document = {
         querySelector(selector) {
+            if (selector === "#v3-sale-date-display") return null;
             if (!elements.has(selector)) elements.set(selector, new FakeElement());
             return elements.get(selector);
         },
@@ -315,6 +317,7 @@ test("resume restores the complete hold context without consuming it before paym
     assert.equal(harness.addressSelect.value, "34");
     assert.equal(harness.deliveryDate.value, "2026-07-30");
     assert.equal(harness.pickup.checked, true);
+    assert.equal(harness.state.deliveryType, "pickup");
     assert.equal(harness.state.note, "TEST hold note");
     assert.equal(harness.state.discount, 10);
     assert.equal(harness.state.deliveryFee, 0);
@@ -519,7 +522,8 @@ test("finish resets the next bill and confirmation restores its actions", async 
     assert.equal(harness.state.deliveryFeeEdited, false);
     assert.equal(harness.state.note, "");
     assert.equal(harness.customerSelect.value, "");
-    assert.equal(harness.pickup.checked, true);
+    assert.equal(harness.pickup.checked, false);
+    assert.equal(harness.state.deliveryType, "delivery");
 
     harness.elements.get("#final-confirm-payment").classList.add("d-none");
     harness.elements.get("#final-edit-items").classList.add("d-none");

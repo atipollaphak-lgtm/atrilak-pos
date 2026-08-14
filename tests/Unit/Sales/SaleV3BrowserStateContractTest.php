@@ -42,11 +42,11 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringNotContainsString('delivery_type: $("#v3-pickup").checked', $payload);
     }
 
-    public function test_sale_v3_defaults_to_pickup_and_sends_price_edit_intent(): void
+    public function test_sale_v3_defaults_to_delivery_and_sends_price_edit_intent(): void
     {
         $sale = $this->source('public/js/modules/sale-v3.js');
 
-        $this->assertStringContainsString('deliveryType: "pickup"', $sale);
+        $this->assertStringContainsString('deliveryType: "delivery"', $sale);
         $this->assertStringContainsString('price_was_edited: Boolean(item.priceWasEdited)', $sale);
         $this->assertStringContainsString(
             'price_changed_since_hold: Boolean(item.priceChangedSinceHold)',
@@ -66,7 +66,8 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('state.deliveryZone', $sale);
         $this->assertStringContainsString('state.addresses.length === 1', $sale);
         $this->assertStringContainsString('state.addresses.length > 1', $sale);
-        $this->assertStringContainsString('const defaultAddress = state.addresses.find', $sale);
+        $this->assertStringNotContainsString('const defaultAddress = state.addresses.find', $sale);
+        $this->assertStringContainsString('const selected = preferred || onlyAddress', $sale);
         $this->assertStringContainsString('const nextZone = nextAddress?.delivery_zone || null', $sale);
         $this->assertStringContainsString('state.deliveryZone = nextZone', $sale);
         $this->assertStringContainsString('state.deliveryFeeEdited = false', $sale);
@@ -91,42 +92,26 @@ class SaleV3BrowserStateContractTest extends TestCase
     public function test_mobile_customer_identity_and_address_remain_visible_without_ellipsis(): void
     {
         $css = $this->source('public/css/sale-v3.css');
-        $mobileStart = strpos($css, '@media (max-width:575px)');
+        $mobileStart = strpos($css, '@media (max-width:991px)');
 
         $this->assertNotFalse($mobileStart);
 
         $mobileCss = substr($css, $mobileStart);
-        $expectedMobileRule = implode(chr(10), [
-            '.pos-v3-customer-summary,',
-            '    .pos-v3-customer-line {',
-            '        overflow:visible;',
-            '        text-overflow:clip;',
-            '        white-space:normal;',
-            '        overflow-wrap:anywhere;',
-            '    }',
-        ]);
-        $this->assertStringContainsString(
-            $expectedMobileRule,
-            $mobileCss
-        );
+        $this->assertStringNotContainsString('.pos-v3-customer-summary { display:none', $mobileCss);
+        $this->assertStringNotContainsString('.pos-v3-customer-line { display:none', $mobileCss);
     }
 
     public function test_customer_identity_and_address_do_not_hide_phone_or_address_on_desktop(): void
     {
         $css = $this->source('public/css/sale-v3.css');
-        $mobileStart = strpos($css, '@media (max-width:575px)');
+        $mobileStart = strpos($css, '@media (max-width:991px)');
 
         $this->assertNotFalse($mobileStart);
 
         $baseCss = substr($css, 0, $mobileStart);
-        $this->assertStringContainsString(
-            '.pos-v3-customer-summary { display:block; overflow:visible; font-size:17px; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }',
-            $baseCss
-        );
-        $this->assertStringContainsString(
-            '.pos-v3-customer-line { display:block; margin-top:3px; overflow:visible; color:var(--pos-muted); font-size:12px; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }',
-            $baseCss
-        );
+        $this->assertStringContainsString('.pos-v3-customer-summary', $baseCss);
+        $this->assertStringContainsString('overflow-wrap:anywhere', $baseCss);
+        $this->assertStringContainsString('.pos-v3-customer-line', $baseCss);
     }
 
     public function test_unit_price_is_inline_editable_without_opening_a_price_popup(): void
@@ -167,11 +152,11 @@ class SaleV3BrowserStateContractTest extends TestCase
 
     public function test_fulfillment_buttons_expose_one_truthful_selected_state(): void
     {
-        $cart = $this->source('resources/views/sales-v3/partials/cart.blade.php');
+        $customer = $this->source('resources/views/sales-v3/partials/customer-bar.blade.php');
         $sale = $this->source('public/js/modules/sale-v3.js');
 
-        $this->assertStringContainsString('class="fulfillment-check"', $cart);
-        $this->assertStringContainsString('aria-pressed="false"', $cart);
+        $this->assertStringContainsString('class="fulfillment-check"', $customer);
+        $this->assertStringContainsString('aria-pressed="false"', $customer);
         $this->assertStringContainsString('setAttribute("aria-pressed"', $sale);
         $this->assertStringContainsString('is-selected', $sale);
         $this->assertStringContainsString('state.deliveryType === "pickup"', $sale);

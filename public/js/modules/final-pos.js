@@ -1,6 +1,7 @@
 (function () {
     let context = null;
     let holding = false;
+    let deliveryEditorReturnFocus = null;
     const printedDocuments = new Set();
     let printing = false;
 
@@ -39,10 +40,11 @@
         });
         bind();
         syncCustomerDisplay();
+        syncDeliveryEditor();
     }
 
     function bind() {
-        $('#v3-open-customer-search')?.addEventListener('click', () => window.jQuery('#customer-search-modal').modal('show'));
+        $('#v3-open-customer-search')?.addEventListener('click', () => openDeliveryEditor('customer'));
         $('#v3-clear-customer')?.addEventListener('click', clearCustomer);
         $('#v3-customer-search')?.addEventListener('input', filterCustomers);
         filterCustomers();
@@ -79,6 +81,19 @@
         $('#final-print-tax')?.addEventListener('click', () => printDocument('tax-invoice'));
         document.querySelectorAll('#v3-open-customer-create, #v3-open-customer-create-from-search, #v3-open-customer-create-from-bar, #v3-customer-empty-create').forEach((button) => button.addEventListener('click', openCustomerCreate));
         $('#v3-customer-create-form')?.addEventListener('submit', createCustomer);
+        $('#v3-address-retry')?.addEventListener('click', async () => {
+            if (!context?.state?.customerId || context.state.addressLoading) return;
+            await context.setCustomer(context.state.customerId);
+            syncDeliveryEditor();
+            focusDeliveryEditor('address');
+        });
+        $('#v3-delivery-editor-confirm')?.addEventListener('click', () => {
+            if (context.state.deliveryType === 'delivery' && (!context.state.customerId || !context.state.addressId)) {
+                focusDeliveryEditor(context.state.customerId ? 'address' : 'customer');
+                return;
+            }
+            window.jQuery('#customer-search-modal').modal('hide');
+        });
         if (document.createElement) {
             ensurePaymentMethodSummary();
         }
@@ -108,10 +123,98 @@
         }
     }
 
+    function focusDeliveryEditor(target = 'customer') {
+        if (target === 'address') {
+            const selected = document.querySelector('#v3-delivery-address-list [aria-pressed="true"]');
+            const firstAddress = document.querySelector('#v3-delivery-address-list [data-address-choice]');
+            (selected || firstAddress || $('#v3-delivery-editor-detail'))?.focus?.();
+            return;
+        }
+        $('#v3-customer-search')?.focus?.();
+        $('#v3-customer-search')?.select?.();
+    }
+
+    function openDeliveryEditor(focusTarget = 'customer') {
+        const modal = $('#customer-search-modal');
+        if (!modal) return;
+        deliveryEditorReturnFocus = document.activeElement;
+        modal.dataset.focusTarget = focusTarget;
+        syncDeliveryEditor();
+        const instance = window.jQuery(modal);
+        instance.one('shown.bs.modal', () => focusDeliveryEditor(modal.dataset.focusTarget || 'customer'));
+        instance.one('hidden.bs.modal', () => {
+            const target = deliveryEditorReturnFocus;
+            deliveryEditorReturnFocus = null;
+            target?.focus?.();
+        });
+        instance.modal('show');
+    }
+
+    function syncDeliveryEditor() {
+        if (!context) return;
+        const detail = $('#v3-delivery-editor-detail');
+        const status = $('#v3-delivery-editor-status');
+        const list = $('#v3-delivery-address-list');
+        const loadError = $('#v3-address-load-error');
+        const noAddress = $('#v3-no-address');
+        const heading = $('#v3-address-list-title');
+        const meta = $('#v3-delivery-customer-meta');
+        const manage = $('#v3-manage-customer-addresses');
+        const confirm = $('#v3-delivery-editor-confirm');
+        const customerId = String(context.state.customerId || '');
+        const option = context.customerSelect.selectedOptions[0];
+        const customerName = customerId ? (option?.dataset.name || option?.textContent || 'ลูกค้าที่เลือก') : 'ยังไม่ได้เลือกลูกค้า';
+        const customerPhone = String(option?.dataset.phone || '').trim();
+
+        detail?.setAttribute('aria-busy', context.state.addressLoading ? 'true' : 'false');
+        loadError?.classList.toggle('d-none', !context.state.addressLoadFailed);
+        noAddress?.classList.add('d-none');
+        if (heading) heading.textContent = customerName;
+        if (meta) meta.textContent = customerId ? (customerPhone || 'ไม่ระบุเบอร์โทร') : 'เลือกลูกค้าเพื่อดูที่อยู่จัดส่ง';
+        if (manage) manage.href = customerId ? context.root.dataset.customerShowUrlTemplate.replace('__CUSTOMER__', customerId) : '#';
+        if (confirm) confirm.disabled = context.state.deliveryType === 'delivery' && (!customerId || !context.state.addressId);
+        if (!list) return;
+
+        if (!customerId) {
+            list.innerHTML = '<div class="final-empty">เลือกลูกค้าและที่อยู่</div>';
+            if (status) status.textContent = 'เลือกลูกค้าและที่อยู่';
+            return;
+        }
+        if (context.state.addressLoading) {
+            list.innerHTML = '<div class="pos-v3-address-loading"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> กำลังโหลดที่อยู่...</div>';
+            if (status) status.textContent = 'กำลังโหลดที่อยู่';
+            return;
+        }
+        if (context.state.addressLoadFailed) {
+            list.innerHTML = '';
+            if (status) status.textContent = 'โหลดที่อยู่ไม่สำเร็จ';
+            return;
+        }
+        if (!context.state.addresses.length) {
+            list.innerHTML = '';
+            noAddress?.classList.remove('d-none');
+            if (status) status.textContent = 'ลูกค้านี้ยังไม่มีที่อยู่จัดส่ง';
+            return;
+        }
+
+        list.innerHTML = context.state.addresses.map((address) => {
+            const selected = String(address.id) === String(context.state.addressId || '');
+            const zone = address.delivery_zone?.name || 'ยังไม่ระบุโซนจัดส่ง';
+            return `<button type="button" class="pos-v3-address-choice${selected ? ' is-selected' : ''}" data-address-choice="${address.id}" aria-pressed="${selected ? 'true' : 'false'}"><span class="pos-v3-address-check" aria-hidden="true">${selected ? '✓' : ''}</span><strong>${escapeHtml(address.label || address.name || `ที่อยู่ ${address.id}`)}</strong><small>${escapeHtml(address.address || '-')}</small><span>${escapeHtml(zone)}</span></button>`;
+        }).join('');
+        list.querySelectorAll('[data-address-choice]').forEach((button) => button.addEventListener('click', async () => {
+            await context.setAddress(button.dataset.addressChoice);
+            syncDeliveryEditor();
+            if (context.state.addressId) window.jQuery('#customer-search-modal').modal('hide');
+        }));
+        if (status) status.textContent = context.state.addressId ? 'เลือกที่อยู่จัดส่งแล้ว' : `พบ ${context.state.addresses.length} ที่อยู่ กรุณาเลือก`;
+    }
+
     function clearCustomer() {
         context.customerSelect.value = '';
         context.customerSelect.dispatchEvent(new Event('change'));
         syncCustomerDisplay();
+        syncDeliveryEditor();
     }
 
     function openCustomerCreate() {
@@ -165,10 +268,11 @@
         context.state.cart = [];
         context.state.customerId = '';
         context.state.addressId = '';
-        context.state.deliveryType = 'pickup';
+        context.state.deliveryType = 'delivery';
         context.state.address = null;
         context.state.addresses = [];
         context.state.addressLoading = false;
+        context.state.addressLoadFailed = false;
         context.state.pricingZone = null;
         context.state.deliveryZone = null;
         context.state.deliveryFee = 0;
@@ -182,16 +286,22 @@
         context.addressSelect.disabled = true;
         const date = deliveryDateField();
         if (date) date.value = saleDate();
-        $('#v3-delivery-date-display').value = window.PosDate?.formatDisplay(saleDate()) || saleDate();
-        $('#v3-sale-date-display').textContent = window.PosDate?.formatDisplay(saleDate()) || saleDate();
-        $('#v3-pickup').checked = true;
+        const formattedSaleDate = window.PosDate?.formatDisplay(saleDate()) || saleDate();
+        const deliveryDateDisplay = $('#v3-delivery-date-display');
+        if (deliveryDateDisplay) deliveryDateDisplay.value = formattedSaleDate;
+        const legacySaleDateDisplay = $('#v3-sale-date-display');
+        if (legacySaleDateDisplay) legacySaleDateDisplay.textContent = formattedSaleDate;
+        $('#v3-pickup').checked = false;
         $('#v3-discount').value = '0.00';
+        const technician = $('#v3-technician-id');
+        if (technician) technician.value = '';
         context.payment?.reset?.();
         updatePaymentMethodSummary(null);
         printedDocuments.clear();
         ['delivery', 'tax'].forEach((suffix) => { const button = $(`#final-print-${suffix}`); if (button) button.disabled = true; });
         context.render();
         syncCustomerDisplay();
+        syncDeliveryEditor();
     }
 
     function filterCustomers() {
@@ -208,26 +318,16 @@
     async function selectCustomer(row) {
         if (!row) return;
         await context.setCustomer(row.dataset.customerId);
-        window.jQuery('#customer-search-modal').modal('hide');
+        syncDeliveryEditor();
+        if (context.state.addresses.length === 1 && context.state.addressId) {
+            window.jQuery('#customer-search-modal').modal('hide');
+            return;
+        }
+        focusDeliveryEditor('address');
     }
 
     async function expandCustomer(row) {
-        const panel = row?.nextElementSibling;
-        const list = panel?.querySelector('[data-customer-address-list]');
-        if (!panel || !list) return;
-        panel.classList.toggle('d-none');
-        if (panel.classList.contains('d-none') || panel.dataset.loaded) return;
-        const response = await fetch(context.root.dataset.addressUrlTemplate.replace('__CUSTOMER__', row.dataset.customerId), { headers: { Accept: 'application/json' } });
-        const addresses = response.ok ? await response.json() : [];
-        panel.dataset.loaded = '1';
-        list.innerHTML = addresses.length
-            ? addresses.map((address) => `<button type="button" class="btn btn-light btn-block text-left mb-1" data-address-choice="${address.id}">${escapeHtml(address.label || address.address || '-')} · ${escapeHtml(address.delivery_zone?.name || 'ไม่ระบุโซน')}</button>`).join('')
-            : 'ยังไม่มีที่อยู่จัดส่ง';
-        list.querySelectorAll('[data-address-choice]').forEach((button) => button.addEventListener('click', async () => {
-            await context.setCustomer(row.dataset.customerId, button.dataset.addressChoice);
-            context.setAddress(button.dataset.addressChoice);
-            window.jQuery('#customer-search-modal').modal('hide');
-        }));
+        await selectCustomer(row);
     }
 
     async function holdBill() {
@@ -327,8 +427,11 @@
         if (heldDeliveryZone) context.state.deliveryZone = heldDeliveryZone;
         const date = deliveryDateField();
         if (date) date.value = hold.delivery_type === 'pickup' ? saleDate() : (hold.delivery_date || hold.sale_date || date.value);
-        $('#v3-delivery-date-display').value = window.PosDate?.formatDisplay(date?.value) || date?.value || '';
-        $('#v3-sale-date-display').textContent = window.PosDate?.formatDisplay(saleDate()) || saleDate();
+        const formattedDeliveryDate = window.PosDate?.formatDisplay(date?.value) || date?.value || '';
+        const deliveryDateDisplay = $('#v3-delivery-date-display');
+        if (deliveryDateDisplay) deliveryDateDisplay.value = formattedDeliveryDate;
+        const legacySaleDateDisplay = $('#v3-sale-date-display');
+        if (legacySaleDateDisplay) legacySaleDateDisplay.textContent = window.PosDate?.formatDisplay(saleDate()) || saleDate();
         context.state.cart = (hold.items || []).map((item) => ({
             key: `${item.product.id}:${item.product_unit_id || 'base'}`,
             productId: item.product.id,
@@ -516,5 +619,5 @@
         window.setTimeout(() => { printing = false; }, 250);
     }
 
-    window.FinalPos = { configure, openConfirmation, showSuccess, syncCustomerDisplay, resetSale, showFeedback };
+    window.FinalPos = { configure, openConfirmation, showSuccess, syncCustomerDisplay, syncDeliveryEditor, openDeliveryEditor, resetSale, showFeedback };
 })();
