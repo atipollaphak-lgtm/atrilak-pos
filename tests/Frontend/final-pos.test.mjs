@@ -13,7 +13,8 @@ const saleV3Source = fs.readFileSync(
 );
 
 class FakeElement {
-    constructor({ dataset = {}, value = "", checked = false } = {}) {
+    constructor({ dataset = {}, value = "", checked = false, id = "" } = {}) {
+        this.id = id;
         this.dataset = dataset;
         this.value = value;
         this.checked = checked;
@@ -34,6 +35,11 @@ class FakeElement {
             },
             contains(name) { return classes.has(name); },
         };
+    }
+
+    focus() {
+        this.ownerDocument && (this.ownerDocument.activeElement = this);
+        this.focused = true;
     }
 
     addEventListener(type, listener) {
@@ -111,6 +117,7 @@ function createHarness(hold) {
         ["#final-payment-method-summary", new FakeElement()],
         ["#final-payment-method-label", new FakeElement()],
         ["#final-payment-amounts", new FakeElement()],
+        ["#v3-submit", new FakeElement({ id: "v3-submit" })],
     ]);
     const requests = [];
     const alerts = [];
@@ -136,13 +143,54 @@ function createHarness(hold) {
     const document = {
         querySelector(selector) {
             if (selector === "#v3-sale-date-display") return null;
-            if (!elements.has(selector)) elements.set(selector, new FakeElement());
+            if (!elements.has(selector)) {
+                const element = new FakeElement();
+                element.ownerDocument = document;
+                elements.set(selector, element);
+            }
             return elements.get(selector);
         },
         querySelectorAll(selector) {
             if (selector === '[data-final-action="holds"]') return [holdsButton];
             return [];
         },
+    };
+    let activeElement = null;
+    Object.defineProperty(document, "activeElement", {
+        get() { return activeElement; },
+        set(element) { activeElement = element; },
+    });
+    elements.forEach((element) => { element.ownerDocument = document; });
+    const modalEvents = new Map();
+    const modalKey = (target) => typeof target === "string" ? target : `#${target?.id || ""}`;
+    const jQuery = (target) => {
+        const key = modalKey(target);
+        return {
+            one(event, callback) {
+                const handlers = modalEvents.get(`${key}:${event}`) || [];
+                handlers.push(callback);
+                modalEvents.set(`${key}:${event}`, handlers);
+                return this;
+            },
+            off(event, callback) {
+                const handlers = modalEvents.get(`${key}:${event}`) || [];
+                modalEvents.set(`${key}:${event}`, callback ? handlers.filter((handler) => handler !== callback) : []);
+                return this;
+            },
+            modal(action) {
+                if (action === "show") {
+                    const handlers = modalEvents.get(`${key}:shown.bs.modal`) || [];
+                    modalEvents.delete(`${key}:shown.bs.modal`);
+                    handlers.forEach((callback) => callback());
+                }
+                if (action === "hide") {
+                    const handlers = modalEvents.get(`${key}:hidden.bs.modal`) || [];
+                    modalEvents.delete(`${key}:hidden.bs.modal`);
+                    handlers.forEach((callback) => callback());
+                }
+                return this;
+            },
+        };
     };
     const window = {
         document,
@@ -152,7 +200,7 @@ function createHarness(hold) {
         alert(message) { alerts.push(message); },
         confirm() { return true; },
         setTimeout(callback) { callback(); return 1; },
-        jQuery() { return { modal() {} }; },
+        jQuery,
         open(url) { openedUrls.push(url); return {}; },
         async fetch(url, options = {}) {
             requests.push({
@@ -224,6 +272,8 @@ function createHarness(hold) {
         requests,
         resumeButton,
         deliveryDate,
+        document,
+        jQuery,
         state,
     };
 }
@@ -759,4 +809,22 @@ test("starting the next bill clears the previous payment snapshot", async () => 
         "วิธีชำระเงิน: ยังไม่ได้ยืนยัน",
     );
     assert.equal(harness.elements.get("#final-payment-amounts").textContent, "");
+});
+
+test("closing payment confirmation returns focus to the submit trigger", () => {
+    const harness = createHarness({
+        id: 22,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        items: [],
+    });
+    const submit = harness.elements.get("#v3-submit");
+    submit.focus();
+    harness.state.cart = [{ name: "TEST product", unitName: "piece", qty: 1, price: 100 }];
+
+    harness.finalPos.openConfirmation();
+    harness.elements.get("#final-confirm-payment").focus();
+    harness.jQuery("#payment-confirmation-modal").modal("hide");
+
+    assert.equal(harness.document.activeElement, submit);
 });

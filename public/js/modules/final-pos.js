@@ -2,6 +2,7 @@
     let context = null;
     let holding = false;
     let deliveryEditorReturnFocus = null;
+    let paymentConfirmationReturnFocus = null;
     const printedDocuments = new Set();
     let printing = false;
 
@@ -482,9 +483,16 @@
         }
     }
 
+    function restorePaymentConfirmationFocus() {
+        const target = paymentConfirmationReturnFocus;
+        paymentConfirmationReturnFocus = null;
+        target?.focus?.();
+    }
+
     function openConfirmation() {
         if (context.canConfirmDelivery && !context.canConfirmDelivery()) return;
         const modal = $('#payment-confirmation-modal');
+        paymentConfirmationReturnFocus = document.activeElement;
         modal?.classList.remove('has-documents');
         $('#final-payment-close')?.classList.remove('d-none');
         $('#final-document-panel')?.classList.add('d-none');
@@ -528,7 +536,10 @@
         $('#final-preview-customer').textContent = option?.dataset.name || 'ลูกค้าทั่วไป';
         $('#final-preview-phone').textContent = option?.dataset.phone || '-';
         updateTaxInvoiceAvailability(option);
-        window.jQuery('#payment-confirmation-modal').modal('show');
+        const paymentModal = window.jQuery('#payment-confirmation-modal');
+        paymentModal.off?.('hidden.bs.modal', restorePaymentConfirmationFocus);
+        paymentModal.one('hidden.bs.modal', restorePaymentConfirmationFocus);
+        paymentModal.modal('show');
     }
 
     function normalizePaymentSnapshot(data) {
