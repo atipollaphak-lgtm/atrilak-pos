@@ -44,4 +44,14 @@ class Customer extends Model
     {
         return $this->hasMany(Sale::class);
     }
+
+    public function importRows(): HasMany
+    {
+        return $this->hasMany(CustomerImportRow::class, 'customer_id');
+    }
+
+    public function externalReferences(): HasMany
+    {
+        return $this->hasMany(CustomerExternalReference::class, 'customer_id');
+    }
 }

@@ -1,0 +1,44 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class CustomerImportRow extends Model
+{
+    protected $fillable = [
+        'batch_id',
+        'customer_id',
+        'row_number',
+        'external_id',
+        'name',
+        'phone',
+        'tax_number',
+        'branch_type',
+        'branch_number',
+        'address',
+        'remark',
+        'status',
+        'reasons',
+        'warnings',
+        'original_values',
+    ];
+
+    protected $casts = [
+        'row_number' => 'integer',
+        'reasons' => 'array',
+        'warnings' => 'array',
+        'original_values' => 'array',
+    ];
+
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(CustomerImportBatch::class, 'batch_id');
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'customer_id');
+    }
+}

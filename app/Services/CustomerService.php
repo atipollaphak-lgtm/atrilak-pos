@@ -4,15 +4,20 @@ namespace App\Services;
 
 use App\Models\Customer;
 use App\Models\CustomerDeliveryAddress;
+use App\Services\Customers\CustomerCodeAllocator;
 use Illuminate\Support\Facades\DB;
 
 class CustomerService
 {
+    public function __construct(
+        private CustomerCodeAllocator $codeAllocator,
+    ) {}
+
     public function create(array $data): Customer
     {
         return DB::transaction(function () use ($data): Customer {
             $customer = Customer::create([
-                'code' => $this->nextCode(),
+                'code' => $this->codeAllocator->nextCode(),
                 'name' => $data['name'],
                 'phone' => $data['phone'] ?? null,
                 'tax_number' => $data['tax_number'] ?? null,
@@ -104,17 +109,4 @@ class CustomerService
         return false;
     }
 
-    private function nextCode(): string
-    {
-        $codes = Customer::query()->lockForUpdate()->pluck('code');
-        $next = $codes->reduce(function (int $carry, ?string $code): int {
-            if (preg_match('/^CUS-(\d+)$/', (string) $code, $matches)) {
-                return max($carry, (int) $matches[1]);
-            }
-
-            return $carry;
-        }, 0) + 1;
-
-        return 'CUS-'.str_pad((string) $next, 4, '0', STR_PAD_LEFT);
-    }
 }
