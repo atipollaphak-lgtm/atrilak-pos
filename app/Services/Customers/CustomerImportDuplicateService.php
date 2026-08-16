@@ -102,7 +102,7 @@ class CustomerImportDuplicateService
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      */
     private function markDuplicate(array &$row, string $reason): void
     {
@@ -111,7 +111,7 @@ class CustomerImportDuplicateService
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      */
     private function markReview(array &$row, string $reason): void
     {
@@ -122,7 +122,7 @@ class CustomerImportDuplicateService
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      */
     private function addReason(array &$row, string $reason): void
     {
@@ -133,7 +133,7 @@ class CustomerImportDuplicateService
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param  array<string, mixed>  $row
      */
     private function addWarning(array &$row, string $warning): void
     {

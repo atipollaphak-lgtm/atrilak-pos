@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Customers;
 
-use App\Http\Requests\Customers\PreviewCustomerImportRequest;
 use App\Http\Requests\Customers\ConfirmCustomerImportRequest;
+use App\Http\Requests\Customers\PreviewCustomerImportRequest;
 use Tests\TestCase;
 
 class CustomerImportRouteAndRequestTest extends TestCase

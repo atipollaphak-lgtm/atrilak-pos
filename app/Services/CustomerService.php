@@ -9,9 +9,13 @@ use Illuminate\Support\Facades\DB;
 
 class CustomerService
 {
+    private CustomerCodeAllocator $codeAllocator;
+
     public function __construct(
-        private CustomerCodeAllocator $codeAllocator,
-    ) {}
+        ?CustomerCodeAllocator $codeAllocator = null,
+    ) {
+        $this->codeAllocator = $codeAllocator ?? new CustomerCodeAllocator;
+    }
 
     public function create(array $data): Customer
     {
@@ -108,5 +112,4 @@ class CustomerService
 
         return false;
     }
-
 }

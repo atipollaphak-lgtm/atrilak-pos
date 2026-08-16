@@ -2,7 +2,6 @@
 
 namespace App\Services\Customers;
 
-use App\Services\Customers\CustomerImportPhoneNormalizer;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -205,6 +204,7 @@ class CustomerImportValidationService
             if ($sourceSystem === 'C2M' && preg_match('/^\s*เลขผู้เสียภาษี\s*[:：]?\s*(.*)$/u', $line, $matches) === 1) {
                 if ($rows === []) {
                     $rows[] = $this->invalidContinuationRow($rawRow['row_number'], $line);
+
                     continue;
                 }
 
@@ -212,7 +212,9 @@ class CustomerImportValidationService
                 if ($tax['valid']) {
                     $rows[array_key_last($rows)]['tax_number'] = $tax['value'];
                 } else {
-                    $rows[array_key_last($rows)]['status'] = 'review_required';
+                    if ($rows[array_key_last($rows)]['status'] !== 'invalid') {
+                        $rows[array_key_last($rows)]['status'] = 'review_required';
+                    }
                     $rows[array_key_last($rows)]['reasons'][] = 'เลขผู้เสียภาษีในแถวต่อเนื่องไม่ครบ 13 หลัก';
                 }
 

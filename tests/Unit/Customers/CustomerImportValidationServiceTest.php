@@ -85,6 +85,24 @@ class CustomerImportValidationServiceTest extends TestCase
         }
     }
 
+    public function test_malformed_tax_continuation_does_not_downgrade_an_invalid_customer_row(): void
+    {
+        $path = $this->workbook([
+            [1, '', '', '', 'ที่อยู่', '0800000001', '', ''],
+            ['เลขผู้เสียภาษี ABC'],
+        ]);
+
+        try {
+            $result = app(CustomerImportValidationService::class)->validate($path, 'members.xlsx');
+
+            $this->assertCount(1, $result['rows']);
+            $this->assertSame('invalid', $result['rows'][0]['status']);
+            $this->assertStringContainsString('ภาษี', implode(' ', $result['rows'][0]['reasons']));
+        } finally {
+            @unlink($path);
+        }
+    }
+
     public function test_blank_name_is_invalid_and_embedded_phone_requires_review_when_primary_is_blank(): void
     {
         $path = $this->workbook([
@@ -124,7 +142,7 @@ class CustomerImportValidationServiceTest extends TestCase
     public function test_formula_cell_is_rejected_as_a_row_error(): void
     {
         $path = tempnam(sys_get_temp_dir(), 'customer-import-formula-').'.xlsx';
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->fromArray(['ลำดับ', 'การติดต่อ', 'ชื่อ', 'กลุ่มลูกค้า', 'ที่อยู่', 'เบอร์โทร', 'อีเมล์', 'จัดการ'], null, 'A1');
         $sheet->fromArray([1, '', 'สูตรต้องห้าม', '', '', '', '', ''], null, 'A2');
@@ -144,7 +162,7 @@ class CustomerImportValidationServiceTest extends TestCase
     private function workbook(array $rows, ?array $headers = null): string
     {
         $path = tempnam(sys_get_temp_dir(), 'customer-import-').'.xlsx';
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->fromArray($headers ?? [
             'ลำดับ', 'การติดต่อ', 'ชื่อ', 'กลุ่มลูกค้า', 'ที่อยู่', 'เบอร์โทร', 'อีเมล์', 'จัดการ',

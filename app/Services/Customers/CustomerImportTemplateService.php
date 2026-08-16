@@ -42,7 +42,7 @@ class CustomerImportTemplateService
     }
 
     /**
-     * @param iterable<array<string, mixed>> $rows
+     * @param  iterable<array<string, mixed>>  $rows
      */
     public function createCsvReport(iterable $rows): string
     {
@@ -59,7 +59,10 @@ class CustomerImportTemplateService
                 $this->safeCellValue($row['address'] ?? ''),
                 $this->safeCellValue($row['tax_number'] ?? ''),
                 $this->safeCellValue($row['status'] ?? ''),
-                $this->safeCellValue(implode('; ', $row['reasons'] ?? [])),
+                $this->safeCellValue(implode('; ', [
+                    ...($row['reasons'] ?? []),
+                    ...($row['warnings'] ?? []),
+                ])),
             ], ',', '"', '\\');
         }
 
@@ -74,7 +77,7 @@ class CustomerImportTemplateService
     {
         $value = is_scalar($value) || $value === null
             ? (string) $value
-            : json_encode($value, JSON_UNESCAPED_UNICODE);
+            : (json_encode($value, JSON_UNESCAPED_UNICODE) ?: '');
 
         return preg_match('/^[=+\-@]/', $value) === 1 ? "'".$value : $value;
     }

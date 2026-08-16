@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Throwable;
 
 class CustomerImportController extends Controller
@@ -36,7 +37,7 @@ class CustomerImportController extends Controller
         $spreadsheet = $this->templateService->createTemplate();
 
         return response()->streamDownload(function () use ($spreadsheet): void {
-            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save('php://output');
+            (new Xlsx($spreadsheet))->save('php://output');
         }, 'atrilak-customer-import-template.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);

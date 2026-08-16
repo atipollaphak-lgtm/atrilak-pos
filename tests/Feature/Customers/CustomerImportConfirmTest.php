@@ -3,6 +3,7 @@
 namespace Tests\Feature\Customers;
 
 use App\Models\Customer;
+use App\Models\CustomerImportRow;
 use App\Services\Customers\CustomerImportService;
 use App\Services\Customers\CustomerImportStorageService;
 use Illuminate\Support\Facades\Schema;
@@ -109,9 +110,9 @@ class CustomerImportConfirmTest extends TestCase
 
     public function test_confirm_creates_customer_address_and_external_reference_atomically(): void
     {
-        $token = $this->storePreview([
-            $this->row('1001', 'บริษัททดสอบ', '0805098556', '0123456789012', 'สำนักงานใหญ่', null, 'ที่อยู่ดิบ'),
-        ]);
+        $row = $this->row('1001', 'บริษัททดสอบ', '0805098556', '0123456789012', 'สำนักงานใหญ่', null, 'ที่อยู่ดิบ');
+        $row['original_values'] = ['อีเมล์' => 'private@example.test'];
+        $token = $this->storePreview([$row]);
 
         $result = app(CustomerImportService::class)->confirm($token, 7, [2]);
 
@@ -135,6 +136,7 @@ class CustomerImportConfirmTest extends TestCase
             'external_id' => '1001',
         ]);
         $this->assertDatabaseHas('customer_import_rows', ['row_number' => 2, 'status' => 'imported']);
+        $this->assertSame([], CustomerImportRow::query()->sole()->original_values);
         $this->assertDatabaseHas('customer_import_batches', ['status' => 'completed', 'imported_count' => 1]);
         $this->assertSame('used', app(CustomerImportStorageService::class)->get($token, 7)->state);
     }

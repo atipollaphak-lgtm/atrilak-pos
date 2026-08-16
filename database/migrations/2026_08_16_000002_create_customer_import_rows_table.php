@@ -34,6 +34,7 @@ return new class extends Migration
 
             $table->index(['batch_id', 'status']);
             $table->index(['batch_id', 'row_number']);
+            $table->index('external_id');
         });
     }
 

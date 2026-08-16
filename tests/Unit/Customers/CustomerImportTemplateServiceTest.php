@@ -28,6 +28,7 @@ class CustomerImportTemplateServiceTest extends TestCase
                 'tax_number' => '0100000000001',
                 'status' => 'duplicate',
                 'reasons' => ['เหตุผล'],
+                'warnings' => ['คำเตือน'],
             ],
         ]);
 
@@ -37,5 +38,6 @@ class CustomerImportTemplateServiceTest extends TestCase
         $this->assertStringContainsString("'-0800000000", $csv);
         $this->assertStringContainsString("'@address", $csv);
         $this->assertStringContainsString('เหตุผล', $csv);
+        $this->assertStringContainsString('คำเตือน', $csv);
     }
 }

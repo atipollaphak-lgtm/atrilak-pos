@@ -2,6 +2,7 @@
 
 namespace App\Services\Customers;
 
+use App\Data\Customers\CustomerImportPreviewData;
 use App\Data\Customers\CustomerImportResultData;
 use App\Models\Customer;
 use App\Models\CustomerDeliveryAddress;
@@ -22,7 +23,7 @@ class CustomerImportService
     ) {}
 
     /**
-     * @param array<int, int|string> $selectedRows
+     * @param  array<int, int|string>  $selectedRows
      */
     public function confirm(string $token, int $userId, array $selectedRows): CustomerImportResultData
     {
@@ -37,7 +38,7 @@ class CustomerImportService
     }
 
     /**
-     * @param array<int, int|string> $selectedRows
+     * @param  array<int, int|string>  $selectedRows
      */
     private function confirmWithoutLock(string $token, int $userId, array $selectedRows): CustomerImportResultData
     {
@@ -86,6 +87,8 @@ class CustomerImportService
 
         try {
             $result = DB::transaction(function () use ($batch, $preview, $previewRows, $selectedRowNumbers): CustomerImportResultData {
+                $this->lockImportWriters();
+
                 return $this->importWithinTransaction($batch, $preview, $previewRows, $selectedRowNumbers);
             });
 
@@ -103,12 +106,12 @@ class CustomerImportService
     }
 
     /**
-     * @param array<int, array<string, mixed>> $previewRows
-     * @param list<int> $selectedRowNumbers
+     * @param  array<int, array<string, mixed>>  $previewRows
+     * @param  list<int>  $selectedRowNumbers
      */
     private function importWithinTransaction(
         CustomerImportBatch $batch,
-        \App\Data\Customers\CustomerImportPreviewData $preview,
+        CustomerImportPreviewData $preview,
         array $previewRows,
         array $selectedRowNumbers,
     ): CustomerImportResultData {
@@ -124,6 +127,7 @@ class CustomerImportService
 
             if ($wasSelected && ($row['status'] ?? null) === 'ready') {
                 $rowsToImport[] = $row;
+
                 continue;
             }
 
@@ -184,6 +188,7 @@ class CustomerImportService
             $rowNumber = (int) ($row['row_number'] ?? 0);
             if (isset($importedByRow[$rowNumber])) {
                 $finalRows[] = $importedByRow[$rowNumber];
+
                 continue;
             }
 
@@ -212,7 +217,7 @@ class CustomerImportService
                 'status' => $status,
                 'reasons' => $row['reasons'] ?? [],
                 'warnings' => $row['warnings'] ?? [],
-                'original_values' => $row['original_values'] ?? [],
+                'original_values' => [],
             ]);
         }
 
@@ -243,7 +248,7 @@ class CustomerImportService
     }
 
     /**
-     * @param array<int, int|string> $selectedRows
+     * @param  array<int, int|string>  $selectedRows
      * @return list<int>
      */
     private function normalizeSelectedRows(array $selectedRows): array
@@ -271,7 +276,7 @@ class CustomerImportService
     }
 
     /**
-     * @param array<int, array<string, mixed>> $rows
+     * @param  array<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
      */
     private function rowsByNumber(array $rows): array
@@ -282,5 +287,12 @@ class CustomerImportService
         }
 
         return $indexed;
+    }
+
+    private function lockImportWriters(): void
+    {
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select("select pg_advisory_xact_lock(hashtext('atrilak:customer-import-confirm'))");
+        }
     }
 }
