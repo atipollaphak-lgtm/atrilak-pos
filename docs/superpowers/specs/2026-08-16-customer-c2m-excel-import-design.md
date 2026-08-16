@@ -1,6 +1,6 @@
 # Customer C2M Excel Import — Design Specification
 
-วันที่: 2026-08-16  
+วันที่: 2026-08-16
 สถานะ: ออกแบบสำหรับ Feature Branch `codex/customer-c2m-excel-import`
 
 ## เป้าหมายและขอบเขต
