@@ -9,7 +9,12 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h3 class="card-title">รายชื่อลูกค้า</h3>
-            <a href="{{ route('customers.create') }}" class="btn btn-primary btn-sm">เพิ่มลูกค้า</a>
+            <div>
+                @can('manager')
+                    <a href="{{ route('customers.import.index') }}" class="btn btn-outline-success btn-sm mr-1">นำเข้าสมาชิก Excel</a>
+                @endcan
+                <a href="{{ route('customers.create') }}" class="btn btn-primary btn-sm">เพิ่มลูกค้า</a>
+            </div>
         </div>
         <div class="card-body">
             <form method="GET" class="row mb-3">

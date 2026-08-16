@@ -5,6 +5,7 @@ use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerDeliveryAddressController;
+use App\Http\Controllers\CustomerImportController;
 use App\Http\Controllers\DailyPaymentClosingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryZoneController;
@@ -62,6 +63,16 @@ Route::middleware(['auth'])->group(function () {
 
     Route::delete('/profile', [ProfileController::class, 'destroy'])
         ->name('profile.destroy');
+
+    // Customer Excel import is restricted to Manager and Owner.
+    Route::middleware(['role:manager'])->group(function () {
+        Route::prefix('customers/import')->name('customers.import.')->group(function () {
+            Route::get('/', [CustomerImportController::class, 'index'])->name('index');
+            Route::get('/template', [CustomerImportController::class, 'template'])->name('template');
+            Route::post('/preview', [CustomerImportController::class, 'preview'])->name('preview');
+            Route::delete('/{token}', [CustomerImportController::class, 'destroy'])->name('destroy');
+        });
+    });
 
     // Cashier ขึ้นไป
     Route::middleware(['role:cashier'])->group(function () {

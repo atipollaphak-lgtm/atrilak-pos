@@ -36,4 +36,14 @@ return [
         ],
     ],
     'default_branch_type' => 'สำนักงานใหญ่',
+    'template_headers' => [
+        'external_id',
+        'name',
+        'phone',
+        'tax_id',
+        'branch_type',
+        'branch_number',
+        'address',
+        'remark',
+    ],
 ];
