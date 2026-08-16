@@ -15,6 +15,10 @@
 @stop
 
 @section('content')
+    <form id="customer-import-confirm-form" method="POST" action="{{ route('customers.import.confirm') }}">
+        @csrf
+        <input type="hidden" name="token" value="{{ $preview->token }}">
+
     @if ($preview->errors !== [])
         <div class="alert alert-danger">
             <ul class="mb-0">
@@ -69,13 +73,20 @@
         </div>
     @endif
 
+    <div class="d-flex justify-content-end mb-3">
+        <button id="customer-import-confirm-button" type="submit" class="btn btn-success" @disabled($preview->rows === [] || $counts['ready'] === 0)>
+            ยืนยันนำเข้า <span id="customer-import-confirm-count">{{ $counts['ready'] }}</span> รายการ
+        </button>
+    </div>
+    </form>
+
     <div class="d-flex justify-content-between">
         <form method="POST" action="{{ route('customers.import.destroy', $preview->token) }}">
             @csrf
             @method('DELETE')
             <button type="submit" class="btn btn-light">ยกเลิก Preview</button>
         </form>
-        <span class="text-muted align-self-center">ระบบจะเปิดให้ยืนยันเฉพาะรายการพร้อมนำเข้าในขั้นถัดไป</span>
+        <span class="text-muted align-self-center">รายการต้องตรวจสอบ/ซ้ำ/ผิดพลาดจะไม่ถูกเลือกอัตโนมัติ</span>
     </div>
 @stop
 

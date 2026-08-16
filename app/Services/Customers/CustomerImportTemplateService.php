@@ -36,7 +36,46 @@ class CustomerImportTemplateService
         ]);
         $instructions->getColumnDimension('A')->setWidth(110);
         $instructions->getStyle('A1')->getFont()->setBold(true);
+        $spreadsheet->setActiveSheetIndex(0);
 
         return $spreadsheet;
+    }
+
+    /**
+     * @param iterable<array<string, mixed>> $rows
+     */
+    public function createCsvReport(iterable $rows): string
+    {
+        $headers = ['C2M ID', 'ชื่อ', 'เบอร์โทร', 'ที่อยู่', 'Tax ID', 'สถานะ', 'เหตุผล'];
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, "\xEF\xBB\xBF");
+        fputcsv($stream, $headers, ',', '"', '\\');
+
+        foreach ($rows as $row) {
+            fputcsv($stream, [
+                $this->safeCellValue($row['external_id'] ?? ''),
+                $this->safeCellValue($row['name'] ?? ''),
+                $this->safeCellValue($row['phone'] ?? ''),
+                $this->safeCellValue($row['address'] ?? ''),
+                $this->safeCellValue($row['tax_number'] ?? ''),
+                $this->safeCellValue($row['status'] ?? ''),
+                $this->safeCellValue(implode('; ', $row['reasons'] ?? [])),
+            ], ',', '"', '\\');
+        }
+
+        rewind($stream);
+        $csv = stream_get_contents($stream);
+        fclose($stream);
+
+        return $csv === false ? "\xEF\xBB\xBF" : $csv;
+    }
+
+    private function safeCellValue(mixed $value): string
+    {
+        $value = is_scalar($value) || $value === null
+            ? (string) $value
+            : json_encode($value, JSON_UNESCAPED_UNICODE);
+
+        return preg_match('/^[=+\-@]/', $value) === 1 ? "'".$value : $value;
     }
 }

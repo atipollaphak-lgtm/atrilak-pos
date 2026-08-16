@@ -70,6 +70,10 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/', [CustomerImportController::class, 'index'])->name('index');
             Route::get('/template', [CustomerImportController::class, 'template'])->name('template');
             Route::post('/preview', [CustomerImportController::class, 'preview'])->name('preview');
+            Route::post('/confirm', [CustomerImportController::class, 'confirm'])->name('confirm');
+            Route::get('/history', [CustomerImportController::class, 'history'])->name('history');
+            Route::get('/history/{batch}', [CustomerImportController::class, 'show'])->name('history.show');
+            Route::get('/report/{batch}', [CustomerImportController::class, 'report'])->name('report');
             Route::delete('/{token}', [CustomerImportController::class, 'destroy'])->name('destroy');
         });
     });

@@ -3,6 +3,7 @@
 namespace Tests\Unit\Customers;
 
 use App\Http\Requests\Customers\PreviewCustomerImportRequest;
+use App\Http\Requests\Customers\ConfirmCustomerImportRequest;
 use Tests\TestCase;
 
 class CustomerImportRouteAndRequestTest extends TestCase
@@ -13,6 +14,10 @@ class CustomerImportRouteAndRequestTest extends TestCase
             'customers.import.index',
             'customers.import.template',
             'customers.import.preview',
+            'customers.import.confirm',
+            'customers.import.history',
+            'customers.import.history.show',
+            'customers.import.report',
             'customers.import.destroy',
         ] as $routeName) {
             $route = app('router')->getRoutes()->getByName($routeName);
@@ -28,5 +33,14 @@ class CustomerImportRouteAndRequestTest extends TestCase
         $rules = (new PreviewCustomerImportRequest)->rules();
 
         $this->assertSame(['required', 'file', 'max:'.config('customer_import.max_file_size_kb')], $rules['file']);
+    }
+
+    public function test_confirm_request_accepts_only_a_token_and_distinct_row_numbers(): void
+    {
+        $rules = (new ConfirmCustomerImportRequest)->rules();
+
+        $this->assertSame(['required', 'uuid'], $rules['token']);
+        $this->assertSame(['required', 'array', 'min:1'], $rules['selected_rows']);
+        $this->assertSame(['integer', 'distinct', 'min:1'], $rules['selected_rows.*']);
     }
 }

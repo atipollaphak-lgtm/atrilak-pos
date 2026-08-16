@@ -20,7 +20,7 @@ class CustomerImportModelContractTest extends TestCase
         $this->assertContains('source_system', $model->getFillable());
         $this->assertContains('created_by', $model->getFillable());
         $this->assertContains('status', $model->getFillable());
-        $this->assertSame('integer', $model->getCasts()['total_rows']);
+        $this->assertSame('integer', $model->getCasts()['total_parsed']);
         $this->assertSame('array', $model->getCasts()['counts']);
         $this->assertInstanceOf(HasMany::class, $model->rows());
         $this->assertInstanceOf(BelongsTo::class, $model->creator());

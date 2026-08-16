@@ -36,6 +36,7 @@
             </ul>
             <div class="mb-3">
                 <a href="{{ route('customers.import.template') }}" class="btn btn-outline-primary">ดาวน์โหลด ATRILAK Template</a>
+                <a href="{{ route('customers.import.history') }}" class="btn btn-outline-secondary ml-1">ประวัติการนำเข้า</a>
             </div>
             <form method="POST" action="{{ route('customers.import.preview') }}" enctype="multipart/form-data">
                 @csrf
