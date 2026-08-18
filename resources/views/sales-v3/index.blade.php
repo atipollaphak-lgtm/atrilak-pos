@@ -11,7 +11,7 @@
 @stop
 
 @section('content')
-    <div id="pos-v3" class="pos-v3-shell" data-store-url="{{ route('sales.v3.store') }}" data-customer-store-url="{{ route('sales.v3.customers.store') }}" data-customer-show-url-template="{{ url('/customers/__CUSTOMER__') }}" data-address-url-template="{{ url('/sales-v3/customers/__CUSTOMER__/delivery-addresses-json') }}" data-hold-store-url="{{ route('sales.v3.hold-bills.store') }}" data-hold-list-url="{{ route('sales.v3.hold-bills.index') }}" data-hold-url-template="{{ url('/sales-v3/hold-bills/__HOLD__') }}" data-document-url-template="{{ url('/sales/__SALE__/invoice-v2') }}" data-sale-date="{{ now()->toDateString() }}">
+    <div id="pos-v3" class="pos-v3-shell" data-store-url="{{ route('sales.v3.store') }}" data-customer-store-url="{{ route('sales.v3.customers.store') }}" data-customer-show-url-template="{{ url('/customers/__CUSTOMER__') }}" data-address-url-template="{{ url('/sales-v3/customers/__CUSTOMER__/delivery-addresses-json') }}" data-hold-store-url="{{ route('sales.v3.hold-bills.store') }}" data-hold-list-url="{{ route('sales.v3.hold-bills.index') }}" data-hold-url-template="{{ url('/sales-v3/hold-bills/__HOLD__') }}" data-document-url-template="{{ url('/sales/__SALE__/invoice-v2') }}" data-product-order-url-template="{{ url('/categories/__CATEGORY__/products/order') }}" data-sale-date="{{ now()->toDateString() }}">
         @include('sales-v3.partials.final-sidebar')
         @include('sales-v3.partials.customer-bar')
 

@@ -15,6 +15,7 @@ use App\Http\Controllers\PriceController;
 use App\Http\Controllers\PricingManagementController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductImportController;
+use App\Http\Controllers\ProductOrderingController;
 use App\Http\Controllers\ProductPriceTierController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
@@ -285,6 +286,8 @@ Route::middleware(['auth'])->group(function () {
 
         Route::put('/categories/order', [CategoryController::class, 'updateOrder'])
             ->name('categories.order');
+        Route::put('/categories/{category}/products/order', [ProductOrderingController::class, 'updateOrder'])
+            ->name('categories.products.order');
         Route::resource('categories', CategoryController::class);
         Route::get('/frequent-products', [FrequentProductController::class, 'index'])
             ->name('frequent-products.index');

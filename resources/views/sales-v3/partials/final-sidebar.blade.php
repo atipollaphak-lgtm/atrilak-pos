@@ -1,8 +1,8 @@
 <header class="final-pos-header">
-    <div class="final-pos-brand" aria-label="ATRILAK POS">
+    <a id="v3-pos-brand" class="final-pos-brand" href="{{ route('dashboard') }}" aria-label="ATRILAK POS กลับ Dashboard">
         <strong>ATRILAK POS</strong>
         <small>ร้านค้าวัสดุก่อสร้าง</small>
-    </div>
+    </a>
     <div class="final-pos-search">
         <i class="fas fa-search" aria-hidden="true"></i>
         <input id="v3-product-search" autocomplete="off" aria-label="ค้นหาสินค้าหรือสแกนบาร์โค้ด" placeholder="ค้นหาสินค้า / สแกนบาร์โค้ด">

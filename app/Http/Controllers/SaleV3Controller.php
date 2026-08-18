@@ -29,7 +29,9 @@ class SaleV3Controller extends Controller
         $products = Product::query()
             ->with(['category', 'frequentProduct', 'productUnits.unit', 'productUnits.barcodes', 'productUnits.priceTiers'])
             ->where('active', true)
-            ->orderBy('name')
+            ->orderBy('category_id')
+            ->orderBy('sort_order')
+            ->orderBy('id')
             ->get();
         $products = $products->sort(function (Product $left, Product $right): int {
             $leftOrder = $left->frequentProduct?->sort_order;
@@ -45,7 +47,19 @@ class SaleV3Controller extends Controller
                 return $leftOrder <=> $rightOrder;
             }
 
-            return strcasecmp($left->name, $right->name);
+            $leftCategorySort = (int) ($left->category?->sort_order ?? 0);
+            $rightCategorySort = (int) ($right->category?->sort_order ?? 0);
+            if ($leftCategorySort !== $rightCategorySort) {
+                return $leftCategorySort <=> $rightCategorySort;
+            }
+
+            $leftProductSort = (int) ($left->sort_order ?? 0);
+            $rightProductSort = (int) ($right->sort_order ?? 0);
+            if ($leftProductSort !== $rightProductSort) {
+                return $leftProductSort <=> $rightProductSort;
+            }
+
+            return $left->id <=> $right->id;
         })->values();
         $technicians = Technician::query()->where('active', true)->orderBy('name')->get();
         $deliveryZones = DeliveryZone::query()

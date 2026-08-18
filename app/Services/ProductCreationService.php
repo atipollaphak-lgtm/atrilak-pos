@@ -11,6 +11,7 @@ class ProductCreationService
     public function __construct(
         private ProductNumberService $productNumberService,
         private ProductUnitService $productUnitService,
+        private ProductOrderingService $productOrderingService,
     ) {}
 
     public function create(array $data): Product
@@ -25,6 +26,8 @@ class ProductCreationService
                     ? ($data['cost_price'] ?? null)
                     : null,
                 ...$numbers,
+                'sort_order' => $this->productOrderingService
+                    ->nextSortOrderForLockedCategory((int) $category->getKey()),
             ]);
 
             if (! empty($data['unit_id'])) {
