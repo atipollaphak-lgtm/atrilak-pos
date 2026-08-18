@@ -15,6 +15,10 @@ const zonePricingSource = fs.readFileSync(
     new URL("../../public/js/modules/zone-pricing.js", import.meta.url),
     "utf8",
 );
+const productNavigationSource = fs.readFileSync(
+    new URL("../../resources/views/sales-v3/partials/product-navigation.blade.php", import.meta.url),
+    "utf8",
+);
 
 class ClassList {
     constructor() {
@@ -69,6 +73,7 @@ class FakeElement {
         this.innerHTML = "";
         this.textContent = "";
         this.id = "";
+        this.draggable = false;
         this.parentElement = { classList: new ClassList() };
         this.classList = new ClassList();
         this.listeners = new Map();
@@ -101,15 +106,17 @@ class FakeElement {
     }
 
     async dispatch(type, properties = {}) {
+        let defaultPrevented = false;
         const event = {
             type,
             target: this,
-            preventDefault() {},
+            preventDefault() { defaultPrevented = true; },
             ...properties,
         };
         for (const listener of this.listeners.get(type) || []) {
             await listener(event);
         }
+        return { defaultPrevented };
     }
 
     dispatchEvent(event) {
@@ -138,6 +145,10 @@ class FakeElement {
 
     select() {}
 
+    getBoundingClientRect() {
+        return { top: 0, height: 100 };
+    }
+
     append() {}
 
     remove() {
@@ -149,6 +160,32 @@ class FakeSelect extends FakeElement {
     constructor(options = []) {
         super({ tagName: "SELECT" });
         this.options = options;
+    }
+}
+
+class FakeGrid extends FakeElement {
+    constructor(cards = []) {
+        super();
+        this.cards = [...cards];
+        this.cards.forEach((card) => { card.parentElement = this; });
+    }
+
+    querySelectorAll(selector) {
+        return selector === ".v3-product-card" ? this.cards : [];
+    }
+
+    append(card) {
+        this.cards = this.cards.filter((candidate) => candidate !== card);
+        this.cards.push(card);
+        card.parentElement = this;
+    }
+
+    insertBefore(card, before) {
+        this.cards = this.cards.filter((candidate) => candidate !== card);
+        const index = this.cards.indexOf(before);
+        if (index < 0) this.cards.push(card);
+        else this.cards.splice(index, 0, card);
+        card.parentElement = this;
     }
 }
 
@@ -169,6 +206,8 @@ function createHarness({
     saleSubmitStatus = 201,
     saleSubmitSuccess = true,
     simulateQuantityBackdropRace = false,
+    products = null,
+    categories = [],
     product = {
         id: 1,
         name: "Test Product",
@@ -203,17 +242,34 @@ function createHarness({
             addressUrlTemplate: "/customers/__CUSTOMER__/addresses",
             storeUrl: "/sales-v3",
             documentUrlTemplate: "/sales/__SALE__/invoice-v2",
+            productOrderUrlTemplate: "/categories/__CATEGORY__/products/order",
         },
     });
-    const productCard = new FakeElement({
-        dataset: {
-            product: JSON.stringify(product),
-            search: product.name.toLowerCase(),
-            category: "",
-        },
+    const productRecords = products || [product];
+    const productPrices = [];
+    const productCards = productRecords.map((record) => {
+        const card = new FakeElement({
+            dataset: {
+                product: JSON.stringify(record),
+                name: String(record.name || "").toLowerCase(),
+                search: String(record.name || "").toLowerCase(),
+                category: String(record.category_id ?? ""),
+                frequentOrder: record.frequent_order == null ? "" : String(record.frequent_order),
+                productSortOrder: String(record.sort_order ?? 0),
+                categorySortOrder: String(record.category_sort_order ?? 0),
+            },
+        });
+        const productPrice = new FakeElement();
+        productPrices.push(productPrice);
+        card.querySelector = (selector) => selector === ".v3-product-price" ? productPrice : null;
+        return card;
     });
-    const productPrice = new FakeElement();
-    productCard.querySelector = (selector) => selector === ".v3-product-price" ? productPrice : null;
+    const productCard = productCards[0];
+    const productPrice = productPrices[0];
+    const productGrid = new FakeGrid(productCards);
+    const categoryButtons = categories.map((category) => new FakeElement({
+        dataset: { category: String(category.category ?? category) },
+    }));
 
     function add(selector, element = new FakeElement()) {
         element.id = selector.replace(/^#/, "");
@@ -229,6 +285,11 @@ function createHarness({
     const addressPicker = add("#v3-address-picker", new FakeElement({ hidden: true }));
     const customerSelect = add("#v3-customer-id", new FakeSelect());
     add("#pos-v3", root);
+    add("#v3-product-grid", productGrid);
+    add("#v3-product-order-toggle");
+    add("#v3-product-order-save");
+    add("#v3-product-order-cancel");
+    add("#v3-product-order-status");
     add("#v3-quantity-input", new FakeElement({ value: "1" }));
     [
         "#v3-stock-only",
@@ -301,8 +362,9 @@ function createHarness({
             return elements.get(selector) || null;
         },
         querySelectorAll(selector) {
-            if (selector === ".v3-product-card") return [productCard];
-            if (selector === ".v3-category" || selector === ".v3-filter") return [];
+            if (selector === ".v3-product-card") return productCards;
+            if (selector === ".v3-category") return categoryButtons;
+            if (selector === ".v3-filter") return [];
             if (selector === ".modal") return [elements.get("#v3-quantity-modal"), elements.get("#payment-confirmation-modal")];
             if (selector === ".modal-backdrop") return modalState.quantityBackdropActive ? [modalBackdrop] : [];
             return [];
@@ -317,6 +379,7 @@ function createHarness({
     const deliveryEditorFocus = [];
     let paymentSubmit = null;
     let saleStoreRequests = 0;
+    const productOrderRequests = [];
     const stateContext = {};
     const window = {
         document,
@@ -412,7 +475,7 @@ function createHarness({
         },
         PosDate: {},
         ZonePricingMath: null,
-        fetch: async (url) => {
+        fetch: async (url, options = {}) => {
             if (url === "/sales-v3") {
                 saleStoreRequests += 1;
                 if (saleSubmitDeferred) await saleSubmitDeferred;
@@ -420,6 +483,17 @@ function createHarness({
                     ok: saleSubmitStatus >= 200 && saleSubmitStatus < 300,
                     status: saleSubmitStatus,
                     async json() { return { success: saleSubmitSuccess, sale_id: 1, sale_no: "SAL-TEST-1", message: "Test submit failed" }; },
+                };
+            }
+            if (String(url).startsWith("/categories/")) {
+                productOrderRequests.push({
+                    url: String(url),
+                    body: options.body ? JSON.parse(options.body) : null,
+                });
+                return {
+                    ok: true,
+                    status: 200,
+                    async json() { return { message: "saved" }; },
                 };
             }
             if (addressLoadDeferred) await addressLoadDeferred;
@@ -451,12 +525,16 @@ function createHarness({
         deliveryEditorFocus,
         priceZoneSelect,
         productCard,
+        productCards,
+        productGrid,
+        categoryButtons,
         productPrice,
         product,
         state: stateContext.state,
         context: stateContext,
         modalState,
         get saleStoreRequests() { return saleStoreRequests; },
+        productOrderRequests,
         submit(payment = {}) { return paymentSubmit(payment); },
         async clickSubmit() {
             if (modalState.quantityBackdropActive) return false;
@@ -466,6 +544,65 @@ function createHarness({
         window,
     };
 }
+
+function cardIds(cards) {
+    return cards.filter((card) => !card.hidden).map((card) => JSON.parse(card.dataset.product).id);
+}
+
+test("Frequent stays independent while All and real Category tabs use their approved product comparators", async () => {
+    const harness = createHarness({
+        categories: ["frequent", "", "1", "2"],
+        products: [
+            { id: 1, name: "Alpha", category_id: 1, sort_order: 1, category_sort_order: 20, frequent_order: 0, stock_qty: 5, productUnits: [] },
+            { id: 2, name: "Zulu", category_id: 1, sort_order: 0, category_sort_order: 20, frequent_order: null, stock_qty: 5, productUnits: [] },
+            { id: 3, name: "Middle", category_id: 2, sort_order: 2, category_sort_order: 5, frequent_order: 1, stock_qty: 5, productUnits: [] },
+        ],
+    });
+
+    assert.deepEqual(cardIds(harness.productGrid.cards), [1, 3]);
+
+    await harness.categoryButtons.find((button) => button.dataset.category === "").dispatch("click");
+    assert.deepEqual(cardIds(harness.productGrid.cards), [3, 2, 1]);
+
+    await harness.categoryButtons.find((button) => button.dataset.category === "1").dispatch("click");
+    assert.deepEqual(cardIds(harness.productGrid.cards), [2, 1]);
+});
+
+test("product cards are clickable until explicit ordering mode, then save a complete category order", async () => {
+    const harness = createHarness({
+        categories: ["frequent", "", "1"],
+        products: [
+            { id: 1, name: "First", category_id: 1, sort_order: 0, category_sort_order: 1, stock_qty: 5, productUnits: [] },
+            { id: 2, name: "Second", category_id: 1, sort_order: 1, category_sort_order: 1, stock_qty: 5, productUnits: [] },
+        ],
+    });
+
+    await harness.categoryButtons.find((button) => button.dataset.category === "1").dispatch("click");
+    await harness.productCards[0].dispatch("click");
+    assert.equal(harness.state.activeProduct.product.id, 1);
+
+    harness.state.activeProduct = null;
+    await harness.elements.get("#v3-product-order-toggle").dispatch("click");
+    assert.equal(harness.state.productOrdering, true);
+    await harness.productCards[0].dispatch("click");
+    assert.equal(harness.state.activeProduct, null);
+
+    const dataTransfer = { effectAllowed: "", setData() {} };
+    await harness.productCards[0].dispatch("dragstart", { dataTransfer });
+    await harness.productCards[1].dispatch("dragover", { clientY: 90 });
+    await harness.productCards[0].dispatch("dragend");
+    await harness.elements.get("#v3-product-order-save").dispatch("click");
+
+    assert.equal(harness.productOrderRequests.length, 1);
+    assert.deepEqual(harness.productOrderRequests[0].body.product_ids, [2, 1]);
+    assert.equal(harness.state.productOrdering, false);
+});
+
+test("shortcut labels are removed from navigation while F2/F8 keyboard behavior remains available", () => {
+    assert.doesNotMatch(productNavigationSource, /F2|F8/);
+    assert.match(saleV3Source, /event\.key === "F2"/);
+    assert.match(saleV3Source, /event\.key === "F8"/);
+});
 
 const activeZone = {
     id: 1,

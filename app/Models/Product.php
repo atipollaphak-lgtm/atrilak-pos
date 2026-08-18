@@ -9,6 +9,7 @@ class Product extends Model
 {
     protected $fillable = [
         'category_id',
+        'sort_order',
         'unit_id',
         'barcode',
         'sku',
@@ -39,6 +40,7 @@ class Product extends Model
     ];
 
     protected $casts = [
+        'sort_order' => 'integer',
         'cost_price' => 'decimal:2',
         'selling_price' => 'decimal:2',
         'pricing_value' => 'decimal:2',

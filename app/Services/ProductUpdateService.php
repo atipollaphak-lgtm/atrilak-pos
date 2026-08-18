@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Category;
 use App\Models\CategoryPricingRule;
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
@@ -12,12 +13,27 @@ class ProductUpdateService
 {
     public function __construct(
         private ProductUnitService $productUnitService,
-        private StockLockService $stockLockService
+        private StockLockService $stockLockService,
+        private ProductOrderingService $productOrderingService
     ) {}
 
     public function update(Product $product, array $data): Product
     {
         return DB::transaction(function () use ($product, $data) {
+            $requestedCategoryId = (int) $data['category_id'];
+            $originalCategoryId = (int) $product->category_id;
+            $categoryChanged = $originalCategoryId !== $requestedCategoryId;
+
+            if ($categoryChanged) {
+                $categoryIds = array_values(array_unique([$originalCategoryId, $requestedCategoryId]));
+                sort($categoryIds);
+                Category::query()
+                    ->whereIn('id', $categoryIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+            }
+
             $lockedProduct = $this->stockLockService->lockProducts([$product->getKey()])
                 ->get((int) $product->getKey());
             $oldStock = $lockedProduct->stock_qty;
@@ -26,17 +42,22 @@ class ProductUpdateService
             $oldSellingPrice = $lockedProduct->selling_price;
 
             if ($lockedProduct->pricing_source === 'category'
-                && (int) $lockedProduct->category_id !== (int) $data['category_id']
+                && (int) $lockedProduct->category_id !== $requestedCategoryId
                 && ! CategoryPricingRule::query()
-                    ->where('category_id', $data['category_id'])
+                    ->where('category_id', $requestedCategoryId)
                     ->where('active', true)
                     ->exists()) {
                 throw new \DomainException('หมวดใหม่ยังไม่ได้ตั้งค่าราคา ไม่สามารถย้ายสินค้าที่ใช้กฎหมวดได้');
             }
 
+            $nextSortOrder = $categoryChanged
+                ? $this->productOrderingService->nextSortOrderForLockedCategory($requestedCategoryId)
+                : $lockedProduct->sort_order;
+
             $lockedProduct->update([
                 'name' => $data['name'],
-                'category_id' => $data['category_id'],
+                'category_id' => $requestedCategoryId,
+                'sort_order' => $nextSortOrder,
                 'unit_id' => $data['unit_id'] ?? null,
                 'unit' => $lockedProduct->unit ?? '-',
                 'cost_price' => $data['cost_price'],

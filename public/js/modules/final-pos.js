@@ -45,6 +45,10 @@
     }
 
     function bind() {
+        $('#v3-pos-brand')?.addEventListener('click', (event) => {
+            if (!context?.state?.cart?.length) return;
+            if (!window.confirm('มีสินค้าอยู่ในตะกร้า ต้องการออกไป Dashboard หรือไม่?')) event.preventDefault();
+        });
         $('#v3-open-customer-search')?.addEventListener('click', () => openDeliveryEditor('customer'));
         $('#v3-clear-customer')?.addEventListener('click', clearCustomer);
         $('#v3-customer-search')?.addEventListener('input', filterCustomers);

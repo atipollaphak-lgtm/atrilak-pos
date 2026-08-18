@@ -2,7 +2,7 @@
     const root = document.getElementById("pos-v3");
     if (!root) return;
 
-    const state = { cart: [], customerId: "", addressId: "", deliveryType: "delivery", address: null, addresses: [], addressLoading: false, addressLoadFailed: false, pricingZone: null, deliveryZone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "frequent", submitting: false };
+    const state = { cart: [], customerId: "", addressId: "", deliveryType: "delivery", address: null, addresses: [], addressLoading: false, addressLoadFailed: false, pricingZone: null, deliveryZone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "frequent", submitting: false, productOrdering: false, productOrderSnapshot: [], productOrderDirty: false, draggedProductCard: null };
     let addressLoadSequence = 0;
     const $ = (selector) => document.querySelector(selector);
     const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -188,9 +188,29 @@
         return Number.isFinite(order) ? order : null;
     }
 
+    function numericCardData(card, key) {
+        const value = Number(card.dataset[key]);
+        return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+    }
+
+    function productIdFor(card) {
+        try {
+            const product = JSON.parse(card.dataset.product || "{}");
+            return Number(product.id || card.dataset.productId || 0);
+        } catch {
+            return Number(card.dataset.productId || 0);
+        }
+    }
+
+    function isRealCategory() {
+        return state.category !== "frequent" && state.category !== "";
+    }
+
     function reorderProductCards() {
         const grid = $("#v3-product-grid");
         if (!grid) return;
+
+        if (state.productOrdering && isRealCategory()) return;
 
         const cards = [...grid.querySelectorAll(".v3-product-card")];
         cards.sort((left, right) => {
@@ -200,25 +220,173 @@
                 if (leftOrder === null && rightOrder !== null) return 1;
                 if (leftOrder !== null && rightOrder === null) return -1;
                 if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) return leftOrder - rightOrder;
+                return productIdFor(left) - productIdFor(right);
             }
 
+            if (state.category === "") {
+                const categoryOrderDifference = numericCardData(left, "categorySortOrder") - numericCardData(right, "categorySortOrder");
+                if (categoryOrderDifference !== 0) return categoryOrderDifference;
+                const categoryDifference = Number(left.dataset.category || 0) - Number(right.dataset.category || 0);
+                if (categoryDifference !== 0) return categoryDifference;
+            } else if (isRealCategory()) {
+                const productOrderDifference = numericCardData(left, "productSortOrder") - numericCardData(right, "productSortOrder");
+                if (productOrderDifference !== 0) return productOrderDifference;
+                const productDifference = productIdFor(left) - productIdFor(right);
+                if (productDifference !== 0) return productDifference;
+            }
+
+            const productOrderDifference = numericCardData(left, "productSortOrder") - numericCardData(right, "productSortOrder");
+            if (productOrderDifference !== 0) return productOrderDifference;
+            const productDifference = productIdFor(left) - productIdFor(right);
+            if (productDifference !== 0) return productDifference;
             return String(left.dataset.name || "").localeCompare(String(right.dataset.name || ""));
         });
         cards.forEach((card) => grid.append(card));
     }
 
+    function orderingCards() {
+        const grid = $("#v3-product-grid");
+        if (!grid || !isRealCategory()) return [];
+        return [...grid.querySelectorAll(".v3-product-card")]
+            .filter((card) => card.dataset.category === state.category);
+    }
+
+    function updateProductOrderingUi() {
+        const toggle = $("#v3-product-order-toggle");
+        const save = $("#v3-product-order-save");
+        const cancel = $("#v3-product-order-cancel");
+        const status = $("#v3-product-order-status");
+        const canOrder = isRealCategory();
+        if (toggle) {
+            toggle.disabled = !canOrder || state.productOrdering;
+            toggle.classList.toggle("d-none", state.productOrdering);
+        }
+        if (save) {
+            save.disabled = !state.productOrderDirty;
+            save.classList.toggle("d-none", !state.productOrdering);
+        }
+        if (cancel) cancel.classList.toggle("d-none", !state.productOrdering);
+        if (status) status.textContent = state.productOrdering ? "กำลังจัดลำดับสินค้า" : (canOrder ? "เลือกจัดลำดับสินค้าเมื่อพร้อม" : "เลือกหมวดหมู่สินค้าเพื่อจัดลำดับ");
+    }
+
+    function setCardOrderingState() {
+        document.querySelectorAll(".v3-product-card").forEach((card) => {
+            const active = state.productOrdering && isRealCategory() && card.dataset.category === state.category;
+            card.draggable = active;
+            card.classList.toggle("is-ordering", active);
+            if (!active) card.classList.remove("is-dragging");
+        });
+    }
+
+    function restoreProductOrderSnapshot() {
+        const grid = $("#v3-product-grid");
+        if (!grid || !state.productOrderSnapshot.length) return;
+        state.productOrderSnapshot.forEach((productId) => {
+            const card = orderingCards().find((candidate) => productIdFor(candidate) === productId);
+            if (card) grid.append(card);
+        });
+    }
+
+    function enterProductOrdering() {
+        if (!isRealCategory()) return;
+        reorderProductCards();
+        state.productOrderSnapshot = orderingCards().map(productIdFor);
+        state.productOrderDirty = false;
+        state.productOrdering = true;
+        filterProducts();
+    }
+
+    function cancelProductOrdering() {
+        restoreProductOrderSnapshot();
+        state.productOrdering = false;
+        state.productOrderSnapshot = [];
+        state.productOrderDirty = false;
+        state.draggedProductCard = null;
+        filterProducts();
+    }
+
+    function updateSavedProductMetadata(cards) {
+        cards.forEach((card, sortOrder) => {
+            card.dataset.productSortOrder = String(sortOrder);
+            try {
+                const product = JSON.parse(card.dataset.product || "{}");
+                product.sort_order = sortOrder;
+                product.product_sort_order = sortOrder;
+                card.dataset.product = JSON.stringify(product);
+            } catch {
+                // The server validates the submitted IDs; stale display metadata is not authoritative.
+            }
+        });
+    }
+
+    async function saveProductOrdering() {
+        if (!isRealCategory() || !state.productOrdering) return;
+        const save = $("#v3-product-order-save");
+        const cards = orderingCards();
+        const productIds = cards.map(productIdFor);
+        if (save) save.disabled = true;
+        try {
+            const url = root.dataset.productOrderUrlTemplate.replace("__CATEGORY__", state.category);
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content },
+                body: JSON.stringify({ product_ids: productIds }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.message || "บันทึกลำดับสินค้าไม่สำเร็จ");
+            updateSavedProductMetadata(cards);
+            state.productOrdering = false;
+            state.productOrderSnapshot = [];
+            state.productOrderDirty = false;
+            filterProducts();
+            window.FinalPos?.showFeedback(payload.message || "บันทึกลำดับสินค้าแล้ว");
+        } catch (error) {
+            if (save) save.disabled = false;
+            window.FinalPos?.showFeedback(error.message || "บันทึกลำดับสินค้าไม่สำเร็จ", "error");
+        }
+    }
+
+    function bindProductOrdering(card) {
+        card.addEventListener("dragstart", (event) => {
+            if (!state.productOrdering || !isRealCategory() || card.dataset.category !== state.category) return;
+            state.draggedProductCard = card;
+            card.classList.add("is-dragging");
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", String(productIdFor(card)));
+            }
+        });
+        card.addEventListener("dragover", (event) => {
+            const dragged = state.draggedProductCard;
+            if (!dragged || dragged === card || !state.productOrdering || card.dataset.category !== state.category) return;
+            event.preventDefault();
+            const bounds = card.getBoundingClientRect();
+            const insertBefore = event.clientY < bounds.top + bounds.height / 2;
+            $("#v3-product-grid").insertBefore(dragged, insertBefore ? card : card.nextSibling);
+            state.productOrderDirty = true;
+            updateProductOrderingUi();
+        });
+        card.addEventListener("dragend", () => {
+            card.classList.remove("is-dragging");
+            state.draggedProductCard = null;
+        });
+    }
+
     function filterProducts() {
         const keyword = $("#v3-product-search").value.trim().toLowerCase();
         reorderProductCards();
+        const ordering = state.productOrdering && isRealCategory();
         document.querySelectorAll(".v3-product-card").forEach((card) => {
             const product = JSON.parse(card.dataset.product);
-            const matchText = !keyword || card.dataset.search.includes(keyword) || product.productUnits?.some((u) => u.barcodes?.some((b) => String(b.barcode).toLowerCase().includes(keyword)));
+            const matchText = ordering || !keyword || card.dataset.search.includes(keyword) || product.productUnits?.some((u) => u.barcodes?.some((b) => String(b.barcode).toLowerCase().includes(keyword)));
             const matchCategory = state.category === "frequent"
                 ? frequentOrderFor(card) !== null
                 : (!state.category || card.dataset.category === state.category);
-            const matchStock = !$("#v3-stock-only").checked || Number(product.stock_qty) > 0;
+            const matchStock = ordering || !$("#v3-stock-only").checked || Number(product.stock_qty) > 0;
             card.hidden = !(matchText && matchCategory && matchStock);
         });
+        setCardOrderingState();
+        updateProductOrderingUi();
     }
 
     function syncQuantityPreview() {
@@ -489,9 +657,21 @@
         $("#v3-delivery-date-display")?.addEventListener("input", (event) => { const iso = window.PosDate?.toIso(event.target.value); const help = $("#v3-delivery-date-help"); if (iso) { $("#v3-delivery-date").value = iso; event.target.classList.remove("is-invalid"); if (help) help.textContent = `วันที่จัดส่ง: ${window.PosDate.formatDisplay(iso)}`; } else { $("#v3-delivery-date").value = ""; event.target.classList.add("is-invalid"); if (help) help.textContent = "กรุณากรอกวันที่เป็น วว/ดด/ปปปป"; } });
         $("#v3-discount").addEventListener("input", (e) => { state.discount = Math.max(0, Number(e.target.value) || 0); render(); }); $("#v3-delivery-fee").addEventListener("input", (e) => { if ($("#v3-pickup").checked) { state.deliveryFee = 0; e.target.value = "0.00"; } else { state.deliveryFee = Math.max(0, Number(e.target.value) || 0); state.deliveryFeeEdited = true; } $("#v3-total").textContent = money(total()); });
         $("#v3-delivery").addEventListener("click", () => setDeliveryType("delivery")); $("#v3-pickup-button").addEventListener("click", () => setDeliveryType("pickup"));
-        document.querySelectorAll(".v3-category").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".v3-category").forEach((b) => b.classList.remove("active")); button.classList.add("active"); state.category = button.dataset.category; filterProducts(); }));
+        $("#v3-product-order-toggle")?.addEventListener("click", enterProductOrdering);
+        $("#v3-product-order-save")?.addEventListener("click", saveProductOrdering);
+        $("#v3-product-order-cancel")?.addEventListener("click", cancelProductOrdering);
+        document.querySelectorAll(".v3-category").forEach((button) => button.addEventListener("click", () => {
+            if (state.productOrdering && button.dataset.category !== state.category) return;
+            document.querySelectorAll(".v3-category").forEach((b) => b.classList.remove("active"));
+            button.classList.add("active");
+            state.category = button.dataset.category;
+            filterProducts();
+        }));
         document.querySelectorAll(".v3-filter").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".v3-filter").forEach((b) => b.classList.remove("active")); button.classList.add("active"); state.filter = button.dataset.filter; filterProducts(); }));
-        document.querySelectorAll(".v3-product-card").forEach((card) => card.addEventListener("click", () => openQuantity(JSON.parse(card.dataset.product)))); $("#v3-quantity-confirm").addEventListener("click", confirmQuantity);
+        document.querySelectorAll(".v3-product-card").forEach((card) => {
+            bindProductOrdering(card);
+            card.addEventListener("click", () => { if (!state.productOrdering) openQuantity(JSON.parse(card.dataset.product)); });
+        }); $("#v3-quantity-confirm").addEventListener("click", confirmQuantity);
         $("#v3-quantity-input").addEventListener("input", syncQuantityPreview); $("#v3-quantity-decrease")?.addEventListener("click", () => { const input = $("#v3-quantity-input"); input.value = Math.max(0, Number(input.value || 0) - 1); syncQuantityPreview(); input.focus(); }); $("#v3-quantity-increase")?.addEventListener("click", () => { const input = $("#v3-quantity-input"); const active = state.activeProduct; const unit = active ? unitFor(active.product, active.unitId) : null; input.value = Math.min(active ? availableSaleQuantity(active.product, unit) : 0, Number(input.value || 0) + 1); syncQuantityPreview(); input.focus(); }); $("#v3-quantity-input").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); confirmQuantity(); } if (event.key === "Escape") window.jQuery($("#v3-quantity-modal")).modal("hide"); });
         $("#v3-cart-items").addEventListener("click", (event) => { const row = event.target.closest(".v3-cart-row"); if (!row || event.target.dataset.action !== "remove") return; state.cart.splice(Number(row.dataset.index), 1); render(); });
         $("#v3-cart-items").addEventListener("input", (event) => { if (!event.target.matches(".v3-cart-quantity")) return; const index = Number(event.target.dataset.index); const item = state.cart[index]; const qty = Number(event.target.value); if (!item || !Number.isFinite(qty) || qty <= 0 || cartBaseStock(item.product, index) + requiredBaseStock(qty, item.unit) > Number(item.product.stock_qty) + 0.00005) return; item.qty = qty; const systemPrice = unitPrice(item.unit, qty, item.product); if (item.priceWasEdited) item.originalPrice = systemPrice; else item.price = systemPrice; const row = event.target.closest(".v3-cart-row"); const priceCell = row.querySelector(".v3-cart-unit-price"); if (priceCell?.tagName === "INPUT") priceCell.value = Number(item.price).toFixed(2); else if (priceCell) priceCell.textContent = money(item.price); row.querySelector(".v3-line-total").textContent = money(item.qty * item.price); syncCartTotals(); });

@@ -48,10 +48,18 @@ class FakeElement {
         this.listeners.set(type, listeners);
     }
 
-    async dispatch(type) {
+    async dispatch(type, properties = {}) {
+        let defaultPrevented = false;
+        const event = {
+            type,
+            target: this,
+            preventDefault() { defaultPrevented = true; },
+            ...properties,
+        };
         for (const listener of this.listeners.get(type) || []) {
-            await listener({ target: this });
+            await listener(event);
         }
+        return { defaultPrevented };
     }
 
     dispatchEvent(event) {
@@ -118,6 +126,7 @@ function createHarness(hold) {
         ["#final-payment-method-label", new FakeElement()],
         ["#final-payment-amounts", new FakeElement()],
         ["#v3-submit", new FakeElement({ id: "v3-submit" })],
+        ["#v3-pos-brand", new FakeElement({ id: "v3-pos-brand" })],
     ]);
     const requests = [];
     const alerts = [];
@@ -265,6 +274,7 @@ function createHarness(hold) {
         customerSelect,
         elements,
         finalPos: window.FinalPos,
+        brand: elements.get("#v3-pos-brand"),
         get addressLoads() { return addressLoads; },
         holdsButton,
         openedUrls,
@@ -275,8 +285,37 @@ function createHarness(hold) {
         document,
         jQuery,
         state,
+        window,
     };
 }
+
+test("POS V3 logo warns before leaving when the cart is non-empty", async () => {
+    const harness = createHarness({
+        id: 30,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        items: [],
+    });
+
+    harness.window.confirm = () => false;
+    assert.equal((await harness.brand.dispatch("click")).defaultPrevented, true);
+
+    harness.window.confirm = () => true;
+    assert.equal((await harness.brand.dispatch("click")).defaultPrevented, false);
+});
+
+test("POS V3 logo leaves immediately when the cart is empty", async () => {
+    const harness = createHarness({
+        id: 31,
+        customer_id: null,
+        customer_delivery_address_id: null,
+        items: [],
+    });
+    harness.state.cart = [];
+    harness.window.confirm = () => { throw new Error("confirm should not be called"); };
+
+    assert.equal((await harness.brand.dispatch("click")).defaultPrevented, false);
+});
 
 test("selected customer summary combines name and phone without pickup copy", () => {
     const harness = createHarness({
