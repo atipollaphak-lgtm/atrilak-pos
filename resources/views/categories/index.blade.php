@@ -12,9 +12,14 @@
             <h1 class="mb-1">หมวดหมู่สินค้า</h1>
             <p class="text-muted mb-0">จัดการหมวดหมู่และ Prefix สำหรับข้อมูลสินค้าใหม่</p>
         </div>
-        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#categoryModal" data-category-mode="create">
-            <i class="fas fa-plus mr-1"></i> เพิ่มหมวดหมู่
-        </button>
+        <div class="category-page-actions">
+            <a href="{{ route('frequent-products.index') }}" class="btn btn-outline-primary">
+                <i class="fas fa-star mr-1"></i> สินค้าขายบ่อย
+            </a>
+            <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#categoryModal" data-category-mode="create">
+                <i class="fas fa-plus mr-1"></i> เพิ่มหมวดหมู่
+            </button>
+        </div>
     </div>
 @stop
 
@@ -23,7 +28,12 @@
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="text-muted">ทั้งหมด <span id="category-count">{{ $categories->count() }}</span> รายการ</div>
-                <span class="badge badge-light">Prefix ใช้กับสินค้าใหม่เท่านั้น</span>
+                <div class="category-order-actions">
+                    <span class="badge badge-light">ลากที่จุดจับเพื่อเรียงลำดับ</span>
+                    <button id="category-order-save" type="button" class="btn btn-outline-primary btn-sm" data-url="{{ route('categories.order') }}" disabled>
+                        <i class="fas fa-save mr-1"></i> บันทึกลำดับ
+                    </button>
+                </div>
             </div>
 
             <div class="category-toolbar mb-3">
@@ -38,6 +48,7 @@
                 <table class="table category-table align-middle">
                     <thead>
                         <tr>
+                            <th class="category-order-column">ลำดับ</th>
                             <th>Category</th>
                             <th>Code Prefix</th>
                             <th>Barcode Prefix</th>
@@ -49,7 +60,13 @@
                     </thead>
                     <tbody id="category-table-body">
                         @forelse ($categories as $category)
-                            <tr data-category-row data-product-count="{{ $category->products_count }}" data-search="{{ strtolower($category->name.' '.$category->code_prefix.' '.$category->barcode_prefix) }}">
+                            <tr data-category-row draggable="true" data-category-id="{{ $category->id }}" data-product-count="{{ $category->products_count }}" data-search="{{ strtolower($category->name.' '.$category->code_prefix.' '.$category->barcode_prefix.' '.$category->description) }}">
+                                <td class="category-order-cell">
+                                    <button type="button" class="category-drag-handle" data-category-drag-handle aria-label="ลากเพื่อเรียง {{ $category->name }}" title="ลากเพื่อเรียงลำดับ">
+                                        <i class="fas fa-grip-vertical" aria-hidden="true"></i>
+                                    </button>
+                                    <span class="category-order-number">{{ $loop->iteration }}</span>
+                                </td>
                                 <td>
                                     <div class="font-weight-bold">{{ $category->name }}</div>
                                     @if ($category->description)
@@ -71,7 +88,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr id="category-empty-row"><td colspan="7" class="text-center text-muted py-5">ยังไม่มีหมวดหมู่สินค้า</td></tr>
+                            <tr id="category-empty-row"><td colspan="8" class="text-center text-muted py-5">ยังไม่มีหมวดหมู่สินค้า</td></tr>
                         @endforelse
                     </tbody>
                 </table>

@@ -622,7 +622,7 @@ test("success printing uses the created sale id and configured document route", 
 
     assert.deepEqual(
         harness.openedUrls,
-        ["/sales/55/invoice-v2?document_type=delivery-note"],
+        ["/sales/55/invoice-v2?document_type=delivery-note&auto_print=1"],
     );
 });
 
@@ -731,7 +731,7 @@ test("successful document popup prevents duplicate printing", async () => {
 
     assert.deepEqual(
         harness.openedUrls,
-        ["/sales/59/invoice-v2?document_type=delivery-note"],
+        ["/sales/59/invoice-v2?document_type=delivery-note&auto_print=1"],
     );
     assert.equal(harness.elements.get("#final-print-delivery").disabled, true);
 });

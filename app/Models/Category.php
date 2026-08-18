@@ -13,12 +13,14 @@ class Category extends Model
         'description',
         'code_prefix',
         'barcode_prefix',
+        'sort_order',
         'active',
         'rounding_override',
     ];
 
     protected $casts = [
         'active' => 'boolean',
+        'sort_order' => 'integer',
         'rounding_override' => 'decimal:2',
     ];
 

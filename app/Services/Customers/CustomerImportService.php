@@ -9,6 +9,7 @@ use App\Models\CustomerDeliveryAddress;
 use App\Models\CustomerExternalReference;
 use App\Models\CustomerImportBatch;
 use App\Models\CustomerImportRow;
+use App\Models\DeliveryZone;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -117,6 +118,27 @@ class CustomerImportService
     ): CustomerImportResultData {
         $selected = array_fill_keys($selectedRowNumbers, true);
         $recheckedRows = $this->duplicateService->annotate($preview->sourceSystem, $preview->rows);
+        foreach ($recheckedRows as $index => $row) {
+            if (($row['status'] ?? null) !== 'ready') {
+                continue;
+            }
+
+            $deliveryZone = DeliveryZone::query()
+                ->where('active', true)
+                ->whereKey($row['delivery_zone_id'] ?? null)
+                ->first();
+
+            if ($deliveryZone === null) {
+                $recheckedRows[$index]['status'] = 'review_required';
+                $recheckedRows[$index]['delivery_zone_id'] = null;
+                $recheckedRows[$index]['reasons'] = array_values(array_unique([
+                    ...($row['reasons'] ?? []),
+                    'ไม่พบโซนลูกค้า',
+                ]));
+            } else {
+                $recheckedRows[$index]['delivery_zone_id'] = $deliveryZone->getKey();
+            }
+        }
         $rowsToImport = [];
         $finalRows = [];
 
@@ -158,19 +180,17 @@ class CustomerImportService
             ]);
 
             $address = trim((string) ($row['address'] ?? ''));
-            if ($address !== '') {
-                CustomerDeliveryAddress::query()->create([
-                    'customer_id' => $customer->id,
-                    'name' => 'หลัก',
-                    'receiver_name' => null,
-                    'receiver_phone' => $row['phone'] ?? null,
-                    'address' => $address,
-                    'delivery_zone_id' => null,
-                    'is_default' => true,
-                ]);
+            CustomerDeliveryAddress::query()->create([
+                'customer_id' => $customer->id,
+                'name' => 'หลัก',
+                'receiver_name' => null,
+                'receiver_phone' => $row['phone'] ?? null,
+                'address' => $address,
+                'delivery_zone_id' => $row['delivery_zone_id'],
+                'is_default' => true,
+            ]);
 
-                $customer->update(['address' => $address]);
-            }
+            $customer->update(['address' => $address]);
 
             CustomerExternalReference::query()->create([
                 'customer_id' => $customer->id,
@@ -205,6 +225,7 @@ class CustomerImportService
             CustomerImportRow::query()->create([
                 'batch_id' => $batch->id,
                 'customer_id' => $row['customer_id'] ?? null,
+                'delivery_zone_id' => $row['delivery_zone_id'] ?? null,
                 'row_number' => (int) ($row['row_number'] ?? 0),
                 'external_id' => $row['external_id'] ?? null,
                 'name' => $row['name'] ?? null,

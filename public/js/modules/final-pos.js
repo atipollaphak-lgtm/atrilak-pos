@@ -232,6 +232,18 @@
         const errorBox = $('#v3-customer-create-error');
         if (submit) submit.disabled = true;
         errorBox?.classList.add('d-none');
+
+        const deliveryZoneId = form.elements?.delivery_zone_id?.value || '';
+        if (!deliveryZoneId) {
+            if (errorBox) {
+                errorBox.textContent = 'กรุณาเลือกโซนลูกค้า';
+                errorBox.classList.remove('d-none');
+            }
+            form.elements?.delivery_zone_id?.focus?.();
+            if (submit) submit.disabled = false;
+            return;
+        }
+
         try {
             const response = await fetch(context.root.dataset.customerStoreUrl, {
                 method: 'POST',
@@ -239,7 +251,10 @@
                 body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
             });
             const data = await response.json();
-            if (!response.ok || !data.success || !data.customer) throw new Error(data.message || 'บันทึกลูกค้าไม่สำเร็จ');
+            if (!response.ok || !data.success || !data.customer) {
+                const zoneError = data.errors?.delivery_zone_id?.[0];
+                throw new Error(zoneError || data.message || 'บันทึกลูกค้าไม่สำเร็จ');
+            }
             const customer = data.customer;
             const option = document.createElement('option');
             option.value = String(customer.id);
@@ -616,7 +631,7 @@
         const button = type === 'delivery-note' ? $('#final-print-delivery') : $('#final-print-tax');
         if (!saleId || printing || printedDocuments.has(type) || (type === 'tax-invoice' && button?.disabled)) return;
         const base = context.root.dataset.documentUrlTemplate.replace('__SALE__', saleId);
-        const query = `?document_type=${type}${preview ? '&preview=1' : ''}`;
+        const query = `?document_type=${type}&auto_print=1${preview ? '&preview=1' : ''}`;
         printing = true;
         if (button) button.disabled = true;
         const popup = window.open(`${base}${query}`, '_blank', 'noopener');

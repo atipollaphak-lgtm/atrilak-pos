@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\Customer;
 use App\Models\CustomerDeliveryAddress;
+use App\Models\DeliveryZone;
 use App\Services\Customers\CustomerCodeAllocator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CustomerService
 {
@@ -20,6 +22,18 @@ class CustomerService
     public function create(array $data): Customer
     {
         return DB::transaction(function () use ($data): Customer {
+            $deliveryZone = DeliveryZone::query()
+                ->whereKey($data['delivery_zone_id'] ?? null)
+                ->where('active', true)
+                ->first();
+
+            if ($deliveryZone === null) {
+                throw ValidationException::withMessages([
+                    'delivery_zone_id' => 'กรุณาเลือกโซนลูกค้า',
+                ]);
+            }
+
+            $data['delivery_zone_id'] = $deliveryZone->getKey();
             $customer = Customer::create([
                 'code' => $this->codeAllocator->nextCode(),
                 'name' => $data['name'],
@@ -83,7 +97,7 @@ class CustomerService
             'name' => $data['address_name'] ?? 'หลัก',
             'receiver_name' => $data['receiver_name'] ?? null,
             'receiver_phone' => $receiverPhone,
-            'address' => $data['address'] ?? null,
+            'address' => $data['address'] ?? '',
             'delivery_zone_id' => $data['delivery_zone_id'] ?? null,
             'is_default' => true,
         ];

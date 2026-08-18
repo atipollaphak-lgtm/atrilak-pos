@@ -47,7 +47,7 @@
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-sm table-bordered mb-0" id="customer-import-preview-table">
-                    <thead><tr><th>เลือก</th><th>แถว</th><th>C2M ID</th><th>ชื่อลูกค้า</th><th>เบอร์โทร</th><th>ที่อยู่</th><th>Tax ID</th><th>สถานะ</th><th>เหตุผล / Warning</th></tr></thead>
+                    <thead><tr><th>เลือก</th><th>แถว</th><th>C2M ID</th><th>ชื่อลูกค้า</th><th>เบอร์โทร</th><th>ที่อยู่</th><th>โซนลูกค้า</th><th>Tax ID</th><th>สถานะ</th><th>เหตุผล / Warning</th></tr></thead>
                     <tbody>
                         @foreach ($preview->rows as $row)
                             @php($status = $row['status'] ?? 'invalid')
@@ -58,6 +58,7 @@
                                 <td>{{ $row['name'] ?? '' }}</td>
                                 <td>{{ $row['phone'] ?? '—' }}</td>
                                 <td>{{ $row['address'] ?? '—' }}</td>
+                                <td>{{ $row['delivery_zone'] ?? ($row['delivery_zone_id'] ?? '—') }}</td>
                                 <td>{{ $row['tax_number'] ?? '—' }}</td>
                                 <td>{{ ['ready' => 'พร้อมนำเข้า', 'review_required' => 'ต้องตรวจสอบ', 'duplicate' => 'มีอยู่แล้ว / ซ้ำ', 'invalid' => 'ผิดพลาด'][$status] ?? $status }}</td>
                                 <td>

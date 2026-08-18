@@ -1,0 +1,19 @@
+.frequent-page-heading h1 { font-weight: 700; }
+.frequent-workspace-card { border: 0; box-shadow: 0 8px 30px rgba(33, 52, 72, .08); }
+.frequent-section-heading { gap: 1rem; }
+.frequent-order-actions { display: flex; align-items: center; gap: .5rem; }
+.frequent-product-search { max-width: 520px; }
+.frequent-product-search label, .frequent-table th { color: #667085; font-size: .78rem; font-weight: 700; }
+.frequent-table th { text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; }
+.frequent-table td { vertical-align: middle; }
+.frequent-order-column, .frequent-order-cell { width: 86px; text-align: center; }
+.frequent-order-cell { white-space: nowrap; }
+.frequent-drag-handle { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: #f1f5f9; color: #64748b; cursor: grab; }
+.frequent-drag-handle:active { cursor: grabbing; }
+[data-frequent-row].is-dragging { opacity: .45; }
+@media (max-width: 576px) {
+    .frequent-page-heading { align-items: flex-start !important; gap: 1rem; }
+    .frequent-page-heading .btn { white-space: nowrap; }
+    .frequent-section-heading { align-items: flex-start !important; flex-direction: column; }
+    .frequent-order-actions { width: 100%; justify-content: space-between; }
+}

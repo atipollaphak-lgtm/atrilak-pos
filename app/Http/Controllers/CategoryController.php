@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -14,7 +15,8 @@ class CategoryController extends Controller
     {
         $categories = Category::query()
             ->withCount('products')
-            ->latest()
+            ->orderBy('sort_order')
+            ->orderBy('id')
             ->get();
 
         return view('categories.index', [
@@ -30,7 +32,15 @@ class CategoryController extends Controller
             return $validated;
         }
 
-        $category = Category::create($validated);
+        $category = DB::transaction(function () use ($validated): Category {
+            $maxSortOrder = Category::query()
+                ->lockForUpdate()
+                ->pluck('sort_order')
+                ->max();
+            $validated['sort_order'] = $maxSortOrder === null ? 0 : ((int) $maxSortOrder + 1);
+
+            return Category::create($validated);
+        });
 
         if ($request->expectsJson()) {
             return response()->json(['category' => $category->loadCount('products')], 201);
@@ -53,6 +63,54 @@ class CategoryController extends Controller
         }
 
         return back()->with('success', 'แก้ไขเรียบร้อย');
+    }
+
+    public function updateOrder(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'category_ids' => ['required', 'array'],
+            'category_ids.*' => ['integer', 'distinct', 'exists:categories,id'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'ลำดับหมวดหมู่ไม่ถูกต้อง',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $categoryIds = array_map('intval', $validator->validated()['category_ids']);
+        $orderUpdated = DB::transaction(function () use ($categoryIds): bool {
+            $currentIds = Category::query()
+                ->lockForUpdate()
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+            $submittedIds = $categoryIds;
+            sort($submittedIds);
+
+            if ($submittedIds !== $currentIds) {
+                return false;
+            }
+
+            foreach ($categoryIds as $sortOrder => $categoryId) {
+                Category::query()
+                    ->whereKey($categoryId)
+                    ->update(['sort_order' => $sortOrder]);
+            }
+
+            return true;
+        });
+
+        if (! $orderUpdated) {
+            return response()->json([
+                'message' => 'ต้องส่งลำดับหมวดหมู่ให้ครบทุกหมวดหมู่',
+                'errors' => ['category_ids' => ['ต้องส่งลำดับหมวดหมู่ให้ครบทุกหมวดหมู่']],
+            ], 422);
+        }
+
+        return response()->json(['message' => 'บันทึกลำดับหมวดหมู่เรียบร้อย']);
     }
 
     public function destroy(Category $category)

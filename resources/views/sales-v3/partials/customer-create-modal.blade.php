@@ -24,9 +24,9 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group col-md-7">
-                            <label for="v3-new-customer-zone">โซนจัดส่ง</label>
-                            <select id="v3-new-customer-zone" name="delivery_zone_id" class="form-control">
-                                <option value="">ยังไม่เลือกโซน</option>
+                            <label for="v3-new-customer-zone">โซนจัดส่ง <span class="text-danger">*</span></label>
+                            <select id="v3-new-customer-zone" name="delivery_zone_id" class="form-control" required>
+                                <option value="">เลือกโซนจัดส่ง</option>
                                 @foreach ($deliveryZones as $zone)
                                     <option value="{{ $zone->id }}">{{ $zone->name }}</option>
                                 @endforeach

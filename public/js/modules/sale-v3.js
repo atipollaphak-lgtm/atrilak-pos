@@ -2,7 +2,7 @@
     const root = document.getElementById("pos-v3");
     if (!root) return;
 
-    const state = { cart: [], customerId: "", addressId: "", deliveryType: "delivery", address: null, addresses: [], addressLoading: false, addressLoadFailed: false, pricingZone: null, deliveryZone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "", submitting: false };
+    const state = { cart: [], customerId: "", addressId: "", deliveryType: "delivery", address: null, addresses: [], addressLoading: false, addressLoadFailed: false, pricingZone: null, deliveryZone: null, deliveryFee: 0, deliveryFeeEdited: false, discount: 0, note: "", holdBillId: null, activeProduct: null, filter: "all", category: "frequent", submitting: false };
     let addressLoadSequence = 0;
     const $ = (selector) => document.querySelector(selector);
     const money = (value) => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -181,12 +181,41 @@
         window.FinalPos?.syncDeliveryEditor?.();
     }
 
+    function frequentOrderFor(card) {
+        const rawOrder = card.dataset.frequentOrder;
+        if (rawOrder === undefined || rawOrder === "") return null;
+        const order = Number(rawOrder);
+        return Number.isFinite(order) ? order : null;
+    }
+
+    function reorderProductCards() {
+        const grid = $("#v3-product-grid");
+        if (!grid) return;
+
+        const cards = [...grid.querySelectorAll(".v3-product-card")];
+        cards.sort((left, right) => {
+            if (state.category === "frequent") {
+                const leftOrder = frequentOrderFor(left);
+                const rightOrder = frequentOrderFor(right);
+                if (leftOrder === null && rightOrder !== null) return 1;
+                if (leftOrder !== null && rightOrder === null) return -1;
+                if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) return leftOrder - rightOrder;
+            }
+
+            return String(left.dataset.name || "").localeCompare(String(right.dataset.name || ""));
+        });
+        cards.forEach((card) => grid.append(card));
+    }
+
     function filterProducts() {
         const keyword = $("#v3-product-search").value.trim().toLowerCase();
+        reorderProductCards();
         document.querySelectorAll(".v3-product-card").forEach((card) => {
             const product = JSON.parse(card.dataset.product);
             const matchText = !keyword || card.dataset.search.includes(keyword) || product.productUnits?.some((u) => u.barcodes?.some((b) => String(b.barcode).toLowerCase().includes(keyword)));
-            const matchCategory = !state.category || card.dataset.category === state.category;
+            const matchCategory = state.category === "frequent"
+                ? frequentOrderFor(card) !== null
+                : (!state.category || card.dataset.category === state.category);
             const matchStock = !$("#v3-stock-only").checked || Number(product.stock_qty) > 0;
             card.hidden = !(matchText && matchCategory && matchStock);
         });

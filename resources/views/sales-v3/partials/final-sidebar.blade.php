@@ -14,6 +14,9 @@
             <button id="v3-more-menu" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="เพิ่มเติม" title="เพิ่มเติม"><i class="fas fa-ellipsis-h" aria-hidden="true"></i><span>เพิ่มเติม</span></button>
             <div class="dropdown-menu dropdown-menu-right" aria-labelledby="v3-more-menu">
                 <button type="button" class="dropdown-item" disabled aria-disabled="true"><i class="far fa-file-alt" aria-hidden="true"></i>ใบเสนอราคา <small>ยังไม่พร้อมใช้งาน</small></button>
+                @if (in_array(auth()->user()?->role, ['manager', 'owner'], true))
+                    <a class="dropdown-item" href="{{ route('frequent-products.index') }}"><i class="fas fa-star" aria-hidden="true"></i>จัดการสินค้าขายบ่อย</a>
+                @endif
                 @if (auth()->user()?->role === 'owner')
                     <a class="dropdown-item" href="{{ route('settings.index') }}"><i class="fas fa-store" aria-hidden="true"></i>ตั้งค่าร้าน</a>
                 @endif

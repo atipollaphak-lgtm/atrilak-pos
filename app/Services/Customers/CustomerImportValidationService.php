@@ -2,6 +2,7 @@
 
 namespace App\Services\Customers;
 
+use App\Models\DeliveryZone;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -233,6 +234,8 @@ class CustomerImportValidationService
         $name = $this->text($values['name'] ?? null);
         $externalId = $this->text($values['external_id'] ?? null);
         $address = $this->nullableText($values['address'] ?? null);
+        $deliveryZoneValue = $this->nullableText($values['delivery_zone'] ?? null);
+        $deliveryZone = $this->resolveDeliveryZone($deliveryZoneValue);
         $remark = $this->nullableText($values['remark'] ?? null);
         $phoneResult = $this->phoneNormalizer->normalize($values['phone'] ?? null);
         $tax = $this->taxNumber($values['tax_number'] ?? null);
@@ -253,6 +256,9 @@ class CustomerImportValidationService
         }
         if ($phoneResult->requiresReview()) {
             $reasons[] = 'เบอร์โทรต้องตรวจสอบเพิ่มเติม';
+        }
+        if ($deliveryZone === null) {
+            $reasons[] = 'ไม่พบโซนลูกค้า';
         }
 
         $embeddedPhones = array_values(array_unique([
@@ -288,6 +294,8 @@ class CustomerImportValidationService
             'branch_type' => $branchType,
             'branch_number' => $this->nullableText($values['branch_number'] ?? null),
             'address' => $address,
+            'delivery_zone' => $deliveryZoneValue,
+            'delivery_zone_id' => $deliveryZone?->getKey(),
             'remark' => $remark,
             'status' => $status,
             'reasons' => array_values(array_unique($reasons)),
@@ -308,6 +316,8 @@ class CustomerImportValidationService
             'branch_type' => config('customer_import.default_branch_type'),
             'branch_number' => null,
             'address' => null,
+            'delivery_zone' => null,
+            'delivery_zone_id' => null,
             'remark' => null,
             'status' => 'invalid',
             'reasons' => ['พบแถวเลขผู้เสียภาษีโดยไม่มีข้อมูลสมาชิกก่อนหน้า: '.$line],
@@ -329,6 +339,30 @@ class CustomerImportValidationService
             'value' => $digits,
             'valid' => preg_match('/^\d{13}$/D', $digits) === 1,
         ];
+    }
+
+    private function resolveDeliveryZone(?string $value): ?DeliveryZone
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $normalized = $this->toArabicDigits($value);
+        if (preg_match('/^\d+$/D', $normalized) === 1) {
+            $zone = DeliveryZone::query()
+                ->where('active', true)
+                ->whereKey((int) $normalized)
+                ->first();
+
+            if ($zone !== null) {
+                return $zone;
+            }
+        }
+
+        return DeliveryZone::query()
+            ->where('active', true)
+            ->where('name', $value)
+            ->first();
     }
 
     private function rowText(array $values): string

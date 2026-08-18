@@ -18,6 +18,7 @@ return [
                 'email' => ['อีเมล์', 'อีเมล', 'email'],
                 'action' => ['จัดการ'],
                 'tax_number' => ['เลขผู้เสียภาษี', 'เลขประจำตัวผู้เสียภาษี', 'เลขภาษี'],
+                'delivery_zone' => ['โซนลูกค้า', 'โซนจัดส่ง', 'delivery_zone', 'zone', 'รหัสโซน'],
                 'remark' => ['หมายเหตุ', 'รายละเอียด'],
             ],
         ],
@@ -31,6 +32,7 @@ return [
                 'branch_type' => ['branch_type', 'ประเภทสาขา'],
                 'branch_number' => ['branch_number', 'เลขสาขา'],
                 'address' => ['address', 'ที่อยู่'],
+                'delivery_zone' => ['delivery_zone', 'zone', 'โซนลูกค้า', 'โซนจัดส่ง', 'รหัสโซน'],
                 'remark' => ['remark', 'หมายเหตุ'],
             ],
         ],
@@ -44,6 +46,7 @@ return [
         'branch_type',
         'branch_number',
         'address',
+        'delivery_zone',
         'remark',
     ],
 ];

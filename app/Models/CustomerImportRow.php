@@ -10,6 +10,7 @@ class CustomerImportRow extends Model
     protected $fillable = [
         'batch_id',
         'customer_id',
+        'delivery_zone_id',
         'row_number',
         'external_id',
         'name',
@@ -27,6 +28,7 @@ class CustomerImportRow extends Model
 
     protected $casts = [
         'row_number' => 'integer',
+        'delivery_zone_id' => 'integer',
         'reasons' => 'array',
         'warnings' => 'array',
         'original_values' => 'array',
@@ -40,5 +42,10 @@ class CustomerImportRow extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'customer_id');
+    }
+
+    public function deliveryZone(): BelongsTo
+    {
+        return $this->belongsTo(DeliveryZone::class, 'delivery_zone_id');
     }
 }

@@ -21,12 +21,32 @@ class SaleV3Controller extends Controller
             ->withCount('deliveryAddresses')
             ->orderBy('name')
             ->get();
-        $categories = Category::query()->orderBy('name')->get();
+        $categories = Category::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
         $products = Product::query()
-            ->with(['category', 'productUnits.unit', 'productUnits.barcodes', 'productUnits.priceTiers'])
+            ->with(['category', 'frequentProduct', 'productUnits.unit', 'productUnits.barcodes', 'productUnits.priceTiers'])
             ->where('active', true)
             ->orderBy('name')
             ->get();
+        $products = $products->sort(function (Product $left, Product $right): int {
+            $leftOrder = $left->frequentProduct?->sort_order;
+            $rightOrder = $right->frequentProduct?->sort_order;
+
+            if ($leftOrder === null && $rightOrder !== null) {
+                return 1;
+            }
+            if ($leftOrder !== null && $rightOrder === null) {
+                return -1;
+            }
+            if ($leftOrder !== null && $rightOrder !== null && $leftOrder !== $rightOrder) {
+                return $leftOrder <=> $rightOrder;
+            }
+
+            return strcasecmp($left->name, $right->name);
+        })->values();
         $technicians = Technician::query()->where('active', true)->orderBy('name')->get();
         $deliveryZones = DeliveryZone::query()
             ->where('active', true)

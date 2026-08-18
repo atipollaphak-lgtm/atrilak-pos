@@ -13,7 +13,7 @@ class CustomerImportTemplateServiceTest extends TestCase
 
         $this->assertSame(
             config('customer_import.template_headers'),
-            $spreadsheet->getActiveSheet()->rangeToArray('A1:H1', null, true, false)[0],
+            $spreadsheet->getActiveSheet()->rangeToArray('A1:I1', null, true, false)[0],
         );
     }
 

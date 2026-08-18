@@ -14,8 +14,11 @@
     const rounding = document.getElementById('categoryModalRounding');
     const errors = document.getElementById('categoryModalErrors');
     const title = document.getElementById('categoryModalTitle');
+    const orderSave = document.getElementById('category-order-save');
+    const tableBody = document.getElementById('category-table-body');
     let editingId = null;
     let codeTouched = false;
+    let draggedRow = null;
 
     const thaiCodeMap = { ก: 'K', ข: 'K', ค: 'K', ง: 'N', จ: 'J', ช: 'C', ซ: 'S', ด: 'D', ต: 'T', ถ: 'T', ท: 'T', น: 'N', บ: 'B', ป: 'P', ผ: 'P', พ: 'P', ฟ: 'F', ม: 'M', ย: 'Y', ร: 'R', ล: 'L', ว: 'W', ศ: 'S', ส: 'S', ห: 'H', อ: '', ฮ: 'H' };
     const generateCodePrefix = (value) => {
@@ -99,4 +102,58 @@
         await Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', timer: 1200, showConfirmButton: false });
         window.location.reload();
     }));
+
+    const categoryRows = () => [...document.querySelectorAll('[data-category-row]')];
+    const syncOrderNumbers = () => categoryRows().forEach((row, index) => {
+        const number = row.querySelector('.category-order-number');
+        if (number) number.textContent = String(index + 1);
+    });
+    const markOrderChanged = () => {
+        if (orderSave) orderSave.disabled = false;
+    };
+
+    categoryRows().forEach((row) => {
+        row.addEventListener('dragstart', (event) => {
+            draggedRow = row;
+            row.classList.add('is-dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', row.dataset.categoryId);
+        });
+        row.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            if (!draggedRow || draggedRow === row) return;
+            const bounds = row.getBoundingClientRect();
+            const insertBefore = event.clientY < bounds.top + bounds.height / 2;
+            tableBody.insertBefore(draggedRow, insertBefore ? row : row.nextSibling);
+            syncOrderNumbers();
+            markOrderChanged();
+        });
+        row.addEventListener('dragend', () => {
+            row.classList.remove('is-dragging');
+            draggedRow = null;
+        });
+    });
+
+    orderSave?.addEventListener('click', async () => {
+        const categoryIds = categoryRows().map((row) => Number(row.dataset.categoryId));
+        orderSave.disabled = true;
+        try {
+            const response = await fetch(orderSave.dataset.url, {
+                method: 'PUT',
+                headers: {
+                    ...jsonHeaders,
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({ category_ids: categoryIds }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.message || 'บันทึกลำดับไม่สำเร็จ');
+            await Swal.fire({ icon: 'success', title: 'บันทึกลำดับแล้ว', timer: 1200, showConfirmButton: false });
+            window.location.reload();
+        } catch (error) {
+            orderSave.disabled = false;
+            await Swal.fire({ icon: 'error', title: 'บันทึกลำดับไม่สำเร็จ', text: error.message || 'กรุณาลองใหม่' });
+        }
+    });
 }());

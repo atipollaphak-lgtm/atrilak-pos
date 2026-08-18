@@ -9,6 +9,7 @@ use App\Http\Controllers\CustomerImportController;
 use App\Http\Controllers\DailyPaymentClosingController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryZoneController;
+use App\Http\Controllers\FrequentProductController;
 use App\Http\Controllers\HoldBillController;
 use App\Http\Controllers\PriceController;
 use App\Http\Controllers\PricingManagementController;
@@ -282,7 +283,17 @@ Route::middleware(['auth'])->group(function () {
             [ProductPriceTierController::class, 'destroyFromManagement']
         )->name('product-price-tiers.destroy');
 
+        Route::put('/categories/order', [CategoryController::class, 'updateOrder'])
+            ->name('categories.order');
         Route::resource('categories', CategoryController::class);
+        Route::get('/frequent-products', [FrequentProductController::class, 'index'])
+            ->name('frequent-products.index');
+        Route::post('/frequent-products/{product}/pin', [FrequentProductController::class, 'pin'])
+            ->name('frequent-products.pin');
+        Route::put('/frequent-products/order', [FrequentProductController::class, 'updateOrder'])
+            ->name('frequent-products.order');
+        Route::delete('/frequent-products/{frequentProduct}', [FrequentProductController::class, 'unpin'])
+            ->name('frequent-products.unpin');
         Route::resource('suppliers', SupplierController::class);
         Route::resource('purchases', PurchaseController::class);
         Route::prefix('receivings')->name('receivings.')->controller(ReceiveStockController::class)->group(function () {

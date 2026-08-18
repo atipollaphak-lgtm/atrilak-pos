@@ -488,17 +488,21 @@
 
 
     </div>
-    <script>
-        window.onload = function() {
+    @if (request()->boolean('auto_print'))
+        <script>
+            window.addEventListener('afterprint', function () {
+                if (window.opener) {
+                    window.close();
+                }
+            });
 
-            setTimeout(function() {
-
-                window.print();
-
-            }, 300);
-
-        };
-    </script>
+            window.addEventListener('load', function () {
+                setTimeout(function () {
+                    window.print();
+                }, 300);
+            });
+        </script>
+    @endif
 </body>
 
 </html>

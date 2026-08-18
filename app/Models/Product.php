@@ -98,6 +98,11 @@ class Product extends Model
         return $this->belongsTo(Category::class);
     }
 
+    public function frequentProduct()
+    {
+        return $this->hasOne(FrequentProduct::class);
+    }
+
     public function stockMovements()
     {
         return $this->hasMany(StockMovement::class);

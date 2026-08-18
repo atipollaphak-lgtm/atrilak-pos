@@ -4,6 +4,7 @@ namespace Tests\Feature\Customers;
 
 use App\Models\Customer;
 use App\Models\CustomerImportRow;
+use App\Models\DeliveryZone;
 use App\Services\Customers\CustomerImportService;
 use App\Services\Customers\CustomerImportStorageService;
 use Illuminate\Support\Facades\Schema;
@@ -12,6 +13,8 @@ use Tests\TestCase;
 
 class CustomerImportConfirmTest extends TestCase
 {
+    private int $deliveryZoneId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -29,6 +32,18 @@ class CustomerImportConfirmTest extends TestCase
             $table->boolean('active')->default(true);
             $table->timestamps();
         });
+
+        Schema::create('delivery_zones', function ($table): void {
+            $table->id();
+            $table->string('name');
+            $table->boolean('active')->default(true);
+            $table->timestamps();
+        });
+
+        $this->deliveryZoneId = DeliveryZone::query()->create([
+            'name' => 'Import Test Zone',
+            'active' => true,
+        ])->id;
 
         Schema::create('customer_delivery_addresses', function ($table): void {
             $table->id();
@@ -70,6 +85,7 @@ class CustomerImportConfirmTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('batch_id');
             $table->unsignedBigInteger('customer_id')->nullable();
+            $table->unsignedBigInteger('delivery_zone_id')->nullable();
             $table->unsignedInteger('row_number');
             $table->string('external_id')->nullable();
             $table->string('name')->nullable();
@@ -103,6 +119,7 @@ class CustomerImportConfirmTest extends TestCase
         Schema::dropIfExists('customer_import_rows');
         Schema::dropIfExists('customer_import_batches');
         Schema::dropIfExists('customer_delivery_addresses');
+        Schema::dropIfExists('delivery_zones');
         Schema::dropIfExists('customers');
 
         parent::tearDown();
@@ -128,7 +145,7 @@ class CustomerImportConfirmTest extends TestCase
         ]);
         $this->assertDatabaseHas('customer_delivery_addresses', [
             'address' => 'ที่อยู่ดิบ',
-            'delivery_zone_id' => null,
+            'delivery_zone_id' => $this->deliveryZoneId,
             'is_default' => true,
         ]);
         $this->assertDatabaseHas('customer_external_references', [
@@ -212,6 +229,23 @@ class CustomerImportConfirmTest extends TestCase
         $this->assertSame('pending', app(CustomerImportStorageService::class)->get($token, 7)->state);
     }
 
+    public function test_confirm_rechecks_zone_and_does_not_import_when_zone_becomes_inactive(): void
+    {
+        $token = $this->storePreview([$this->row('5001', 'โซนถูกปิด', '0800000031')]);
+        DeliveryZone::query()->whereKey($this->deliveryZoneId)->update(['active' => false]);
+
+        $result = app(CustomerImportService::class)->confirm($token, 7, [2]);
+
+        $this->assertSame(0, $result->importedCount);
+        $this->assertSame(1, $result->reviewCount);
+        $this->assertDatabaseCount('customers', 0);
+        $this->assertDatabaseHas('customer_import_rows', [
+            'row_number' => 2,
+            'status' => 'review_required',
+            'delivery_zone_id' => null,
+        ]);
+    }
+
     private function storePreview(array $rows): string
     {
         $rows = array_values($rows);
@@ -249,6 +283,7 @@ class CustomerImportConfirmTest extends TestCase
             'branch_type' => $branchType,
             'branch_number' => $branchNumber,
             'address' => $address,
+            'delivery_zone_id' => $this->deliveryZoneId,
             'remark' => 'หมายเหตุทดสอบ',
             'status' => $status,
             'reasons' => $status === 'ready' ? [] : ['สถานะทดสอบ'],

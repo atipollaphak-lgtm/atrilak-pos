@@ -2,13 +2,17 @@
 
 namespace Tests\Unit\Customers;
 
+use App\Models\DeliveryZone;
 use App\Services\Customers\CustomerImportValidationService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class CustomerImportValidationServiceTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_c2m_tax_continuation_is_attached_to_the_previous_customer(): void
     {
         $path = $this->workbook([
@@ -154,6 +158,43 @@ class CustomerImportValidationServiceTest extends TestCase
 
             $this->assertSame('invalid', $result['rows'][0]['status']);
             $this->assertStringContainsString('สูตร', implode(' ', $result['rows'][0]['reasons']));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_missing_delivery_zone_requires_review(): void
+    {
+        $path = $this->workbook([
+            ['A-200', 'ร้านไม่มีโซน', '0800000002', '', 'สำนักงานใหญ่', '', '', '', ''],
+        ], [
+            'external_id', 'name', 'phone', 'tax_id', 'branch_type', 'branch_number', 'address', 'remark', 'delivery_zone',
+        ]);
+
+        try {
+            $result = app(CustomerImportValidationService::class)->validate($path, 'atrilak-members.xlsx');
+
+            $this->assertSame('review_required', $result['rows'][0]['status']);
+            $this->assertContains('ไม่พบโซนลูกค้า', $result['rows'][0]['reasons']);
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function test_active_delivery_zone_is_resolved_for_import_row(): void
+    {
+        $zone = DeliveryZone::query()->create(['name' => 'North Import Zone', 'active' => true]);
+        $path = $this->workbook([
+            ['A-201', 'ร้านมีโซน', '0800000003', '', 'สำนักงานใหญ่', '', '', '', $zone->name],
+        ], [
+            'external_id', 'name', 'phone', 'tax_id', 'branch_type', 'branch_number', 'address', 'remark', 'delivery_zone',
+        ]);
+
+        try {
+            $result = app(CustomerImportValidationService::class)->validate($path, 'atrilak-members.xlsx');
+
+            $this->assertSame('ready', $result['rows'][0]['status']);
+            $this->assertSame($zone->id, $result['rows'][0]['delivery_zone_id']);
         } finally {
             @unlink($path);
         }
