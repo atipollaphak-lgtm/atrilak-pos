@@ -461,6 +461,68 @@ class HoldBillWorkflowTest extends TestCase
         $this->assertDatabaseMissing('hold_bills', ['id' => $holdId]);
     }
 
+    public function test_same_key_does_not_replay_when_hold_fee_inheritance_presence_changes(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        [$customer, $address] = $this->customerWithAddress('Hold idempotency customer', '150.00');
+        [$product, $productUnit] = $this->productWithUnit();
+
+        $holdId = $this->actingAs($cashier)
+            ->postJson('/sales-v3/hold-bills', [
+                'customer_id' => $customer->id,
+                'customer_delivery_address_id' => $address->id,
+                'sale_date' => '2026-07-29',
+                'delivery_type' => 'delivery',
+                'discount' => '30.00',
+                'delivery_fee' => '25.00',
+                'delivery_fee_override_flag' => true,
+                'total_amount' => '195.00',
+                'items' => [[
+                    'product_id' => $product->id,
+                    'product_unit_id' => $productUnit->id,
+                    'qty' => '2.00',
+                    'selling_price' => '100.00',
+                ]],
+            ])
+            ->assertCreated()
+            ->json('hold_bill.id');
+
+        $key = '90000000-0000-4000-8000-000000000005';
+        $payload = [
+            'hold_bill_id' => $holdId,
+            'sale_date' => '2026-07-29',
+            'delivery_type' => 'delivery',
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'discount' => '30.00',
+            'payment_method' => 'cash',
+            'cash_amount' => '195.00',
+            'promptpay_amount' => '0.00',
+            'received_amount' => '195.00',
+            'idempotency_key' => $key,
+            'items' => [[
+                'product_id' => $product->id,
+                'product_unit_id' => $productUnit->id,
+                'qty' => '2.00',
+                'selling_price' => '100.00',
+            ]],
+        ];
+
+        $this->actingAs($cashier)
+            ->postJson('/sales-v3/store', $payload)
+            ->assertOk()
+            ->assertJsonPath('idempotent_replay', false);
+
+        $payload['delivery_fee'] = '0.00';
+        $payload['delivery_fee_override_flag'] = false;
+
+        $this->actingAs($cashier)
+            ->postJson('/sales-v3/store', $payload)
+            ->assertStatus(409);
+
+        $this->assertDatabaseCount('sales', 1);
+    }
+
     private function customerWithAddress(
         string $name = 'ลูกค้าพักบิล',
         string $minimumProfit = '0.00'

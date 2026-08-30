@@ -42,7 +42,23 @@ class SaleIdempotencyService
         ];
 
         if (! empty($data['hold_bill_id'])) {
-            $payload = ['hold_bill_id' => $this->normalizeId($data['hold_bill_id'])] + $payload;
+            $payload = [
+                'hold_bill_id' => $this->normalizeId($data['hold_bill_id']),
+                // A resumed hold inherits its stored fee when the fee is omitted,
+                // null, or empty. Preserve that intent in the hash so an explicit
+                // zero cannot replay a sale created with the hold's fee.
+                'delivery_fee_input_mode' => array_key_exists('delivery_fee', $data)
+                    && $data['delivery_fee'] !== null
+                    && $data['delivery_fee'] !== ''
+                    ? 'provided'
+                    : 'inherited',
+                // The service inherits the hold flag only when the key is absent;
+                // an explicit false (or null) is an intentional override.
+                'delivery_fee_override_flag_input_mode' => array_key_exists(
+                    'delivery_fee_override_flag',
+                    $data
+                ) ? 'provided' : 'inherited',
+            ] + $payload;
         }
 
         return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
