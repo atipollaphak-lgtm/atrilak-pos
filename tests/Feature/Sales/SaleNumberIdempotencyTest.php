@@ -179,6 +179,28 @@ class SaleNumberIdempotencyTest extends TestCase
         $second['hold_bill_id'] = 10;
         $withAnotherHold['hold_bill_id'] = 11;
         $this->assertNotSame($service->payloadHash($second), $service->payloadHash($withAnotherHold));
+
+        $manualFee = $second;
+        $autoFee = $second;
+        $manualFee['delivery_fee'] = '25.00';
+        $manualFee['delivery_fee_override_flag'] = true;
+        $autoFee['delivery_fee'] = '25.00';
+        $autoFee['delivery_fee_override_flag'] = false;
+        $this->assertNotSame($service->payloadHash($manualFee), $service->payloadHash($autoFee));
+    }
+
+    public function test_payload_hash_includes_price_edit_and_hold_change_flags(): void
+    {
+        $product = $this->product('Hash price flags product', '10.0000');
+        $service = app(SaleIdempotencyService::class);
+        $base = $this->payload($product, '30000000-0000-4000-8000-000000000010');
+        $edited = $base;
+        $edited['items'][0]['price_was_edited'] = true;
+        $changedAfterHold = $base;
+        $changedAfterHold['items'][0]['price_changed_since_hold'] = true;
+
+        $this->assertNotSame($service->payloadHash($base), $service->payloadHash($edited));
+        $this->assertNotSame($service->payloadHash($base), $service->payloadHash($changedAfterHold));
     }
 
     public function test_counter_rolls_back_with_transaction_and_keeps_minimum_width_over_9999(): void

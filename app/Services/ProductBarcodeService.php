@@ -19,19 +19,16 @@ class ProductBarcodeService
             $productUnit,
             $data
         ) {
-            if (($data['is_default'] ?? false) === true) {
+            $this->lockProductAndUnit($product->getKey(), $productUnit->getKey());
 
-                ProductBarcode::where(
-                    'product_unit_id',
-                    $productUnit->id
-                )->update([
-                    'is_default' => false,
-                ]);
+            if (($data['is_default'] ?? false) === true) {
+                $this->barcodeScope($product->getKey(), $productUnit->getKey())
+                    ->update(['is_default' => false]);
             }
 
             return ProductBarcode::create([
-                'product_id' => $product->id,
-                'product_unit_id' => $productUnit->id,
+                'product_id' => $product->getKey(),
+                'product_unit_id' => $productUnit->getKey(),
                 'barcode' => $data['barcode'],
                 'is_default' => $data['is_default'] ?? false,
                 'active' => $data['active'] ?? true,
@@ -48,33 +45,60 @@ class ProductBarcodeService
             $productBarcode,
             $data
         ) {
-            if (($data['is_default'] ?? false) === true) {
+            $productId = (int) $productBarcode->product_id;
+            $productUnitId = $productBarcode->product_unit_id === null
+                ? null
+                : (int) $productBarcode->product_unit_id;
+            $this->lockProductAndUnit($productId, $productUnitId);
+            $lockedBarcode = ProductBarcode::query()
+                ->whereKey($productBarcode->getKey())
+                ->where('product_id', $productId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-                ProductBarcode::where(
-                    'product_unit_id',
-                    $productBarcode->product_unit_id
-                )
-                    ->where('id', '!=', $productBarcode->id)
-                    ->update([
-                        'is_default' => false,
-                    ]);
+            if (($data['is_default'] ?? false) === true) {
+                $this->barcodeScope($productId, $productUnitId)
+                    ->where('id', '!=', $lockedBarcode->getKey())
+                    ->update(['is_default' => false]);
             }
 
-            $productBarcode->update([
+            $lockedBarcode->update([
                 'barcode' => $data['barcode'],
                 'is_default' => $data['is_default'] ?? false,
                 'active' => $data['active'] ?? true,
-                'sort_order' => $data['sort_order'] ?? $productBarcode->sort_order,
+                'sort_order' => $data['sort_order'] ?? $lockedBarcode->sort_order,
             ]);
 
-            return $productBarcode;
+            return $lockedBarcode;
         });
     }
 
     public function deleteBarcode(ProductBarcode $productBarcode): void
     {
-        DB::transaction(function () use ($productBarcode) {
-            $productBarcode->delete();
+        DB::transaction(function () use ($productBarcode): void {
+            $productId = (int) $productBarcode->product_id;
+            $productUnitId = $productBarcode->product_unit_id === null
+                ? null
+                : (int) $productBarcode->product_unit_id;
+            $this->lockProductAndUnit($productId, $productUnitId);
+            $lockedBarcode = ProductBarcode::query()
+                ->whereKey($productBarcode->getKey())
+                ->where('product_id', $productId)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $wasDefault = (bool) $lockedBarcode->is_default;
+            $lockedBarcode->delete();
+
+            if (! $wasDefault) {
+                return;
+            }
+
+            $scope = $this->barcodeScope($productId, $productUnitId);
+            $scope->update(['is_default' => false]);
+            $scope->where('active', true)
+                ->orderBy('sort_order')
+                ->orderBy('id')
+                ->first()?->forceFill(['is_default' => true])->save();
         });
     }
 
@@ -88,5 +112,27 @@ class ProductBarcodeService
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get();
+    }
+
+    private function lockProductAndUnit(int $productId, ?int $productUnitId): void
+    {
+        Product::query()->whereKey($productId)->lockForUpdate()->firstOrFail();
+
+        if ($productUnitId !== null) {
+            ProductUnit::query()
+                ->whereKey($productUnitId)
+                ->where('product_id', $productId)
+                ->lockForUpdate()
+                ->firstOrFail();
+        }
+    }
+
+    private function barcodeScope(int $productId, ?int $productUnitId)
+    {
+        $query = ProductBarcode::query()->where('product_id', $productId);
+
+        return $productUnitId === null
+            ? $query->whereNull('product_unit_id')
+            : $query->where('product_unit_id', $productUnitId);
     }
 }

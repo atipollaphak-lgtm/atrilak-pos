@@ -81,6 +81,44 @@ class ProductImportConfirmTest extends TestCase
         $this->assertDatabaseHas('product_barcodes', ['barcode' => '8851234567890']);
     }
 
+    public function test_confirm_rechecks_and_rounds_prices_before_persisting(): void
+    {
+        $category = $this->category();
+        $unit = $this->unit();
+        $row = $this->row('สินค้าปัดเศษตอนยืนยัน', $category, $unit, 0);
+        $row['values']['cost_price'] = '10.005';
+        $row['values']['selling_price'] = '20.004';
+        $token = app(ProductImportStorageService::class)->store(7, 'products.xlsx', 'rounding-hash', [$row], [])->token;
+
+        app(ProductImportService::class)->confirm($token, 7);
+
+        $product = Product::query()->sole();
+        $this->assertSame('10.01', $product->cost_price);
+        $this->assertSame('20.00', $product->selling_price);
+        $this->assertSame('0.0000', $product->stock_qty);
+        $this->assertDatabaseCount('stock_movements', 0);
+    }
+
+    public function test_missing_product_code_can_generate_a_unique_barcode_when_manual_codes_are_used(): void
+    {
+        $category = $this->category();
+        $unit = $this->unit();
+        $first = $this->row('สินค้ารหัสเองหนึ่ง', $category, $unit, 0);
+        $first['values']['product_code'] = 'HAR-0998';
+        $second = $this->row('สินค้ารหัสเองสอง', $category, $unit, 0);
+        $second['values']['product_code'] = 'HAR-0997';
+        $token = app(ProductImportStorageService::class)->store(7, 'products.xlsx', 'partial-identifiers-hash', [$first, $second], [])->token;
+
+        app(ProductImportService::class)->confirm($token, 7);
+
+        $barcodes = Product::query()->orderBy('id')->pluck('barcode')->all();
+        $this->assertCount(2, $barcodes);
+        $this->assertCount(2, array_unique($barcodes));
+        foreach ($barcodes as $barcode) {
+            $this->assertMatchesRegularExpression('/^\d{13}$/', $barcode);
+        }
+    }
+
     public function test_stale_preview_conflict_is_rejected_without_importing_and_token_stays_pending(): void
     {
         $category = $this->category();

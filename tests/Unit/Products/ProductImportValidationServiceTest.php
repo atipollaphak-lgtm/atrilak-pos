@@ -98,6 +98,27 @@ class ProductImportValidationServiceTest extends TestCase
         }
     }
 
+    public function test_money_values_are_half_up_rounded_and_blank_stock_becomes_zero(): void
+    {
+        $this->category();
+        $this->unit();
+        $path = $this->workbook([
+            ['สินค้าใหม่', 'Hardware', 'กิโลกรัม', '10.005', '10.004', '', '', '', 'ใช้งาน', 'ไม่ล็อก', ''],
+        ]);
+
+        try {
+            $result = app(ProductImportValidationService::class)->validate($path);
+            $values = $result['rows'][0]['values'];
+
+            $this->assertSame('10.01', $values['cost_price']);
+            $this->assertSame('10.00', $values['selling_price']);
+            $this->assertSame('0.0000', $values['opening_stock']);
+            $this->assertSame([], $result['rows'][0]['errors']);
+        } finally {
+            @unlink($path);
+        }
+    }
+
     private function category(): Category
     {
         return Category::query()->create([

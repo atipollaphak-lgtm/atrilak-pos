@@ -8,7 +8,11 @@ use App\Models\HoldBill;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\User;
+use App\Services\Sales\ProductUnitConversionService;
+use App\Services\Sales\SaleDecimalService;
 use App\Services\Sales\SalePriceSnapshotService;
+use App\Services\Sales\SaleValidationService;
+use App\Services\Sales\ZonePricingService;
 use DomainException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +20,11 @@ use Illuminate\Support\Facades\DB;
 class HoldBillService
 {
     public function __construct(
-        private readonly ?SalePriceSnapshotService $salePriceSnapshotService = null
+        private readonly ?SalePriceSnapshotService $salePriceSnapshotService = null,
+        private readonly ?ProductUnitConversionService $productUnitConversionService = null,
+        private readonly ?SaleDecimalService $saleDecimalService = null,
+        private readonly ?ZonePricingService $zonePricingService = null,
+        private readonly ?SaleValidationService $saleValidationService = null
     ) {}
 
     public function create(array $data, User $user): HoldBill
@@ -24,14 +32,31 @@ class HoldBillService
         return DB::transaction(function () use ($data, $user): HoldBill {
             $priceSnapshotService = $this->salePriceSnapshotService
                 ?? app(SalePriceSnapshotService::class);
+            $unitConversionService = $this->productUnitConversionService
+                ?? app(ProductUnitConversionService::class);
+            $decimalService = $this->saleDecimalService
+                ?? app(SaleDecimalService::class);
+            $validationService = $this->saleValidationService
+                ?? app(SaleValidationService::class);
+            $zonePricingService = $this->zonePricingService
+                ?? app(ZonePricingService::class);
             $pricingZoneId = $data['pricing_zone_id'] ?? null;
             $hasExplicitPricingZone = $pricingZoneId !== null && $pricingZoneId !== '';
+            $deliveryType = $data['delivery_type'] ?? 'pickup';
+            $pickup = $deliveryType === 'pickup';
+            $manualDeliveryFee = ! $pickup
+                && filter_var($data['delivery_fee_override_flag'] ?? false, FILTER_VALIDATE_BOOLEAN);
             $deliveryZone = ($data['delivery_type'] ?? 'pickup') === 'delivery'
                 ? CustomerDeliveryAddress::query()
                     ->with('deliveryZone')
                     ->find($data['customer_delivery_address_id'] ?? null)
                     ?->deliveryZone
                 : null;
+            if (! $pickup && $deliveryZone !== null && ! $deliveryZone->active) {
+                throw new DomainException(
+                    'โซนจัดส่งนี้ปิดใช้งานแล้ว กรุณาเลือกที่อยู่ที่ผูกกับโซนที่เปิดใช้งาน'
+                );
+            }
             $pricingZone = $hasExplicitPricingZone
                 ? DeliveryZone::query()
                     ->whereKey($pricingZoneId)
@@ -66,13 +91,18 @@ class HoldBillService
                 'delivery_date' => $pickup
                     ? null
                     : ($data['delivery_date'] ?? null),
-                'delivery_type' => $data['delivery_type'],
+                'delivery_type' => $deliveryType,
                 'discount' => $data['discount'] ?? 0,
-                'delivery_fee' => $data['delivery_fee'] ?? 0,
-                'total_amount' => $data['total_amount'],
+                'delivery_fee' => 0,
+                'delivery_fee_override_flag' => $manualDeliveryFee,
+                // The browser total is display-only. The authoritative amount
+                // is derived from the snapshotted lines, discount, and fee below.
+                'total_amount' => '0.00',
                 'notes' => $data['notes'] ?? null,
             ]);
 
+            $productProfit = '0.00';
+            $itemTotals = [];
             foreach ($data['items'] as $item) {
                 $product = Product::query()
                     ->with(['unitRelation', 'category'])
@@ -101,6 +131,22 @@ class HoldBillService
                         FILTER_VALIDATE_BOOLEAN
                     )
                 );
+                $baseQty = $productUnit !== null
+                    ? $unitConversionService->calculateBaseQuantity($item['qty'], $productUnit->conversion_rate)
+                    : $unitConversionService->calculateBaseQuantity($item['qty'], 1);
+                $productProfit = $decimalService->addMoney(
+                    $productProfit,
+                    $decimalService->lineProfitFromBaseQuantity(
+                        $item['qty'],
+                        $priceSnapshot['selling_price'],
+                        $baseQty,
+                        $product->cost_price
+                    )
+                );
+                $itemTotals[] = $decimalService->lineTotal(
+                    $item['qty'],
+                    $priceSnapshot['selling_price']
+                );
 
                 $holdBill->items()->create([
                     'product_id' => $product->getKey(),
@@ -116,8 +162,32 @@ class HoldBillService
                 ]);
             }
 
+            $discount = $validationService->money($data['discount'] ?? 0);
+            $productProfitAfterDiscount = $decimalService->subtractMoney(
+                $productProfit,
+                $discount
+            );
+            $deliveryFee = $pickup
+                ? '0.00'
+                : ($manualDeliveryFee
+                    ? $validationService->nonNegativeDeliveryFee($data['delivery_fee'] ?? 0)
+                    : $zonePricingService->deliveryFee(
+                        $productProfitAfterDiscount,
+                        $deliveryZone,
+                        false
+                    ));
+            $itemsTotal = $decimalService->sumMoney($itemTotals);
+            $totalAmount = $validationService->calculateNetTotal(
+                $itemsTotal,
+                $deliveryFee,
+                $discount
+            );
+
             $holdBill->update([
                 'hold_no' => 'HLD-'.date('Ymd', strtotime($data['sale_date'])).'-'.str_pad((string) $holdBill->getKey(), 4, '0', STR_PAD_LEFT),
+                'delivery_fee' => $deliveryFee,
+                'discount' => $discount,
+                'total_amount' => $totalAmount,
             ]);
 
             return $holdBill->fresh([

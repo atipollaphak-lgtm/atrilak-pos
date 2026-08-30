@@ -71,7 +71,9 @@
     $subTotal = $sale->items->sum('total');
     $deliveryFee = $sale->delivery_fee ?? 0;
     $discount = $sale->discount ?? 0;
-    $grandTotal = $subTotal + $deliveryFee - $discount;
+    // Render the persisted total so the printed document matches the
+    // transaction that was validated and saved by the server.
+    $grandTotal = $sale->total_amount ?? ($subTotal + $deliveryFee - $discount);
     $receiptFooter = trim((string) ($setting?->receipt_footer ?? ''));
     $receiptFooter = $receiptFooter !== ''
         ? $receiptFooter

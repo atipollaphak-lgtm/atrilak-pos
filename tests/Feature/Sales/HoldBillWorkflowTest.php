@@ -50,8 +50,9 @@ class HoldBillWorkflowTest extends TestCase
             'hold_no' => 'HLD-20260729-0001',
             'customer_id' => $customer->id,
             'customer_delivery_address_id' => $address->id,
-            'total_amount' => '240.00',
+            'total_amount' => '190.00',
             'delivery_date' => '2026-08-12',
+            'delivery_fee_override_flag' => false,
         ]);
         $this->assertDatabaseHas('hold_bill_items', [
             'product_id' => $product->id,
@@ -112,6 +113,57 @@ class HoldBillWorkflowTest extends TestCase
                 'items' => [],
             ])
             ->assertUnprocessable();
+    }
+
+    public function test_hold_bill_rejects_an_address_in_a_deactivated_delivery_zone(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        [$customer, $address] = $this->customerWithAddress();
+        [$product, $productUnit] = $this->productWithUnit();
+        $address->deliveryZone->update(['active' => false]);
+
+        $this->actingAs($cashier)
+            ->postJson('/sales-v3/hold-bills', [
+                'customer_id' => $customer->id,
+                'customer_delivery_address_id' => $address->id,
+                'sale_date' => '2026-07-29',
+                'delivery_type' => 'delivery',
+                'delivery_fee' => '0.00',
+                'total_amount' => '100.00',
+                'items' => [[
+                    'product_id' => $product->id,
+                    'product_unit_id' => $productUnit->id,
+                    'qty' => '1.00',
+                    'selling_price' => '100.00',
+                ]],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'โซนจัดส่งนี้ปิดใช้งานแล้ว กรุณาเลือกที่อยู่ที่ผูกกับโซนที่เปิดใช้งาน');
+
+        $this->assertDatabaseCount('hold_bills', 0);
+    }
+
+    public function test_hold_bill_ignores_a_tampered_browser_total_and_persists_the_server_total(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        [$product, $productUnit] = $this->productWithUnit();
+
+        $this->actingAs($cashier)
+            ->postJson('/sales-v3/hold-bills', [
+                'sale_date' => '2026-07-29',
+                'delivery_type' => 'pickup',
+                'discount' => '10.00',
+                'delivery_fee' => '99.00',
+                'total_amount' => '9999.99',
+                'items' => [[
+                    'product_id' => $product->id,
+                    'product_unit_id' => $productUnit->id,
+                    'qty' => '2.00',
+                    'selling_price' => '100.00',
+                ]],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('hold_bill.total_amount', '190.00');
     }
 
     public function test_hold_bill_rejects_item_values_that_exceed_database_scale(): void
@@ -315,20 +367,116 @@ class HoldBillWorkflowTest extends TestCase
         $this->assertTrue($item->price_override_flag);
     }
 
-    private function customerWithAddress(): array
+    public function test_manual_delivery_fee_hold_persists_and_resumes_the_override_flag(): void
     {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        [$customer, $address] = $this->customerWithAddress('Manual hold customer', '150.00');
+        [$product, $productUnit] = $this->productWithUnit();
+
+        $created = $this->actingAs($cashier)->postJson('/sales-v3/hold-bills', [
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'sale_date' => '2026-07-29',
+            'delivery_type' => 'delivery',
+            'discount' => '30.00',
+            'delivery_fee' => '25.00',
+            'delivery_fee_override_flag' => true,
+            'total_amount' => '195.00',
+            'items' => [[
+                'product_id' => $product->id,
+                'product_unit_id' => $productUnit->id,
+                'qty' => '2.00',
+                'selling_price' => '100.00',
+            ]],
+        ])->assertCreated();
+
+        $holdId = $created->json('hold_bill.id');
+
+        $this->assertDatabaseHas('hold_bills', [
+            'id' => $holdId,
+            'delivery_fee' => '25.00',
+            'delivery_fee_override_flag' => true,
+        ]);
+
+        $this->actingAs($cashier)
+            ->getJson('/sales-v3/hold-bills/'.$holdId)
+            ->assertOk()
+            ->assertJsonPath('data.delivery_fee', '25.00')
+            ->assertJsonPath('data.delivery_fee_override_flag', true);
+    }
+
+    public function test_manual_delivery_fee_from_resumed_hold_is_used_for_sale_total(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        [$customer, $address] = $this->customerWithAddress('Manual hold sale customer', '150.00');
+        [$product, $productUnit] = $this->productWithUnit();
+        $created = $this->actingAs($cashier)->postJson('/sales-v3/hold-bills', [
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'sale_date' => '2026-07-29',
+            'delivery_type' => 'delivery',
+            'discount' => '30.00',
+            'delivery_fee' => '25.00',
+            'delivery_fee_override_flag' => true,
+            'total_amount' => '195.00',
+            'items' => [[
+                'product_id' => $product->id,
+                'product_unit_id' => $productUnit->id,
+                'qty' => '2.00',
+                'selling_price' => '100.00',
+            ]],
+        ])->assertCreated();
+        $holdId = $created->json('hold_bill.id');
+        $payload = [
+            'hold_bill_id' => $holdId,
+            'sale_date' => '2026-07-29',
+            'delivery_type' => 'delivery',
+            'customer_id' => $customer->id,
+            'customer_delivery_address_id' => $address->id,
+            'delivery_fee' => '25.00',
+            'delivery_fee_override_flag' => true,
+            'discount' => '30.00',
+            'payment_method' => 'cash',
+            'cash_amount' => '195.00',
+            'promptpay_amount' => '0.00',
+            'received_amount' => '195.00',
+            'idempotency_key' => '90000000-0000-4000-8000-000000000004',
+            'items' => [[
+                'product_id' => $product->id,
+                'product_unit_id' => $productUnit->id,
+                'qty' => '2.00',
+                'selling_price' => '100.00',
+            ]],
+        ];
+
+        $this->actingAs($cashier)
+            ->postJson('/sales-v3/store', $payload)
+            ->assertOk();
+
+        $sale = Sale::query()->sole();
+
+        $this->assertEquals('25.00', $sale->delivery_fee);
+        $this->assertTrue($sale->delivery_fee_override_flag);
+        $this->assertEquals('195.00', $sale->total_amount);
+        $this->assertDatabaseMissing('hold_bills', ['id' => $holdId]);
+    }
+
+    private function customerWithAddress(
+        string $name = 'ลูกค้าพักบิล',
+        string $minimumProfit = '0.00'
+    ): array {
         $customer = Customer::query()->create([
             'code' => 'CUS-HOLD-1',
-            'name' => 'ลูกค้าพักบิล',
+            'name' => $name,
             'phone' => '0800000001',
             'active' => true,
         ]);
         $zone = DeliveryZone::query()->create([
-            'name' => 'โซนทดสอบ',
+            'name' => $name.' zone',
             'price_markup_percent' => '0.00',
             'rounding_increment' => '0.25',
             'base_delivery_fee' => '50.00',
-            'minimum_profit' => '0.00',
+            'minimum_profit' => $minimumProfit,
             'active' => true,
         ]);
         $address = CustomerDeliveryAddress::query()->create([

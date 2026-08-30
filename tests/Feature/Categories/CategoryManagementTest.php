@@ -120,16 +120,16 @@ class CategoryManagementTest extends TestCase
             ->assertJsonPath('errors.barcode_prefix.0', 'The barcode prefix has already been taken.');
     }
 
-    public function test_category_with_products_cannot_be_deleted(): void
+    public function test_category_with_products_is_deactivated_instead_of_deleted(): void
     {
         $category = Category::query()->create(['name' => 'Used']);
         Product::query()->create(['category_id' => $category->id, 'name' => 'Product']);
 
         $this->deleteJson(route('categories.destroy', $category))
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'ไม่สามารถลบหมวดหมู่ที่มีสินค้าได้');
+            ->assertOk()
+            ->assertJsonPath('action', 'deactivated');
 
-        $this->assertDatabaseHas('categories', ['id' => $category->id]);
+        $this->assertDatabaseHas('categories', ['id' => $category->id, 'active' => false]);
     }
 
     public function test_empty_category_can_be_deleted(): void

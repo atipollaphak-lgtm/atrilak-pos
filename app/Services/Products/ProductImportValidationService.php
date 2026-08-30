@@ -191,6 +191,14 @@ class ProductImportValidationService
             $errors = [...$errors, ...$this->validateRowValues($values, $categories, $units)];
             $errors = [...$errors, ...$this->duplicateErrors($values, $seen)];
             $errors = [...$errors, ...$this->databaseDuplicateErrors($values, $dbCodes, $dbBarcodes, $dbBarcodeTable, $dbNames)];
+            $warnings = [];
+            if ($values['product_code'] === null) {
+                $warnings[] = 'รหัสสินค้าจะถูกสร้างจาก Prefix ของหมวดหมู่ตอนยืนยัน';
+            }
+            if ($values['barcode'] === null) {
+                $warnings[] = 'บาร์โค้ดจะถูกสร้างจาก Prefix ของหมวดหมู่ตอนยืนยัน';
+            }
+            $warnings[] = 'ต้นทุนและราคาขายจะถูกปัดเป็นทศนิยม 2 ตำแหน่งแบบ HALF_UP';
 
             foreach (['product_name', 'product_code', 'barcode'] as $key) {
                 if (($values[$key] ?? null) !== null && $values[$key] !== '') {
@@ -203,6 +211,7 @@ class ProductImportValidationService
                 'values' => $values,
                 'original_values' => $source,
                 'errors' => $errors,
+                'warnings' => $warnings,
             ];
         }
 
@@ -224,8 +233,8 @@ class ProductImportValidationService
             'category_id' => $categories->get(strtolower($categoryName))?->getKey(),
             'base_unit' => $unitName,
             'unit_id' => $units->get(strtolower($unitName))?->getKey(),
-            'cost_price' => $this->decimal($source[config('product_import.headers.cost_price')] ?? null, 2),
-            'selling_price' => $this->decimal($source[config('product_import.headers.selling_price')] ?? null, 2),
+            'cost_price' => $this->decimal($source[config('product_import.headers.cost_price')] ?? null, 2, true),
+            'selling_price' => $this->decimal($source[config('product_import.headers.selling_price')] ?? null, 2, true),
             'opening_stock' => $openingStock,
             'product_code' => $this->optionalText($source[config('product_import.headers.product_code')] ?? null, 255),
             'barcode' => $this->optionalBarcode($source[config('product_import.headers.barcode')] ?? null),
@@ -271,9 +280,7 @@ class ProductImportValidationService
             $errors[] = $this->error('product_code', 'รหัสสินค้ายาวเกิน 255 ตัวอักษร');
         }
         $category = $categories->get(strtolower((string) $values['category']));
-        if ($values['product_code'] !== null && $category && blank($category->code_prefix)) {
-            $errors[] = $this->error('product_code', 'หมวดหมู่ยังไม่กำหนด Prefix สำหรับรหัสสินค้า');
-        } elseif ($values['product_code'] !== null && $category
+        if ($values['product_code'] !== null && $category && filled($category->code_prefix)
             && preg_match('/^'.preg_quote((string) $category->code_prefix, '/').'-(\d{4})$/', $values['product_code']) !== 1) {
             $errors[] = $this->error('product_code', 'รหัสสินค้าต้องตรงกับ Prefix และรูปแบบเดิมของหมวดหมู่');
         }
@@ -354,20 +361,32 @@ class ProductImportValidationService
             ->all();
     }
 
-    private function decimal(mixed $value, int $scale): ?string
+    private function decimal(mixed $value, int $scale, bool $round = false): ?string
     {
         if ($value === null || trim((string) $value) === '') {
             return null;
         }
 
         $value = trim((string) $value);
-        $pattern = '/^\d+(?:\.\d{1,'.$scale.'})?$/D';
+        $pattern = '/^\d+(?:\.\d+)?$/D';
         if (preg_match($pattern, $value) !== 1) {
             return null;
         }
 
         try {
-            return (string) BigDecimal::of($value)->toScale($scale, RoundingMode::UNNECESSARY);
+            $decimal = BigDecimal::of($value);
+            $max = $scale === 2
+                ? BigDecimal::of('9999999999.99')
+                : BigDecimal::of('999999999999999.9999');
+            $rounded = $decimal->toScale(
+                $scale,
+                $round ? RoundingMode::HALF_UP : RoundingMode::UNNECESSARY,
+            );
+            if ($rounded->isGreaterThan($max)) {
+                return null;
+            }
+
+            return (string) $rounded;
         } catch (MathException) {
             return null;
         }

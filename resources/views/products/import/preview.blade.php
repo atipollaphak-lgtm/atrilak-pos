@@ -32,12 +32,12 @@
     @if ($preview->rows !== [])
         <div class="card"><div class="card-body table-responsive">
             <table class="table table-sm table-bordered">
-                <thead><tr><th>แถว</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>หน่วยหลัก</th><th>ต้นทุน</th><th>ราคาขาย</th><th>สถานะ</th><th>ข้อผิดพลาด</th></tr></thead>
+                <thead><tr><th>แถว</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>หน่วยหลัก</th><th>ต้นทุน</th><th>ราคาขาย</th><th>รหัส/บาร์โค้ด</th><th>สถานะ</th><th>ข้อผิดพลาด / คำเตือน</th></tr></thead>
                 <tbody>
                     @foreach ($preview->rows as $row)
                         <tr class="{{ ($row['errors'] ?? []) !== [] ? 'table-danger' : '' }}">
-                            <td>{{ $row['row_number'] }}</td><td>{{ $row['values']['product_name'] ?? '' }}</td><td>{{ $row['values']['category'] ?? '' }}</td><td>{{ $row['values']['base_unit'] ?? '' }}</td><td>{{ $row['values']['cost_price'] ?? '' }}</td><td>{{ $row['values']['selling_price'] ?? '' }}</td><td>{{ ($row['errors'] ?? []) === [] ? 'ผ่าน' : 'ไม่ผ่าน' }}</td>
-                            <td>@foreach ($row['errors'] ?? [] as $error)<div>{{ $error['column'] ?? 'ข้อมูล' }}: {{ $error['message'] ?? '' }}</div>@endforeach</td>
+                            <td>{{ $row['row_number'] }}</td><td>{{ $row['values']['product_name'] ?? '' }}</td><td>{{ $row['values']['category'] ?? '' }}</td><td>{{ $row['values']['base_unit'] ?? '' }}</td><td>{{ $row['values']['cost_price'] ?? '' }}</td><td>{{ $row['values']['selling_price'] ?? '' }}</td><td>{{ $row['values']['product_code'] ?? 'สร้างอัตโนมัติ' }}<br><small>{{ $row['values']['barcode'] ?? 'สร้างอัตโนมัติ' }}</small></td><td>{{ ($row['errors'] ?? []) === [] ? 'ผ่าน' : 'ไม่ผ่าน' }}</td>
+                            <td>@foreach ($row['errors'] ?? [] as $error)<div>{{ $error['column'] ?? 'ข้อมูล' }}: {{ $error['message'] ?? '' }}</div>@endforeach @foreach ($row['warnings'] ?? [] as $warning)<div class="text-muted">{{ $warning }}</div>@endforeach</td>
                         </tr>
                     @endforeach
                 </tbody>

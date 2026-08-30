@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Services\CatalogDeletionService;
+use App\Services\CategoryPrefixAllocator;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,7 +42,9 @@ class CategoryController extends Controller
                 ->max();
             $validated['sort_order'] = $maxSortOrder === null ? 0 : ((int) $maxSortOrder + 1);
 
-            return Category::create($validated);
+            $category = Category::create($validated);
+
+            return app(CategoryPrefixAllocator::class)->ensure($category);
         });
 
         if ($request->expectsJson()) {
@@ -56,7 +61,12 @@ class CategoryController extends Controller
             return $validated;
         }
 
-        $category->update($validated);
+        $category = DB::transaction(function () use ($category, $validated): Category {
+            $locked = Category::query()->lockForUpdate()->findOrFail($category->getKey());
+            $locked->update($validated);
+
+            return app(CategoryPrefixAllocator::class)->ensure($locked);
+        });
 
         if ($request->expectsJson()) {
             return response()->json(['category' => $category->fresh()->loadCount('products')]);
@@ -113,25 +123,32 @@ class CategoryController extends Controller
         return response()->json(['message' => 'บันทึกลำดับหมวดหมู่เรียบร้อย']);
     }
 
-    public function destroy(Category $category)
+    public function destroy(Request $request, Category $category, CatalogDeletionService $deletionService)
     {
-        if ($category->products()->exists()) {
-            $message = 'ไม่สามารถลบหมวดหมู่ที่มีสินค้าได้';
-
-            if (request()->expectsJson()) {
-                return response()->json(['message' => $message], 422);
+        try {
+            $result = $deletionService->deleteCategory($category);
+        } catch (DomainException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $exception->getMessage()], 422);
             }
 
-            return back()->withErrors(['category' => $message]);
+            return back()->withErrors(['category' => $exception->getMessage()]);
         }
 
-        $category->delete();
-
-        if (request()->expectsJson()) {
-            return response()->json(['message' => 'ลบหมวดหมู่เรียบร้อย']);
+        if ($request->expectsJson()) {
+            return response()->json($result);
         }
 
-        return back()->with('success', 'ลบเรียบร้อย');
+        return back()->with('success', $result['action'] === 'deleted'
+            ? 'ลบหมวดหมู่เรียบร้อย'
+            : 'หมวดหมู่ถูกใช้งานแล้ว จึงปิดใช้งานเพื่อรักษาข้อมูลเดิม');
+    }
+
+    public function restore(Category $category, CatalogDeletionService $deletionService)
+    {
+        $deletionService->restoreCategory($category);
+
+        return back()->with('success', 'เปิดใช้งานหมวดหมู่เรียบร้อยแล้ว');
     }
 
     private function rules(?Category $category = null): array

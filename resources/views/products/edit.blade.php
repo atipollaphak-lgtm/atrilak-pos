@@ -203,6 +203,21 @@
 
         @include('products.partials._product_price_tier_edit_modal')
 
+        <div class="mt-3">
+            @if ($product->active)
+                <form method="POST" action="{{ route('products.destroy', $product) }}" onsubmit="return confirm('ยืนยันลบหรือปิดใช้งานสินค้านี้?');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-outline-danger">ลบ/ปิดใช้งานสินค้า</button>
+                </form>
+            @else
+                <form method="POST" action="{{ route('products.restore', $product) }}">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-success">เปิดใช้งานสินค้า</button>
+                </form>
+            @endif
+        </div>
+
         <hr>
 
         <div class="card mt-3">

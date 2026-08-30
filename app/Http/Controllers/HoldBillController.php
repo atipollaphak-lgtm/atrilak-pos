@@ -6,6 +6,7 @@ use App\Http\Requests\Sales\ResumeHoldBillRequest;
 use App\Http\Requests\Sales\StoreHoldBillRequest;
 use App\Models\HoldBill;
 use App\Services\HoldBillService;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Throwable;
 
@@ -36,6 +37,11 @@ class HoldBillController extends Controller
                 'success' => true,
                 'hold_bill' => $holdBill,
             ], 201);
+        } catch (DomainException $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => $exception->getMessage(),
+            ], $exception->getCode() === 409 ? 409 : 422);
         } catch (Throwable $exception) {
             report($exception);
 

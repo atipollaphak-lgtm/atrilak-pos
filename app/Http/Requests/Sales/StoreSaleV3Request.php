@@ -11,6 +11,7 @@ class StoreSaleV3Request extends StoreSaleV2Request
         $rules = parent::rules();
         $rules['delivery_type'] = ['required', 'in:delivery,pickup'];
         $rules['delivery_date'] = ['nullable', 'date_format:Y-m-d'];
+        $rules['delivery_fee_override_flag'] = ['nullable', 'boolean'];
         $rules['pricing_zone_id'] = [
             'nullable',
             'integer',

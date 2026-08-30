@@ -75,7 +75,7 @@ class SaleV3Controller extends Controller
     {
         try {
             $validated = $request->validated();
-            $sale = $saleService->createSale([
+            $saleData = [
                 'hold_bill_id' => $validated['hold_bill_id'] ?? null,
                 'customer_id' => $validated['customer_id'] ?? null,
                 'customer_delivery_address_id' => $validated['customer_delivery_address_id'] ?? null,
@@ -84,7 +84,6 @@ class SaleV3Controller extends Controller
                 'sale_date' => now()->toDateString(),
                 'delivery_date' => $validated['delivery_date'] ?? null,
                 'delivery_type' => $validated['delivery_type'],
-                'delivery_fee' => $validated['delivery_fee'] ?? 0,
                 'discount' => $validated['discount'] ?? 0,
                 'notes' => $validated['notes'] ?? null,
                 'payment_method' => $validated['payment_method'],
@@ -93,7 +92,19 @@ class SaleV3Controller extends Controller
                 'received_amount' => $validated['received_amount'],
                 'idempotency_key' => $validated['idempotency_key'],
                 'items' => $validated['items'],
-            ]);
+            ];
+
+            // Leave these keys absent when the caller is resuming a hold and
+            // did not send an override. SaleService then restores the exact
+            // fee/flag snapshot stored on the hold bill.
+            if (array_key_exists('delivery_fee', $validated)) {
+                $saleData['delivery_fee'] = $validated['delivery_fee'];
+            }
+            if (array_key_exists('delivery_fee_override_flag', $validated)) {
+                $saleData['delivery_fee_override_flag'] = $validated['delivery_fee_override_flag'];
+            }
+
+            $sale = $saleService->createSale($saleData);
 
             return response()->json([
                 'success' => true,

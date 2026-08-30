@@ -56,7 +56,7 @@
                                 แก้ไข
                             </button>
 
-                            @if (!$productUnit->is_base_unit)
+                            @if (!$productUnit->is_base_unit && $productUnit->active)
                                 <form action="{{ route('products.units.destroy', [$product, $productUnit]) }}"
                                       method="POST"
                                       style="display:inline;">
@@ -68,6 +68,16 @@
                                             onclick="return confirm('ต้องการลบรูปแบบการขายนี้ใช่หรือไม่?')">
                                         <i class="fas fa-trash"></i>
                                         ลบ
+                                    </button>
+                                </form>
+                            @elseif (!$productUnit->is_base_unit)
+                                <form action="{{ route('products.units.restore', [$product, $productUnit]) }}"
+                                      method="POST"
+                                      style="display:inline;">
+                                    @csrf
+                                    <button type="submit" class="btn btn-success btn-sm">
+                                        <i class="fas fa-undo"></i>
+                                        เปิดใช้งาน
                                     </button>
                                 </form>
                             @else

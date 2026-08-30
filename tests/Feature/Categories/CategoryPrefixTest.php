@@ -24,7 +24,7 @@ class CategoryPrefixTest extends TestCase
         ]);
     }
 
-    public function test_category_prefixes_are_optional_for_existing_categories_but_validated_when_present(): void
+    public function test_category_prefixes_are_allocated_when_omitted_but_validated_when_present(): void
     {
         $this->post(route('categories.store'), [
             'name' => 'Cement',
@@ -40,8 +40,8 @@ class CategoryPrefixTest extends TestCase
 
         $this->assertDatabaseHas('categories', [
             'name' => 'Legacy Category',
-            'code_prefix' => null,
-            'barcode_prefix' => null,
+            'code_prefix' => 'LEG',
+            'barcode_prefix' => '101',
         ]);
     }
 

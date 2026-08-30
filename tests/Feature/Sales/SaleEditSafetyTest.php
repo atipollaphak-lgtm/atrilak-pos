@@ -72,6 +72,18 @@ class SaleEditSafetyTest extends TestCase
         );
     }
 
+    public function test_edit_exposes_delivery_fee_override_controls(): void
+    {
+        [$sale] = $this->existingSale();
+
+        $html = $this->get(route('sales.edit', $sale))->assertOk()->getContent();
+
+        $this->assertStringContainsString('data-delivery-type="pickup"', $html);
+        $this->assertStringContainsString('name="delivery_fee_override_flag"', $html);
+        $this->assertStringContainsString('id="delivery_fee_override_toggle"', $html);
+        $this->assertStringContainsString('id="delivery_fee_reset_auto"', $html);
+    }
+
     public function test_validation_failure_preserves_product_rows(): void
     {
         [$sale, $historicalProduct] = $this->existingSale(productActive: false);
@@ -359,6 +371,11 @@ class SaleEditSafetyTest extends TestCase
         $this->assertStringContainsString('form.checkValidity()', $script);
         $this->assertStringContainsString("form.dataset.paymentConfirmed !== '1'", $script);
         $this->assertStringContainsString('paymentController.open()', $script);
+        $this->assertStringContainsString('deliveryFeeField', $script);
+        $this->assertStringContainsString('deliveryFeeFlagField', $script);
+        $this->assertStringContainsString('deliveryFeeToggle', $script);
+        $this->assertStringContainsString('deliveryFeeResetButton', $script);
+        $this->assertStringContainsString('syncDeliveryFeeMode()', $script);
     }
 
     private function customer(string $name, bool $active = true): Customer

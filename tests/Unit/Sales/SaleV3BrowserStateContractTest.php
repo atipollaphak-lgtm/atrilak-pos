@@ -21,6 +21,9 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString("context.state.pricingZone = null;\n        context.state.deliveryZone = null;", $final);
         $this->assertStringContainsString("context.customerSelect.dispatchEvent(new Event('change'))", $final);
         $this->assertStringContainsString('context.setDeliveryType(hold.delivery_type)', $final);
+        $this->assertStringContainsString('delivery_fee_override_flag: pickup ? false : Boolean(context.state.deliveryFeeEdited)', $final);
+        $this->assertStringContainsString('const holdHasManualDeliveryFee = hold.delivery_fee_override_flag === true', $final);
+        $this->assertStringContainsString('context.state.deliveryFeeEdited = hold.delivery_type !== \'pickup\' && holdHasManualDeliveryFee', $final);
         $this->assertStringContainsString("$('#v3-customer-summary')", $final);
         $this->assertStringNotContainsString('pickupSuffix', $final);
         $this->assertStringContainsString('filterCustomers();', $final);
@@ -38,6 +41,7 @@ class SaleV3BrowserStateContractTest extends TestCase
         $this->assertStringContainsString('customer_delivery_address_id: state.addressId || null', $payload);
         $this->assertStringContainsString('pricing_zone_id: state.pricingZone?.id || null', $payload);
         $this->assertStringContainsString('delivery_type: state.deliveryType', $payload);
+        $this->assertStringContainsString('delivery_fee_override_flag: state.deliveryType === "pickup" ? false : Boolean(state.deliveryFeeEdited)', $payload);
         $this->assertStringNotContainsString('customer_id: $("#v3-customer-id").value', $payload);
         $this->assertStringNotContainsString('delivery_type: $("#v3-pickup").checked', $payload);
     }

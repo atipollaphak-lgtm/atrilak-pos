@@ -27,6 +27,7 @@ class HoldBill extends Model
         'delivery_type',
         'discount',
         'delivery_fee',
+        'delivery_fee_override_flag',
         'total_amount',
         'notes',
     ];
@@ -38,6 +39,7 @@ class HoldBill extends Model
             'delivery_date' => 'date:Y-m-d',
             'discount' => 'decimal:2',
             'delivery_fee' => 'decimal:2',
+            'delivery_fee_override_flag' => 'boolean',
             'total_amount' => 'decimal:2',
             'pricing_zone_markup_percent_snapshot' => 'decimal:2',
             'pricing_zone_rounding_increment_snapshot' => 'decimal:2',

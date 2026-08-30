@@ -376,6 +376,7 @@
                 delivery_type: pickup ? 'pickup' : 'delivery',
                 discount: Number(context.state.discount || 0).toFixed(2),
                 delivery_fee: Number(context.state.deliveryFee || 0).toFixed(2),
+                delivery_fee_override_flag: pickup ? false : Boolean(context.state.deliveryFeeEdited),
                 total_amount: context.total(),
                 notes: context.state.note || null,
                 items: context.state.cart.map((item) => ({
@@ -468,7 +469,10 @@
         }));
         context.state.discount = Number(hold.discount || 0);
         context.state.deliveryFee = hold.delivery_type === 'pickup' ? 0 : Number(hold.delivery_fee || 0);
-        context.state.deliveryFeeEdited = hold.delivery_type !== 'pickup';
+        const holdHasManualDeliveryFee = hold.delivery_fee_override_flag === true
+            || hold.delivery_fee_override_flag === 1
+            || hold.delivery_fee_override_flag === '1';
+        context.state.deliveryFeeEdited = hold.delivery_type !== 'pickup' && holdHasManualDeliveryFee;
         context.state.note = hold.notes || '';
         context.state.holdBillId = Number(hold.id);
         $('#v3-discount').value = money(context.state.discount);

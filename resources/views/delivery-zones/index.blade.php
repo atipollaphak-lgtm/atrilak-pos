@@ -78,6 +78,20 @@
                                     ดู/แก้ไข
                                 </a>
 
+                                @if ($zone->active)
+                                    <form method="POST" action="{{ route('delivery-zones.destroy', $zone) }}" class="d-inline"
+                                          onsubmit="return confirm('ยืนยันลบหรือปิดใช้งานโซนนี้?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-danger">ลบ/ปิดใช้งาน</button>
+                                    </form>
+                                @else
+                                    <form method="POST" action="{{ route('delivery-zones.restore', $zone) }}" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-success">เปิดใช้งาน</button>
+                                    </form>
+                                @endif
+
                             </td>
 
                         </tr>

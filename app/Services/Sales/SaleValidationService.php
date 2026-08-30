@@ -72,6 +72,38 @@ class SaleValidationService
         return $this->decimalService->money($value);
     }
 
+    /**
+     * Validate a fee value at the transaction boundary before it is used in
+     * a persisted sale or hold bill. Form Requests perform the same check at
+     * the HTTP boundary, but service callers must not be able to bypass it.
+     */
+    public function nonNegativeDeliveryFee(mixed $value): string
+    {
+        $decimal = is_int($value) || is_float($value) || is_string($value)
+            ? trim((string) $value)
+            : '';
+
+        if ($decimal === '') {
+            $decimal = '0';
+        }
+
+        if (preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D', $decimal) !== 1) {
+            throw new DomainException('ค่าขนส่งต้องเป็นตัวเลขไม่ติดลบและมีทศนิยมไม่เกิน 2 ตำแหน่ง');
+        }
+
+        try {
+            $number = BigDecimal::of($decimal);
+        } catch (MathException) {
+            throw new DomainException('ค่าขนส่งต้องเป็นตัวเลขไม่ติดลบและมีทศนิยมไม่เกิน 2 ตำแหน่ง');
+        }
+
+        if ($number->isGreaterThan(BigDecimal::of('9999999999.99'))) {
+            throw new DomainException('ค่าขนส่งเกินขนาดที่ระบบรองรับ');
+        }
+
+        return $this->decimalService->money($number);
+    }
+
     public function calculateNetTotal(
         mixed $subtotal,
         mixed $deliveryFee,

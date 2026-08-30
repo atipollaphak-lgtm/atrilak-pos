@@ -19,6 +19,11 @@ class SaleIdempotencyService
             'sale_date' => (string) $data['sale_date'],
             'delivery_date' => $data['delivery_date'] ?? null,
             'delivery_type' => (string) ($data['delivery_type'] ?? 'delivery'),
+            'delivery_fee' => $this->normalizeDecimal($data['delivery_fee'] ?? 0),
+            'delivery_fee_override_flag' => filter_var(
+                $data['delivery_fee_override_flag'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            ),
             'discount' => $this->normalizeDecimal($data['discount'] ?? 0),
             'payment_method' => (string) ($data['payment_method'] ?? ''),
             'cash_amount' => $this->normalizeDecimal($data['cash_amount'] ?? 0),
@@ -29,6 +34,10 @@ class SaleIdempotencyService
                 'product_unit_id' => $this->normalizeId($item['product_unit_id'] ?? null),
                 'qty' => $this->normalizeDecimal($item['qty'] ?? 0),
                 'selling_price' => $this->normalizeDecimal($item['selling_price'] ?? 0),
+                'price_was_edited' => $this->normalizeBoolean($item['price_was_edited'] ?? false),
+                'price_changed_since_hold' => $this->normalizeBoolean(
+                    $item['price_changed_since_hold'] ?? false
+                ),
             ], $data['items'] ?? []),
         ];
 
@@ -76,5 +85,10 @@ class SaleIdempotencyService
     private function normalizeDecimal(mixed $value): string
     {
         return (string) BigDecimal::of((string) $value)->stripTrailingZeros();
+    }
+
+    private function normalizeBoolean(mixed $value): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 }
