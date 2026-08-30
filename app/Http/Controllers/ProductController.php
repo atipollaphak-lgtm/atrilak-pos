@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductBarcode;
 use App\Models\ProductUnit;
 use App\Models\Unit;
+use App\Services\CatalogDeletionService;
 use App\Services\Pricing\PricingService;
 use App\Services\ProductBarcodeService;
 use App\Services\ProductCreationService;
@@ -17,6 +18,7 @@ use App\Services\ProductUnitService;
 use App\Services\ProductUpdateService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
@@ -30,18 +32,22 @@ class ProductController extends Controller
 
     protected ProductCostAdjustmentService $productCostAdjustmentService;
 
+    protected CatalogDeletionService $catalogDeletionService;
+
     public function __construct(
         ProductUnitService $productUnitService,
         ProductBarcodeService $productBarcodeService,
         ProductUpdateService $productUpdateService,
         ProductCreationService $productCreationService,
-        ProductCostAdjustmentService $productCostAdjustmentService
+        ProductCostAdjustmentService $productCostAdjustmentService,
+        CatalogDeletionService $catalogDeletionService
     ) {
         $this->productUnitService = $productUnitService;
         $this->productBarcodeService = $productBarcodeService;
         $this->productUpdateService = $productUpdateService;
         $this->productCreationService = $productCreationService;
         $this->productCostAdjustmentService = $productCostAdjustmentService;
+        $this->catalogDeletionService = $catalogDeletionService;
     }
 
     public function index(Request $request)
@@ -111,8 +117,14 @@ class ProductController extends Controller
         }
 
         $validated = $request->validate([
-            'category_id' => 'required|exists:categories,id',
-            'unit_id' => 'nullable|exists:units,id',
+            'category_id' => [
+                'required',
+                Rule::exists('categories', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
+            'unit_id' => [
+                'nullable',
+                Rule::exists('units', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
             'name' => 'required|string|max:255',
             'sku' => 'nullable|string|max:255',
             'cost_price' => 'nullable|numeric|min:0',
@@ -200,8 +212,14 @@ class ProductController extends Controller
         }
 
         $validated = $request->validate([
-            'category_id' => 'required|exists:categories,id',
-            'unit_id' => 'nullable|exists:units,id',
+            'category_id' => [
+                'required',
+                Rule::exists('categories', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
+            'unit_id' => [
+                'nullable',
+                Rule::exists('units', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
             'name' => 'required|string|max:255',
             'sku' => 'nullable|string|max:255',
             'remark' => 'nullable|string',
@@ -279,21 +297,25 @@ class ProductController extends Controller
         ], static fn ($value) => $value !== null && $value !== '');
     }
 
-    public function destroy(Product $product)
+    public function destroy(Request $request, Product $product)
     {
-        $product->active = false;
-        $product->save();
+        $result = $this->catalogDeletionService->deleteProduct($product);
+
+        if ($request->expectsJson()) {
+            return response()->json($result);
+        }
 
         return back()->with(
             'success',
-            'ปิดใช้งานสินค้าเรียบร้อย'
+            $result['action'] === 'deleted'
+                ? 'ลบสินค้าเรียบร้อยแล้ว'
+                : 'สินค้าถูกใช้งานแล้ว จึงปิดใช้งานเพื่อรักษาประวัติเดิม'
         );
     }
 
     public function restore(Product $product)
     {
-        $product->active = true;
-        $product->save();
+        $this->catalogDeletionService->restoreProduct($product);
 
         return back()->with(
             'success',
@@ -306,7 +328,10 @@ class ProductController extends Controller
         Product $product
     ) {
         $request->validate([
-            'unit_id' => 'required|exists:units,id',
+            'unit_id' => [
+                'required',
+                Rule::exists('units', 'id')->where(fn ($query) => $query->where('active', true)),
+            ],
             'conversion_rate' => 'required|numeric|min:0.0001',
             'purchase_price' => 'nullable|numeric|min:0',
             'selling_price' => 'nullable|numeric|min:0',
@@ -335,6 +360,8 @@ class ProductController extends Controller
         Product $product,
         ProductUnit $productUnit
     ) {
+        abort_unless((int) $productUnit->product_id === (int) $product->id, 404);
+
         $request->validate([
             'conversion_rate' => 'required|numeric|min:0.0001',
             'purchase_price' => 'nullable|numeric|min:0',
@@ -359,14 +386,41 @@ class ProductController extends Controller
     }
 
     public function destroyUnit(
+        Request $request,
         Product $product,
         ProductUnit $productUnit
     ) {
-        $this->productUnitService->deleteUnit($productUnit);
+        abort_unless((int) $productUnit->product_id === (int) $product->id, 404);
+
+        try {
+            $result = $this->catalogDeletionService->deleteProductUnit($productUnit);
+        } catch (\DomainException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $exception->getMessage()], 422);
+            }
+
+            return back()->with('error', $exception->getMessage());
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json($result);
+        }
 
         return redirect()
             ->route('products.edit', $product)
-            ->with('success', 'ลบหน่วยสินค้าสำเร็จ');
+            ->with('success', $result['action'] === 'deleted'
+                ? 'ลบหน่วยสินค้าสำเร็จ'
+                : 'หน่วยสินค้าถูกใช้งานแล้ว จึงปิดใช้งานเพื่อรักษาประวัติเดิม');
+    }
+
+    public function restoreUnit(Product $product, ProductUnit $productUnit)
+    {
+        abort_unless((int) $productUnit->product_id === (int) $product->id, 404);
+        $this->catalogDeletionService->restoreProductUnit($productUnit);
+
+        return redirect()
+            ->route('products.edit', $product)
+            ->with('success', 'เปิดใช้งานหน่วยสินค้าเรียบร้อยแล้ว');
     }
 
     public function storeBarcode(
@@ -375,12 +429,15 @@ class ProductController extends Controller
     ) {
         $request->validate([
             'product_unit_id' => 'required|exists:product_units,id',
-            'barcode' => 'required|string|max:255|unique:product_barcodes,barcode',
+            'barcode' => 'required|string|max:100|unique:product_barcodes,barcode',
         ]);
 
-        $productUnit = ProductUnit::findOrFail(
-            $request->product_unit_id
-        );
+        $productUnit = ProductUnit::query()
+            ->where('product_id', $product->id)
+            ->where('active', true)
+            ->findOrFail(
+                $request->product_unit_id
+            );
 
         $this->productBarcodeService->createBarcode(
             $product,
@@ -402,8 +459,17 @@ class ProductController extends Controller
         Product $product,
         ProductBarcode $productBarcode
     ) {
+        abort_unless((int) $productBarcode->product_id === (int) $product->id, 404);
+
+        if ($productBarcode->product_unit_id !== null) {
+            ProductUnit::query()
+                ->whereKey($productBarcode->product_unit_id)
+                ->where('product_id', $product->id)
+                ->firstOrFail();
+        }
+
         $request->validate([
-            'barcode' => 'required|string|max:255|unique:product_barcodes,barcode,'.$productBarcode->id,
+            'barcode' => 'required|string|max:100|unique:product_barcodes,barcode,'.$productBarcode->id,
         ]);
 
         $this->productBarcodeService->updateBarcode(
@@ -421,12 +487,15 @@ class ProductController extends Controller
     }
 
     public function destroyBarcode(
+        Request $request,
         Product $product,
         ProductBarcode $productBarcode
     ) {
-        $this->productBarcodeService->deleteBarcode(
-            $productBarcode
-        );
+        $result = $this->catalogDeletionService->deleteBarcode($product, $productBarcode);
+
+        if ($request->expectsJson()) {
+            return response()->json($result);
+        }
 
         return redirect()
             ->route('products.edit', $product)

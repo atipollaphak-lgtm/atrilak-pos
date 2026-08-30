@@ -468,7 +468,9 @@
             $subTotal = $sale->items->sum('total');
             $deliveryFee = $sale->delivery_fee ?? 0;
             $discount = $sale->discount ?? 0;
-            $grandTotal = $subTotal + $deliveryFee - $discount;
+            // Use the persisted total so the document cannot drift from the
+            // amount that was validated and saved by the sale transaction.
+            $grandTotal = $sale->total_amount ?? ($subTotal + $deliveryFee - $discount);
         @endphp
 
         @include('sales.invoice_v2.summary')

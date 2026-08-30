@@ -41,6 +41,7 @@ class UpdateSaleRequest extends FormRequest
             'delivery_zone_id' => ['nullable', 'integer'],
             'discount' => ['nullable', $this->decimalRule(2, 10, false)],
             'delivery_fee' => ['nullable', $this->decimalRule(2, 10, false)],
+            'delivery_fee_override_flag' => ['nullable', 'boolean'],
             'payment_method' => [$paymentIsRequired ? 'required' : 'nullable', 'string', 'in:cash,promptpay,mixed'],
             'cash_amount' => [$paymentIsRequired ? 'required' : 'nullable', $this->decimalRule(2, 13, false)],
             'promptpay_amount' => [$paymentIsRequired ? 'required' : 'nullable', $this->decimalRule(2, 13, false)],

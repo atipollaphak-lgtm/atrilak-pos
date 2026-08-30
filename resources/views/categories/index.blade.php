@@ -82,9 +82,15 @@
                                     <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#categoryModal" data-category-mode="edit" data-category='@json($category)'>
                                         <i class="fas fa-edit"></i> แก้ไข
                                     </button>
-                                    <button type="button" class="btn btn-outline-danger btn-sm" data-category-delete data-url="{{ route('categories.destroy', $category) }}" data-name="{{ $category->name }}" data-product-count="{{ $category->products_count }}">
-                                        <i class="fas fa-trash"></i> ลบ
-                                    </button>
+                                    @if ($category->active)
+                                        <button type="button" class="btn btn-outline-danger btn-sm" data-category-delete data-url="{{ route('categories.destroy', $category) }}" data-name="{{ $category->name }}" data-product-count="{{ $category->products_count }}">
+                                            <i class="fas fa-trash"></i> ลบ/ปิดใช้งาน
+                                        </button>
+                                    @else
+                                        <button type="button" class="btn btn-outline-success btn-sm" data-category-restore data-url="{{ route('categories.restore', $category) }}" data-name="{{ $category->name }}">
+                                            <i class="fas fa-undo"></i> เปิดใช้งาน
+                                        </button>
+                                    @endif
                                 </td>
                             </tr>
                         @empty

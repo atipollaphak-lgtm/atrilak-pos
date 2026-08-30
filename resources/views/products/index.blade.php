@@ -123,7 +123,7 @@
                             <th>คงเหลือ</th>
                             <th>กำไร %</th>
                             <th>กฎการขาย</th>
-                            <th class="text-right">รายละเอียด</th>
+                            <th class="text-right">จัดการ</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -184,6 +184,18 @@
                                 <td class="text-muted">—</td>
                                 <td class="text-right">
                                     <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#productModal" data-product-mode="details" data-product='@json($productData)'>รายละเอียด</button>
+                                    @if ($product->active)
+                                        <form method="POST" action="{{ route('products.destroy', $product) }}" class="d-inline" onsubmit="return confirm('ยืนยันลบหรือปิดใช้งานสินค้านี้?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-outline-danger btn-sm">ลบ/ปิดใช้งาน</button>
+                                        </form>
+                                    @else
+                                        <form method="POST" action="{{ route('products.restore', $product) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-outline-success btn-sm">เปิดใช้งาน</button>
+                                        </form>
+                                    @endif
                                 </td>
                             </tr>
                         @empty

@@ -249,7 +249,7 @@ class CustomerImportValidationService
             $reasons[] = 'ชื่อลูกค้าต้องไม่ว่าง';
         }
         if ($externalId === '') {
-            $reasons[] = 'รหัสอ้างอิงภายนอกต้องไม่ว่าง';
+            $warnings[] = 'ไม่มีรหัสอ้างอิงภายนอก ระบบจะสร้างรหัสลูกค้า CUS-#### ให้อัตโนมัติ';
         }
         if (! $tax['valid'] && $tax['value'] !== null) {
             $reasons[] = 'เลขผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก';
@@ -275,7 +275,7 @@ class CustomerImportValidationService
         }
 
         $status = $reasons === [] ? 'ready' : 'review_required';
-        if ($rawRow['has_formula'] || $name === '' || $externalId === '') {
+        if ($rawRow['has_formula'] || $name === '') {
             $status = 'invalid';
         }
 

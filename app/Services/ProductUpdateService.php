@@ -7,6 +7,8 @@ use App\Models\CategoryPricingRule;
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
 use App\Models\StockMovement;
+use App\Models\Unit;
+use DomainException;
 use Illuminate\Support\Facades\DB;
 
 class ProductUpdateService
@@ -34,6 +36,24 @@ class ProductUpdateService
                     ->get();
             }
 
+            $requestedCategory = Category::query()
+                ->whereKey($requestedCategoryId)
+                ->lockForUpdate()
+                ->firstOrFail();
+            if (! $requestedCategory->active) {
+                throw new DomainException('หมวดหมู่ที่เลือกปิดใช้งานแล้ว ไม่สามารถแก้ไขสินค้าได้');
+            }
+
+            if (! empty($data['unit_id'])) {
+                $requestedUnit = Unit::query()
+                    ->whereKey($data['unit_id'])
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                if (! $requestedUnit->active) {
+                    throw new DomainException('หน่วยที่เลือกปิดใช้งานแล้ว ไม่สามารถแก้ไขสินค้าได้');
+                }
+            }
+
             $lockedProduct = $this->stockLockService->lockProducts([$product->getKey()])
                 ->get((int) $product->getKey());
             $oldStock = $lockedProduct->stock_qty;
@@ -47,7 +67,7 @@ class ProductUpdateService
                     ->where('category_id', $requestedCategoryId)
                     ->where('active', true)
                     ->exists()) {
-                throw new \DomainException('หมวดใหม่ยังไม่ได้ตั้งค่าราคา ไม่สามารถย้ายสินค้าที่ใช้กฎหมวดได้');
+                throw new DomainException('หมวดใหม่ยังไม่ได้ตั้งค่าราคา ไม่สามารถย้ายสินค้าที่ใช้กฎหมวดได้');
             }
 
             $nextSortOrder = $categoryChanged

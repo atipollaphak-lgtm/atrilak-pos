@@ -42,6 +42,13 @@ class SaleV3PriceOverrideTest extends TestCase
         }
     }
 
+    public function test_sales_and_hold_bills_have_delivery_fee_override_flag(): void
+    {
+        foreach (['sales', 'hold_bills'] as $table) {
+            $this->assertTrue(Schema::hasColumn($table, 'delivery_fee_override_flag'));
+        }
+    }
+
     public function test_price_snapshot_models_cast_override_values(): void
     {
         $saleItem = new SaleItem([
@@ -57,6 +64,15 @@ class SaleV3PriceOverrideTest extends TestCase
         $this->assertTrue($saleItem->price_override_flag);
         $this->assertSame('99.50', $holdItem->original_price);
         $this->assertFalse($holdItem->price_override_flag);
+    }
+
+    public function test_delivery_fee_override_models_cast_flag_values(): void
+    {
+        $sale = new Sale([
+            'delivery_fee_override_flag' => true,
+        ]);
+
+        $this->assertTrue($sale->delivery_fee_override_flag);
     }
 
     public function test_v3_sale_without_price_edit_keeps_normal_price_metadata(): void
@@ -219,6 +235,82 @@ class SaleV3PriceOverrideTest extends TestCase
         $this->assertTrue($item->price_override_flag);
     }
 
+    public function test_v3_auto_delivery_fee_recalculates_after_price_edit_and_discount(): void
+    {
+        [$product, $customer, $address] = $this->deliveryContext(
+            'Auto delivery fee zone',
+            '100.00'
+        );
+        $payload = $this->payload($product, '60.00', true);
+        $payload['delivery_type'] = 'delivery';
+        $payload['customer_id'] = $customer->id;
+        $payload['customer_delivery_address_id'] = $address->id;
+        $payload['discount'] = '30.00';
+        $payload['delivery_fee'] = '25.00';
+        $payload['delivery_fee_override_flag'] = false;
+        $payload['cash_amount'] = '150.00';
+        $payload['received_amount'] = '150.00';
+
+        $this->postJson(route('sales.v3.store'), $payload)->assertOk();
+
+        $sale = Sale::query()->sole();
+
+        $this->assertSame('delivery', $sale->delivery_type);
+        $this->assertEquals('120.00', $sale->delivery_fee);
+        $this->assertFalse($sale->delivery_fee_override_flag);
+        $this->assertEquals('150.00', $sale->total_amount);
+    }
+
+    public function test_v3_manual_delivery_fee_can_be_below_auto_shortfall(): void
+    {
+        [$product, $customer, $address] = $this->deliveryContext(
+            'Manual delivery fee zone',
+            '100.00'
+        );
+        $payload = $this->payload($product, '60.00', true);
+        $payload['delivery_type'] = 'delivery';
+        $payload['customer_id'] = $customer->id;
+        $payload['customer_delivery_address_id'] = $address->id;
+        $payload['discount'] = '30.00';
+        $payload['delivery_fee'] = '25.00';
+        $payload['delivery_fee_override_flag'] = true;
+        $payload['cash_amount'] = '55.00';
+        $payload['received_amount'] = '55.00';
+
+        $this->postJson(route('sales.v3.store'), $payload)->assertOk();
+
+        $sale = Sale::query()->sole();
+        $html = view('sales.invoice_v2', [
+            'sale' => $sale->fresh('items.product.unitRelation', 'items.productUnit.unit'),
+            'setting' => null,
+            'document' => app(CommercialDocumentService::class)
+                ->buildSaleDocument($sale, 'delivery-note'),
+        ])->render();
+
+        $this->assertEquals('25.00', $sale->delivery_fee);
+        $this->assertTrue($sale->delivery_fee_override_flag);
+        $this->assertEquals('55.00', $sale->total_amount);
+        $this->assertStringContainsString('25.00', $html);
+        $this->assertStringContainsString('55.00', $html);
+    }
+
+    public function test_v3_pickup_forces_delivery_fee_override_off(): void
+    {
+        $product = $this->product('Pickup manual fee product');
+        $payload = $this->payload($product, '100.00', false);
+        $payload['delivery_fee'] = '25.00';
+        $payload['delivery_fee_override_flag'] = true;
+
+        $this->postJson(route('sales.v3.store'), $payload)->assertOk();
+
+        $sale = Sale::query()->sole();
+
+        $this->assertSame('pickup', $sale->delivery_type);
+        $this->assertEquals('0.00', $sale->delivery_fee);
+        $this->assertFalse($sale->delivery_fee_override_flag);
+        $this->assertEquals('100.00', $sale->total_amount);
+    }
+
     public function test_v3_override_snapshot_uses_the_latest_delivery_zone_context(): void
     {
         $product = $this->product('Delivery context V3 price product');
@@ -304,5 +396,25 @@ class SaleV3PriceOverrideTest extends TestCase
             'minimum_stock' => '0.0000',
             'active' => true,
         ]);
+    }
+
+    private function deliveryContext(string $zoneName, string $minimumProfit): array
+    {
+        $product = $this->product($zoneName.' product');
+        $customer = Customer::query()->create(['name' => $zoneName.' customer']);
+        $zone = DeliveryZone::query()->create([
+            'name' => $zoneName,
+            'price_markup_percent' => '0.00',
+            'minimum_profit' => $minimumProfit,
+            'rounding_increment' => '0.25',
+            'active' => true,
+        ]);
+        $address = CustomerDeliveryAddress::query()->create([
+            'customer_id' => $customer->id,
+            'delivery_zone_id' => $zone->id,
+            'name' => $zoneName.' address',
+        ]);
+
+        return [$product, $customer, $address];
     }
 }

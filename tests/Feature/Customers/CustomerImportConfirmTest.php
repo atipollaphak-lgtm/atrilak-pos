@@ -158,6 +158,20 @@ class CustomerImportConfirmTest extends TestCase
         $this->assertSame('used', app(CustomerImportStorageService::class)->get($token, 7)->state);
     }
 
+    public function test_blank_external_id_gets_an_allocated_customer_code_without_empty_reference(): void
+    {
+        $token = $this->storePreview([$this->row('', 'ไม่มีรหัสภายนอก', '0805098557')]);
+
+        $result = app(CustomerImportService::class)->confirm($token, 7, [2]);
+
+        $this->assertSame(1, $result->importedCount);
+        $this->assertDatabaseHas('customers', [
+            'code' => 'CUS-0001',
+            'name' => 'ไม่มีรหัสภายนอก',
+        ]);
+        $this->assertDatabaseCount('customer_external_references', 0);
+    }
+
     public function test_review_duplicate_invalid_and_not_selected_rows_are_not_imported(): void
     {
         $token = $this->storePreview([

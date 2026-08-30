@@ -133,15 +133,19 @@
                                     </button>
                             </form>
 
-                            <form method="POST" action="{{ route('units.destroy', $unit) }}" style="display:inline-block;"
-                                onsubmit="return confirm('ยืนยันการลบหน่วยนับนี้?');">
-                                @csrf
-                                @method('DELETE')
-
-                                <button type="submit" class="btn btn-sm btn-danger">
-                                    ลบ
-                                </button>
-                            </form>
+                            @if ($unit->active)
+                                <form method="POST" action="{{ route('units.destroy', $unit) }}" style="display:inline-block;"
+                                    onsubmit="return confirm('ยืนยันการลบหรือปิดใช้งานหน่วยนับนี้?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-sm btn-danger">ลบ/ปิดใช้งาน</button>
+                                </form>
+                            @else
+                                <form method="POST" action="{{ route('units.restore', $unit) }}" style="display:inline-block;">
+                                    @csrf
+                                    <button type="submit" class="btn btn-sm btn-success">เปิดใช้งาน</button>
+                                </form>
+                            @endif
                             </td>
                         </tr>
                     @empty

@@ -100,6 +100,7 @@ trait CreatesBusinessRuleTestSchema
             $table->date('delivery_date')->nullable();
             $table->decimal('total_amount', 12, 2)->default(0);
             $table->decimal('delivery_fee', 12, 2)->default(0);
+            $table->boolean('delivery_fee_override_flag')->default(false);
             $table->string('delivery_type')->default('delivery');
             $table->decimal('discount', 12, 2)->default(0);
             $table->text('notes')->nullable();

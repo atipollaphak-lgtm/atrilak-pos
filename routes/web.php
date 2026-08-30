@@ -221,6 +221,9 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/products/{product}/units/{productUnit}', [ProductController::class, 'destroyUnit'])
             ->name('products.units.destroy');
 
+        Route::post('/products/{product}/units/{productUnit}/restore', [ProductController::class, 'restoreUnit'])
+            ->name('products.units.restore');
+
         Route::post(
             '/products/{product}/barcodes',
             [ProductController::class, 'storeBarcode']
@@ -289,6 +292,8 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/categories/{category}/products/order', [ProductOrderingController::class, 'updateOrder'])
             ->name('categories.products.order');
         Route::resource('categories', CategoryController::class);
+        Route::post('/categories/{category}/restore', [CategoryController::class, 'restore'])
+            ->name('categories.restore');
         Route::get('/frequent-products', [FrequentProductController::class, 'index'])
             ->name('frequent-products.index');
         Route::post('/frequent-products/{product}/pin', [FrequentProductController::class, 'pin'])
@@ -339,6 +344,8 @@ Route::middleware(['auth'])->group(function () {
             'units',
             UnitController::class
         );
+        Route::post('/units/{unit}/restore', [UnitController::class, 'restore'])
+            ->name('units.restore');
 
         Route::post('/units/seed', [UnitController::class, 'seed'])
             ->name('units.seed');
@@ -382,6 +389,8 @@ Route::middleware(['auth'])->group(function () {
             'delivery-zones',
             DeliveryZoneController::class
         );
+        Route::post('/delivery-zones/{deliveryZone}/restore', [DeliveryZoneController::class, 'restore'])
+            ->name('delivery-zones.restore');
 
         Route::resource(
             'customers.delivery-addresses',

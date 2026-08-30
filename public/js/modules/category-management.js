@@ -25,10 +25,13 @@
         const latin = value.match(/[A-Za-z]/g)?.join('').toUpperCase() || '';
         if (latin) return latin.slice(0, 3);
         const thai = [...value].map((character) => thaiCodeMap[character] || '').join('');
-        return thai.slice(-3).toUpperCase();
+        return thai.slice(-3).toUpperCase() || 'CAT';
     };
     const generateBarcodePrefix = () => {
-        const used = [...document.querySelectorAll('[data-category-delete]')].map((element) => Number(element.dataset.productCount) >= 0 ? element.closest('tr')?.querySelectorAll('.badge-light')[1]?.textContent.trim() : '').filter((value) => /^\d{3}$/.test(value)).map(Number);
+        const used = [...document.querySelectorAll('[data-category-row]')]
+            .map((row) => row.querySelectorAll('.badge-light')[1]?.textContent.trim() || '')
+            .filter((value) => /^\d{3}$/.test(value))
+            .map(Number);
         for (let value = 101; value <= 999; value += 1) if (!used.includes(value)) return String(value);
         return '';
     };
@@ -93,13 +96,21 @@
     });
 
     document.querySelectorAll('[data-category-delete]').forEach((button) => button.addEventListener('click', async function () {
-        if (Number(button.dataset.productCount) > 0) { await Swal.fire({ icon: 'error', title: 'ลบไม่ได้', text: 'หมวดหมู่นี้มีสินค้าอยู่ จึงไม่สามารถลบได้' }); return; }
-        const result = await Swal.fire({ icon: 'warning', title: 'ลบหมวดหมู่?', text: `ต้องการลบ ${button.dataset.name} หรือไม่`, showCancelButton: true, confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc3545' });
+        const result = await Swal.fire({ icon: 'warning', title: 'ลบหรือปิดใช้งานหมวดหมู่?', text: `ต้องการดำเนินการกับ ${button.dataset.name} หรือไม่`, showCancelButton: true, confirmButtonText: 'ดำเนินการ', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc3545' });
         if (!result.isConfirmed) return;
         const response = await fetch(button.dataset.url, { method: 'DELETE', headers: { ...jsonHeaders, 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } });
         const payload = await response.json();
-        if (!response.ok) { await Swal.fire({ icon: 'error', title: 'ลบไม่ได้', text: payload.message || 'เกิดข้อผิดพลาด' }); return; }
-        await Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', timer: 1200, showConfirmButton: false });
+        if (!response.ok) { await Swal.fire({ icon: 'error', title: 'ดำเนินการไม่สำเร็จ', text: payload.message || 'เกิดข้อผิดพลาด' }); return; }
+        await Swal.fire({ icon: 'success', title: payload.action === 'deactivated' ? 'ปิดใช้งานแล้ว' : 'ลบแล้ว', text: payload.message || '', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    }));
+
+    document.querySelectorAll('[data-category-restore]').forEach((button) => button.addEventListener('click', async function () {
+        const result = await Swal.fire({ icon: 'question', title: 'เปิดใช้งานหมวดหมู่?', text: `ต้องการเปิดใช้งาน ${button.dataset.name} หรือไม่`, showCancelButton: true, confirmButtonText: 'เปิดใช้งาน', cancelButtonText: 'ยกเลิก' });
+        if (!result.isConfirmed) return;
+        const response = await fetch(button.dataset.url, { method: 'POST', headers: { ...jsonHeaders, 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) { await Swal.fire({ icon: 'error', title: 'เปิดใช้งานไม่สำเร็จ', text: payload.message || 'เกิดข้อผิดพลาด' }); return; }
         window.location.reload();
     }));
 

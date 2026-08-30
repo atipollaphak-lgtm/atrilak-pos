@@ -192,12 +192,15 @@ class CustomerImportService
 
             $customer->update(['address' => $address]);
 
-            CustomerExternalReference::query()->create([
-                'customer_id' => $customer->id,
-                'batch_id' => $batch->id,
-                'source_system' => $preview->sourceSystem,
-                'external_id' => $row['external_id'],
-            ]);
+            $externalId = trim((string) ($row['external_id'] ?? ''));
+            if ($externalId !== '') {
+                CustomerExternalReference::query()->create([
+                    'customer_id' => $customer->id,
+                    'batch_id' => $batch->id,
+                    'source_system' => $preview->sourceSystem,
+                    'external_id' => $externalId,
+                ]);
+            }
 
             $row['status'] = 'imported';
             $row['customer_id'] = $customer->id;

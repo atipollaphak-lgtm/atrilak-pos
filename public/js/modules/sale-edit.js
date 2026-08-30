@@ -2,6 +2,10 @@
     const itemRows = document.getElementById('sale-items');
     const addRowButton = document.getElementById('addRow');
     const form = document.getElementById('sale-edit-form');
+    const deliveryFeeField = document.getElementById('delivery_fee');
+    const deliveryFeeFlagField = document.getElementById('delivery_fee_override_flag');
+    const deliveryFeeToggle = document.getElementById('delivery_fee_override_toggle');
+    const deliveryFeeResetButton = document.getElementById('delivery_fee_reset_auto');
     const paymentFields = {
         payment_method: document.getElementById('sale-payment-method'),
         cash_amount: document.getElementById('sale-cash-amount'),
@@ -9,6 +13,7 @@
         received_amount: document.getElementById('sale-received-amount')
     };
     const hasPaymentFields = Object.values(paymentFields).every(Boolean);
+    const isPickupSale = form?.dataset.deliveryType === 'pickup';
     let paymentController = null;
 
     if (!itemRows || !addRowButton) {
@@ -29,10 +34,26 @@
 
         document.getElementById('grand-total').textContent = grandTotal.toFixed(2);
 
-        const deliveryFee = Number.parseFloat(document.getElementById('delivery_fee')?.value || 0);
+        const deliveryFee = Number.parseFloat(deliveryFeeField?.value || 0);
         const discount = Number.parseFloat(document.getElementById('discount')?.value || 0);
 
         document.getElementById('net_total').value = (grandTotal + deliveryFee - discount).toFixed(2);
+    };
+
+    const syncDeliveryFeeMode = () => {
+        if (!deliveryFeeField || !deliveryFeeToggle || !deliveryFeeFlagField) {
+            return;
+        }
+
+        const manual = Boolean(deliveryFeeToggle.checked) && !isPickupSale;
+        deliveryFeeFlagField.value = manual ? '1' : '0';
+        deliveryFeeField.readOnly = !manual || isPickupSale;
+        deliveryFeeField.classList.toggle('bg-light', !manual || isPickupSale);
+
+        if (isPickupSale) {
+            deliveryFeeField.value = '0.00';
+            deliveryFeeToggle.checked = false;
+        }
     };
 
     addRowButton.addEventListener('click', () => {
@@ -85,6 +106,21 @@
             || event.target.id === 'discount') {
             calculateTotals();
         }
+    });
+
+    deliveryFeeToggle?.addEventListener('change', () => {
+        syncDeliveryFeeMode();
+        calculateTotals();
+    });
+
+    deliveryFeeResetButton?.addEventListener('click', () => {
+        if (!deliveryFeeToggle || !deliveryFeeField) {
+            return;
+        }
+
+        deliveryFeeToggle.checked = false;
+        syncDeliveryFeeMode();
+        calculateTotals();
     });
 
     document.addEventListener('change', (event) => {
@@ -177,5 +213,6 @@
         });
     });
 
+    syncDeliveryFeeMode();
     calculateTotals();
 })();

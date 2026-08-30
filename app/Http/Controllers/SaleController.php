@@ -98,6 +98,7 @@ class SaleController extends Controller
                 'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
                 'delivery_type' => $validated['delivery_type'] ?? 'delivery',
                 'discount' => $validated['discount'] ?? 0,
+                'delivery_fee_override_flag' => $validated['delivery_fee_override_flag'] ?? false,
                 'notes' => $validated['notes'] ?? null,
                 'payment_method' => $validated['payment_method'],
                 'cash_amount' => $validated['cash_amount'],
@@ -156,6 +157,7 @@ class SaleController extends Controller
                 'sale_date' => $validated['sale_date'] ?? now()->toDateString(),
                 'delivery_type' => $validated['delivery_type'] ?? 'delivery',
                 'discount' => $validated['discount'] ?? 0,
+                'delivery_fee_override_flag' => $validated['delivery_fee_override_flag'] ?? false,
                 'notes' => $validated['notes'] ?? null,
                 'payment_method' => $validated['payment_method'],
                 'cash_amount' => $validated['cash_amount'],
@@ -268,7 +270,8 @@ class SaleController extends Controller
             'sale_date' => $validated['sale_date'],
             'items' => $request->normalizedItems(),
             'delivery_type' => $validated['delivery_type'] ?? null,
-            'delivery_fee' => $validated['delivery_fee'] ?? 0,
+            'delivery_fee' => $validated['delivery_fee'] ?? null,
+            'delivery_fee_override_flag' => $validated['delivery_fee_override_flag'] ?? null,
             'discount' => $validated['discount'] ?? 0,
         ];
 

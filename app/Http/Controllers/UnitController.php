@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\Unit;
+use App\Services\CatalogDeletionService;
 use App\Services\UnitCodeService;
+use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -59,19 +61,36 @@ class UnitController extends Controller
             ->with('success', 'แก้ไขหน่วยนับเรียบร้อยแล้ว');
     }
 
-    public function destroy(Unit $unit)
+    public function destroy(Request $request, Unit $unit, CatalogDeletionService $deletionService)
     {
-        if ($unit->productUnits()->exists()) {
+        try {
+            $result = $deletionService->deleteUnit($unit);
+        } catch (DomainException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $exception->getMessage()], 422);
+            }
+
             return redirect()
                 ->route('units.index')
-                ->with('error', 'ลบไม่ได้ เพราะหน่วยนี้ถูกใช้กับสินค้าแล้ว');
+                ->with('error', $exception->getMessage());
         }
 
-        $unit->delete();
+        if ($request->expectsJson()) {
+            return response()->json($result);
+        }
 
         return redirect()
             ->route('units.index')
-            ->with('success', 'ลบหน่วยนับเรียบร้อยแล้ว');
+            ->with('success', $result['action'] === 'deleted'
+                ? 'ลบหน่วยนับเรียบร้อยแล้ว'
+                : 'หน่วยนี้ถูกใช้งานแล้ว จึงปิดใช้งานเพื่อรักษาข้อมูลเดิม');
+    }
+
+    public function restore(Unit $unit, CatalogDeletionService $deletionService)
+    {
+        $deletionService->restoreUnit($unit);
+
+        return back()->with('success', 'เปิดใช้งานหน่วยนับเรียบร้อยแล้ว');
     }
 
     public function seed()
@@ -107,23 +126,53 @@ class UnitController extends Controller
             ->with('success', 'สร้างข้อมูลมาตรฐานเรียบร้อยแล้ว');
     }
 
-    public function merge(Request $request)
+    public function merge(Request $request, CatalogDeletionService $deletionService)
     {
         $request->validate([
             'from_unit_id' => 'required|exists:units,id',
             'to_unit_id' => 'required|exists:units,id|different:from_unit_id',
         ]);
 
-        DB::transaction(function () use ($request) {
+        try {
+            DB::transaction(function () use ($request, $deletionService) {
+                $unitIds = [(int) $request->from_unit_id, (int) $request->to_unit_id];
+                sort($unitIds, SORT_NUMERIC);
+                $lockedUnits = Unit::query()
+                    ->whereIn('id', $unitIds)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+                $fromUnit = $lockedUnits->get((int) $request->from_unit_id);
+                if ($fromUnit === null || ! $lockedUnits->has((int) $request->to_unit_id)) {
+                    throw new DomainException('ไม่พบหน่วยนับที่ต้องการรวม');
+                }
 
-            Product::where('unit_id', $request->from_unit_id)
-                ->update([
-                    'unit_id' => $request->to_unit_id,
-                ]);
+                if (DB::table('product_units')
+                    ->where('unit_id', $fromUnit->getKey())
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->exists()) {
+                    throw new DomainException(
+                        'ไม่สามารถรวมหน่วยนี้ได้ เนื่องจากมีหน่วยสินค้าย่อยใช้งานอยู่ กรุณาจัดการหน่วยสินค้าก่อน'
+                    );
+                }
 
-            Unit::where('id', $request->from_unit_id)
-                ->delete();
-        });
+                Product::query()
+                    ->where('unit_id', $request->from_unit_id)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+                Product::where('unit_id', $request->from_unit_id)
+                    ->update([
+                        'unit_id' => $request->to_unit_id,
+                    ]);
+
+                $deletionService->deleteUnit($fromUnit);
+            });
+        } catch (DomainException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return redirect()
             ->route('units.index')

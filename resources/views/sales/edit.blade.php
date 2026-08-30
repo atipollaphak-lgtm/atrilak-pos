@@ -33,6 +33,10 @@
         $oldPriceActions = is_array(old('price_action'))
             ? old('price_action')
             : array_fill(0, count($defaultSaleItemIds), 'preserve');
+        $deliveryFeeOverrideFlag = old(
+            'delivery_fee_override_flag',
+            $sale->delivery_fee_override_flag ?? false
+        );
         $rowCount = max(
             count($oldSaleItemIds),
             count($oldProductUnitIds),
@@ -47,10 +51,13 @@
             || $customers->contains('id', (int) $selectedCustomerId);
     @endphp
 
-    <form id="sale-edit-form" action="{{ route('sales.update', $sale->id) }}" method="POST">
+    <form id="sale-edit-form" action="{{ route('sales.update', $sale->id) }}" method="POST"
+        data-delivery-type="{{ $sale->delivery_type }}">
         @csrf
         @method('PUT')
         <input type="hidden" name="revision" value="{{ old('revision', $sale->revision) }}">
+        <input type="hidden" name="delivery_fee_override_flag" id="delivery_fee_override_flag"
+            value="{{ $deliveryFeeOverrideFlag ? '1' : '0' }}">
         @if ($sale->quotation_id === null)
             <input type="hidden" name="payment_method" id="sale-payment-method"
                 value="{{ old('payment_method', $sale->payment_method) }}">
@@ -171,7 +178,25 @@
                     <div class="col-md-4">
                         <label>ค่าขนส่ง</label>
                         <input type="number" name="delivery_fee" id="delivery_fee" class="form-control"
-                            value="{{ old('delivery_fee', $sale->delivery_fee ?? 0) }}" step="0.01">
+                            value="{{ old('delivery_fee', $sale->delivery_type === 'pickup' ? '0.00' : ($sale->delivery_fee ?? 0)) }}"
+                            step="0.01" min="0">
+                        <div class="d-flex flex-wrap align-items-center mt-2">
+                            <div class="form-check mr-3 mb-0">
+                                <input type="checkbox" class="form-check-input" id="delivery_fee_override_toggle"
+                                    @checked((bool) $deliveryFeeOverrideFlag && $sale->delivery_type !== 'pickup')
+                                    @disabled($sale->delivery_type === 'pickup')>
+                                <label class="form-check-label" for="delivery_fee_override_toggle">
+                                    กำหนดค่าขนส่งเอง
+                                </label>
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm p-0" id="delivery_fee_reset_auto"
+                                @disabled($sale->delivery_type === 'pickup')>
+                                คืนค่าอัตโนมัติ
+                            </button>
+                        </div>
+                        <small class="form-text text-muted mb-0">
+                            เมื่อปิดโหมดกำหนดเอง ระบบจะคำนวณค่าขนส่งใหม่ตอนบันทึก
+                        </small>
                     </div>
 
                     <div class="col-md-4">

@@ -135,6 +135,21 @@ class SalePaymentDisplayTest extends TestCase
         $this->assertStringContainsString('class="invoice paper-a5"', $a5);
     }
 
+    public function test_v2_delivery_document_uses_the_persisted_sale_total(): void
+    {
+        $sale = $this->sale('cash', '100.00', '0.00', '123.45', '0.00');
+        $sale->update(['total_amount' => '123.45']);
+
+        $html = view('sales.invoice_v2', [
+            'sale' => $sale->fresh('items'),
+            'setting' => null,
+            'document' => app(CommercialDocumentService::class)
+                ->buildSaleDocument($sale, 'delivery-note'),
+        ])->render();
+
+        $this->assertStringContainsString('123.45', $html);
+    }
+
     public function test_combined_delivery_receipt_renderers_show_payment_and_legacy_sales_omit_it(): void
     {
         $cashSale = $this->sale('cash', '100.00', '0.00', '150.00', '50.00');

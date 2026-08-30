@@ -5,6 +5,7 @@ namespace Tests\Feature\Products;
 use App\Http\Middleware\RoleMiddleware;
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\Unit;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,7 +69,8 @@ class ProductManagementTest extends TestCase
             ->assertSee('name="per_page"', false)
             ->assertSee('Selling Rule')
             ->assertSee('ยังไม่ได้กำหนด')
-            ->assertDontSee('value="DELETE"', false);
+            ->assertSee('value="DELETE"', false)
+            ->assertSee('ลบ/ปิดใช้งาน');
     }
 
     public function test_product_without_image_uses_placeholder_and_details_are_read_only_for_price_and_stock(): void
@@ -144,6 +146,30 @@ class ProductManagementTest extends TestCase
         $this->assertDatabaseCount('products', 0);
     }
 
+    public function test_product_create_rejects_inactive_category_and_unit_references(): void
+    {
+        $category = $this->category('Hardware');
+        $inactiveCategory = $this->category('Inactive category');
+        $inactiveCategory->update(['active' => false]);
+        $inactiveUnit = Unit::query()->create([
+            'code' => 'INACT',
+            'name' => 'Inactive unit',
+            'short_name' => 'inactive',
+            'active' => false,
+        ]);
+
+        $this->from(route('products.index'))
+            ->post(route('products.store'), [
+                ...$this->productPayload($category),
+                'category_id' => $inactiveCategory->id,
+                'unit_id' => $inactiveUnit->id,
+            ])
+            ->assertRedirect(route('products.index'))
+            ->assertSessionHasErrors(['category_id', 'unit_id']);
+
+        $this->assertDatabaseCount('products', 0);
+    }
+
     public function test_product_details_update_changes_profile_fields_without_changing_price_or_stock(): void
     {
         $category = $this->category('Hardware');
@@ -173,14 +199,15 @@ class ProductManagementTest extends TestCase
         $this->assertSame('7.0000', $product->stock_qty);
     }
 
-    public function test_product_edit_fallback_has_no_delete_control(): void
+    public function test_product_edit_fallback_has_delete_control(): void
     {
         $category = $this->category('Hardware');
         $product = Product::query()->create($this->productPayload($category));
 
         $this->get(route('products.edit', $product))
             ->assertOk()
-            ->assertDontSee('value="DELETE"', false);
+            ->assertSee('value="DELETE"', false)
+            ->assertSee('ลบ/ปิดใช้งานสินค้า');
     }
 
     private function category(string $name): Category

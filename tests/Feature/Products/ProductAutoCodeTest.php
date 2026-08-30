@@ -60,16 +60,17 @@ class ProductAutoCodeTest extends TestCase
         $this->assertSame('2000100000021', Product::query()->where('name', 'Cement 2')->value('barcode'));
     }
 
-    public function test_product_creation_requires_both_category_prefixes(): void
+    public function test_product_creation_allocates_missing_category_prefixes(): void
     {
         $category = Category::query()->create(['name' => 'Unconfigured', 'active' => true]);
 
-        $this->from(route('products.index'))
-            ->post(route('products.store'), $this->payload($category))
-            ->assertRedirect(route('products.index'))
-            ->assertSessionHasErrors('category_id');
+        $this->post(route('products.store'), $this->payload($category))
+            ->assertRedirect(route('products.index'));
 
-        $this->assertDatabaseCount('products', 0);
+        $category->refresh();
+        $this->assertSame('UNC', $category->code_prefix);
+        $this->assertSame('101', $category->barcode_prefix);
+        $this->assertDatabaseHas('products', ['product_code' => 'UNC-0001']);
     }
 
     public function test_existing_code_and_barcode_do_not_change_when_product_is_updated_or_recategorized(): void

@@ -19,6 +19,11 @@ class SaleIdempotencyService
             'sale_date' => (string) $data['sale_date'],
             'delivery_date' => $data['delivery_date'] ?? null,
             'delivery_type' => (string) ($data['delivery_type'] ?? 'delivery'),
+            'delivery_fee' => $this->normalizeDecimal($data['delivery_fee'] ?? 0),
+            'delivery_fee_override_flag' => filter_var(
+                $data['delivery_fee_override_flag'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            ),
             'discount' => $this->normalizeDecimal($data['discount'] ?? 0),
             'payment_method' => (string) ($data['payment_method'] ?? ''),
             'cash_amount' => $this->normalizeDecimal($data['cash_amount'] ?? 0),
@@ -29,11 +34,31 @@ class SaleIdempotencyService
                 'product_unit_id' => $this->normalizeId($item['product_unit_id'] ?? null),
                 'qty' => $this->normalizeDecimal($item['qty'] ?? 0),
                 'selling_price' => $this->normalizeDecimal($item['selling_price'] ?? 0),
+                'price_was_edited' => $this->normalizeBoolean($item['price_was_edited'] ?? false),
+                'price_changed_since_hold' => $this->normalizeBoolean(
+                    $item['price_changed_since_hold'] ?? false
+                ),
             ], $data['items'] ?? []),
         ];
 
         if (! empty($data['hold_bill_id'])) {
-            $payload = ['hold_bill_id' => $this->normalizeId($data['hold_bill_id'])] + $payload;
+            $payload = [
+                'hold_bill_id' => $this->normalizeId($data['hold_bill_id']),
+                // A resumed hold inherits its stored fee when the fee is omitted,
+                // null, or empty. Preserve that intent in the hash so an explicit
+                // zero cannot replay a sale created with the hold's fee.
+                'delivery_fee_input_mode' => array_key_exists('delivery_fee', $data)
+                    && $data['delivery_fee'] !== null
+                    && $data['delivery_fee'] !== ''
+                    ? 'provided'
+                    : 'inherited',
+                // The service inherits the hold flag only when the key is absent;
+                // an explicit false (or null) is an intentional override.
+                'delivery_fee_override_flag_input_mode' => array_key_exists(
+                    'delivery_fee_override_flag',
+                    $data
+                ) ? 'provided' : 'inherited',
+            ] + $payload;
         }
 
         return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
@@ -76,5 +101,10 @@ class SaleIdempotencyService
     private function normalizeDecimal(mixed $value): string
     {
         return (string) BigDecimal::of((string) $value)->stripTrailingZeros();
+    }
+
+    private function normalizeBoolean(mixed $value): bool
+    {
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 }

@@ -4,52 +4,80 @@ namespace App\Services;
 
 use App\Models\Category;
 use App\Models\Product;
+use App\Models\ProductBarcode;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
 class ProductNumberService
 {
+    public function __construct(
+        private CategoryPrefixAllocator $prefixAllocator,
+    ) {}
+
     public function generateForCategory(Category $category): array
     {
-        $lockedCategory = Category::query()
-            ->lockForUpdate()
-            ->findOrFail($category->getKey());
+        return DB::transaction(function () use ($category): array {
+            // Keep the advisory lock alive through the sequence read. Callers
+            // normally already have an outer transaction, but this also makes
+            // direct service calls safe against concurrent allocations.
+            $lockedCategory = $this->prefixAllocator->ensure($category);
+            $this->lockNumberAllocation($lockedCategory);
 
-        if (blank($lockedCategory->code_prefix)) {
-            throw ValidationException::withMessages([
-                'category_id' => 'หมวดหมู่นี้ยังไม่ได้กำหนดตัวย่อสำหรับสร้างรหัสสินค้า',
-            ]);
-        }
+            $sequence = $this->nextSequence($lockedCategory);
+            $productCode = sprintf('%s-%04d', $lockedCategory->code_prefix, $sequence);
+            $barcodeBody = sprintf('20%s0%06d', $lockedCategory->barcode_prefix, $sequence);
 
-        if (blank($lockedCategory->barcode_prefix)) {
-            throw ValidationException::withMessages([
-                'category_id' => 'หมวดหมู่นี้ยังไม่ได้กำหนดรหัสบาร์โค้ด 3 หลัก',
-            ]);
-        }
-
-        $sequence = $this->nextSequence($lockedCategory);
-        $productCode = sprintf('%s-%04d', $lockedCategory->code_prefix, $sequence);
-        $barcodeBody = sprintf('20%s0%06d', $lockedCategory->barcode_prefix, $sequence);
-
-        return [
-            'product_code' => $productCode,
-            'barcode' => $barcodeBody.$this->ean13CheckDigit($barcodeBody),
-        ];
+            return [
+                'product_code' => $productCode,
+                'barcode' => $barcodeBody.$this->ean13CheckDigit($barcodeBody),
+            ];
+        });
     }
 
     private function nextSequence(Category $category): int
     {
-        $prefix = preg_quote($category->code_prefix, '/');
-        $sequence = Product::query()
+        $codePrefix = preg_quote((string) $category->code_prefix, '/');
+        $highestCode = Product::query()
             ->where('category_id', $category->getKey())
             ->whereNotNull('product_code')
             ->pluck('product_code')
-            ->reduce(function (int $highest, ?string $productCode) use ($prefix): int {
-                if (is_string($productCode) && preg_match('/^'.$prefix.'-(\d{4})$/', $productCode, $matches)) {
+            ->reduce(function (int $highest, ?string $productCode) use ($codePrefix): int {
+                if (is_string($productCode) && preg_match('/^'.$codePrefix.'-(\d{4})$/', $productCode, $matches)) {
                     return max($highest, (int) $matches[1]);
                 }
 
                 return $highest;
-            }, 0) + 1;
+            }, 0);
+
+        $barcodePrefix = preg_quote((string) $category->barcode_prefix, '/');
+        $highestBarcode = Product::query()
+            ->whereNotNull('barcode')
+            ->pluck('barcode')
+            ->reduce(function (int $highest, ?string $barcode) use ($barcodePrefix): int {
+                if (is_string($barcode)
+                    && preg_match('/^20'.$barcodePrefix.'0(\d{6})\d$/', $barcode, $matches)) {
+                    return max($highest, (int) $matches[1]);
+                }
+
+                return $highest;
+            }, 0);
+
+        if (Schema::hasTable('product_barcodes')) {
+            $highestBarcode = ProductBarcode::query()
+                ->whereNotNull('barcode')
+                ->pluck('barcode')
+                ->reduce(function (int $highest, ?string $barcode) use ($barcodePrefix): int {
+                    if (is_string($barcode)
+                        && preg_match('/^20'.$barcodePrefix.'0(\d{6})\d$/', $barcode, $matches)) {
+                        return max($highest, (int) $matches[1]);
+                    }
+
+                    return $highest;
+                }, $highestBarcode);
+        }
+
+        $sequence = max($highestCode, $highestBarcode) + 1;
 
         if ($sequence > 9999) {
             throw ValidationException::withMessages([
@@ -58,6 +86,16 @@ class ProductNumberService
         }
 
         return $sequence;
+    }
+
+    private function lockNumberAllocation(Category $category): void
+    {
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::select(
+                'select pg_advisory_xact_lock(hashtext(?))',
+                ['atrilak:product-number:'.$category->getKey()]
+            );
+        }
     }
 
     private function ean13CheckDigit(string $body): int

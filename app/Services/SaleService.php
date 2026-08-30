@@ -147,6 +147,16 @@ class SaleService
                         'items' => fn ($query) => $query->orderBy('id'),
                     ]);
 
+                    if (! array_key_exists('delivery_fee_override_flag', $data)) {
+                        $data['delivery_fee_override_flag'] = $holdBill->delivery_fee_override_flag;
+                    }
+
+                    if (! array_key_exists('delivery_fee', $data)
+                        || $data['delivery_fee'] === null
+                        || $data['delivery_fee'] === '') {
+                        $data['delivery_fee'] = $holdBill->delivery_fee;
+                    }
+
                     if (! array_key_exists('delivery_date', $data)) {
                         $data['delivery_date'] = $holdBill->delivery_date;
                     }
@@ -378,7 +388,6 @@ class SaleService
         $grandTotal = $this->saleValidationService->calculateItemsTotal($items);
         $deliveryType = $data['delivery_type'] ?? 'delivery';
         $discount = $this->saleValidationService->money($data['discount'] ?? 0);
-        $deliveryFee = '0.00';
         $minimumProfit = '0.00';
         $deliveryZoneId = null;
         $deliveryAddressId = $data['customer_delivery_address_id'] ?? null;
@@ -399,11 +408,14 @@ class SaleService
             $rawProductProfit,
             $discount
         );
-        $deliveryFee = $this->zonePricingService->deliveryFee(
-            $productProfitAfterDiscount,
+        $deliveryFeeResult = $this->resolveDeliveryFee(
+            $deliveryType,
+            $data,
             $deliveryZone,
-            $pickup
+            $productProfitAfterDiscount
         );
+        $deliveryFee = $deliveryFeeResult['delivery_fee'];
+        $deliveryFeeOverrideFlag = $deliveryFeeResult['delivery_fee_override_flag'];
 
         $netTotal = $this->saleValidationService->calculateNetTotal(
             $grandTotal,
@@ -439,6 +451,7 @@ class SaleService
         $sale->delivery_date = $deliveryDate;
         $sale->total_amount = $netTotal;
         $sale->delivery_fee = $deliveryFee;
+        $sale->delivery_fee_override_flag = $deliveryFeeOverrideFlag;
         $sale->delivery_type = $deliveryType;
         $sale->discount = $discount;
         $sale->delivery_zone_id = $deliveryZoneId;
@@ -612,6 +625,13 @@ class SaleService
             // existing fulfillment snapshot when the form omits those fields.
             $data['delivery_type'] ??= $lockedSale->delivery_type;
             $data['customer_delivery_address_id'] ??= $lockedSale->customer_delivery_address_id;
+            if (! array_key_exists('delivery_fee_override_flag', $data)
+                || $data['delivery_fee_override_flag'] === null) {
+                $data['delivery_fee_override_flag'] = (bool) $lockedSale->delivery_fee_override_flag;
+            }
+            if (! array_key_exists('delivery_fee', $data) || $data['delivery_fee'] === null) {
+                $data['delivery_fee'] = $lockedSale->delivery_fee;
+            }
 
             if ((int) $lockedSale->revision !== $expectedRevision) {
                 throw new StaleSaleRevisionException;
@@ -658,6 +678,7 @@ class SaleService
             if (! $itemsChanged) {
                 $itemsTotal = $this->saleValidationService
                     ->calculateStoredItemsTotal($lockedItems);
+                $deliveryType = $data['delivery_type'] ?? $lockedSale->delivery_type;
                 $data['delivery_fee'] = $this->authoritativeDeliveryFee(
                     $lockedSale,
                     $data,
@@ -665,6 +686,10 @@ class SaleService
                         $this->saleDecimalService->sumMoney($lockedItems->pluck('profit')),
                         $data['discount'] ?? $lockedSale->discount
                     )
+                );
+                $data['delivery_fee_override_flag'] = $this->resolveDeliveryFeeOverrideFlag(
+                    $data,
+                    $deliveryType
                 );
                 $finalNetTotal = $this->finalNetTotal($lockedSale, $data, $itemsTotal);
                 $commissionAffected = $this->headerAffectsCommission(
@@ -757,6 +782,10 @@ class SaleService
                     $data['discount'] ?? $lockedSale->discount
                 )
             );
+            $data['delivery_fee_override_flag'] = $this->resolveDeliveryFeeOverrideFlag(
+                $data,
+                $data['delivery_type'] ?? $lockedSale->delivery_type
+            );
             $finalNetTotal = $this->finalNetTotal($lockedSale, $data, $grandTotal);
             $commissionAffected = $updatePlan['commission_affected']
                 || $this->headerAffectsCommission(
@@ -844,6 +873,7 @@ class SaleService
         ?string $itemsTotal = null,
         ?array $payment = null
     ): void {
+        $deliveryType = $data['delivery_type'] ?? $sale->delivery_type;
         $deliveryFee = $this->saleValidationService
             ->money($data['delivery_fee'] ?? $sale->delivery_fee);
         $discount = $this->saleValidationService
@@ -870,10 +900,13 @@ class SaleService
             'sale_date' => $data['sale_date'] ?? $sale->sale_date,
             'total_amount' => $netTotal,
             'delivery_fee' => $deliveryFee,
+            'delivery_fee_override_flag' => $this->resolveDeliveryFeeOverrideFlag(
+                $data,
+                $deliveryType
+            ),
             'discount' => $discount,
         ];
 
-        $deliveryType = $data['delivery_type'] ?? $sale->delivery_type;
         $deliveryAddressId = $data['customer_delivery_address_id'] ?? $sale->customer_delivery_address_id;
         [$zone] = $this->resolveZoneContext([
             'delivery_type' => $deliveryType,
@@ -1240,11 +1273,51 @@ class SaleService
             'customer_delivery_address_id' => $addressId,
         ]);
 
-        return $this->zonePricingService->deliveryFee(
-            $profitAfterDiscount,
+        return $this->resolveDeliveryFee(
+            $deliveryType,
+            $data,
             $zone,
-            $deliveryType === 'pickup'
-        );
+            $profitAfterDiscount
+        )['delivery_fee'];
+    }
+
+    private function resolveDeliveryFee(
+        string $deliveryType,
+        array $data,
+        ?DeliveryZone $deliveryZone,
+        mixed $profitAfterDiscount
+    ): array {
+        $overrideFlag = $this->resolveDeliveryFeeOverrideFlag($data, $deliveryType);
+
+        if ($deliveryType === 'pickup') {
+            return [
+                'delivery_fee' => '0.00',
+                'delivery_fee_override_flag' => false,
+            ];
+        }
+
+        if ($overrideFlag) {
+            return [
+                'delivery_fee' => $this->saleValidationService
+                    ->nonNegativeDeliveryFee($data['delivery_fee'] ?? 0),
+                'delivery_fee_override_flag' => true,
+            ];
+        }
+
+        return [
+            'delivery_fee' => $this->zonePricingService->deliveryFee(
+                $profitAfterDiscount,
+                $deliveryZone,
+                false
+            ),
+            'delivery_fee_override_flag' => false,
+        ];
+    }
+
+    private function resolveDeliveryFeeOverrideFlag(array $data, string $deliveryType): bool
+    {
+        return $deliveryType === 'delivery'
+            && filter_var($data['delivery_fee_override_flag'] ?? false, FILTER_VALIDATE_BOOLEAN);
     }
 
     private function saleItemMatches($existingItem, array $submittedItem): bool
